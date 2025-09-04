@@ -91,12 +91,44 @@ web10CreateTexture :: proc(
 	return rl.LoadTextureFromImage(img)
 }
 
+getAppRtexSrcRect :: proc(rtex: rl.RenderTexture) -> rl.Rectangle {
+	rtex_size := getTextureSize(rtex.texture)
+	return {0.0, rtex_size.y, rtex_size.x, -rtex_size.y}
+}
+
+getAppRtexDestRect :: proc(rtex: rl.RenderTexture) -> rl.Rectangle {
+	screen_size := rl.Vector2{cast(f32)rl.GetScreenWidth(), cast(f32)rl.GetScreenHeight()}
+	rtex_size := getTextureSize(rtex.texture)
+	if screen_size.x < screen_size.y {
+		h := screen_size.x / rtex_size.x * rtex_size.y
+		return {0.0, screen_size.y / 2.0 - h / 2.0, screen_size.x, h}
+	} else {
+		w := screen_size.y / rtex_size.y * rtex_size.x
+		return {screen_size.x / 2.0 - w / 2.0, 0.0, w, screen_size.y}
+	}
+}
+
+getTextureSize :: proc(tex: rl.Texture) -> rl.Vector2 {
+	return {cast(f32)tex.width, cast(f32)tex.height}
+}
+
+drawAppRtex :: proc(rtex: rl.RenderTexture) {
+	src := getAppRtexSrcRect(rtex)
+	dest := getAppRtexDestRect(rtex)
+	origin := rl.Vector2{0.0, 0.0}
+	rl.DrawTexturePro(rtex.texture, src, dest, origin, 0.0, rl.WHITE)
+}
+
 MAX_TEXTURE_SIZE :: 4096
 TARGET_FPS :: 60
 TARGET_TIME_STEP :: 1.0 / cast(f32)TARGET_FPS
+WINDOW_WIDTH :: 480
+WINDOW_HEIGHT :: 360
 
 main :: proc() {
-	rl.InitWindow(480, 360, "The Great Seeker: Unruly Lands")
+	rl.SetConfigFlags({.WINDOW_RESIZABLE})
+	rl.SetTraceLogLevel(.WARNING)
+	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "The Great Seeker: Unruly Lands")
 	rl.SetTargetFPS(TARGET_FPS)
 	defer rl.CloseWindow()
 
@@ -113,15 +145,21 @@ main :: proc() {
 	defer rl.UnloadTexture(web10_tex)
 	web10_sprdef := createSpriteDef(web10_tex, 128, 10.0)
 	web10_spr := createSprite(web10_sprdef, 0.0)
+	app_rtex := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
+	defer rl.UnloadRenderTexture(app_rtex)
 
 	mem.dynamic_arena_reset(&temp_arena)
 
 	for !rl.WindowShouldClose() {
 		defer mem.dynamic_arena_reset(&temp_arena)
 		rl.BeginDrawing()
-		defer rl.EndDrawing()
+
+		rl.BeginTextureMode(app_rtex)
 		rl.ClearBackground(rl.BLACK)
 		updateSprite(&web10_spr)
 		drawSpriteEx(web10_spr, rl.Vector2{0.0, 0.0}, rl.Vector2{1.0, 1.0})
+		rl.EndTextureMode()
+		drawAppRtex(app_rtex)
+		rl.EndDrawing()
 	}
 }
