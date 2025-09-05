@@ -141,16 +141,35 @@ WINDOW_HEIGHT :: 360
 RepeatingStarBg :: struct {
 	shd:        rl.Shader,
 	tex:        rl.Texture,
+	texSize:    rl.Vector2,
 	frameIndex: f32,
+	frameSpd:   f32,
+	frameCount: i32,
+	scroll:     rl.Vector2,
+	scrollSpd:  rl.Vector2,
+}
+createRepeatingStarBg :: proc(
+	shd: rl.Shader,
+	tex: rl.Texture,
+	texSize: rl.Vector2,
+	frameSpd: f32,
+	frameCount: i32,
+	scrollSpd: rl.Vector2,
+) -> RepeatingStarBg {
+	return {shd, tex, texSize, 0.0, frameSpd, frameCount, rl.Vector2{0.0, 0.0}, scrollSpd}
 }
 drawRepeatingStarBg :: proc(bg: ^RepeatingStarBg) {
 	rl.BeginShaderMode(bg.shd)
-	frameCount: c.int = 7
 	frameCountLoc := rl.GetShaderLocation(bg.shd, "frameCount")
-	rl.SetShaderValue(bg.shd, frameCountLoc, &frameCount, .INT)
+	rl.SetShaderValue(bg.shd, frameCountLoc, &bg.frameCount, .INT)
 	frameIndexLoc := rl.GetShaderLocation(bg.shd, "frameInd")
 	rl.SetShaderValue(bg.shd, frameIndexLoc, &bg.frameIndex, .FLOAT)
-	bg.frameIndex += TARGET_TIME_STEP * 4.0
+	texSizeLoc := rl.GetShaderLocation(bg.shd, "texSize")
+	rl.SetShaderValue(bg.shd, texSizeLoc, &bg.texSize, .VEC2)
+	bg.frameIndex += TARGET_TIME_STEP * bg.frameSpd
+	scrollPxLoc := rl.GetShaderLocation(bg.shd, "scrollPx")
+	rl.SetShaderValue(bg.shd, scrollPxLoc, &bg.scroll, .VEC2)
+	bg.scroll += bg.scrollSpd * TARGET_TIME_STEP
 	drawTextureRecDest(bg.tex, {0.0, 0.0, WINDOW_WIDTH, WINDOW_HEIGHT})
 	rl.EndShaderMode()
 }
@@ -171,35 +190,42 @@ main :: proc() {
 	rl.SetTargetFPS(TARGET_FPS)
 	defer rl.CloseWindow()
 
-	temp_arena: mem.Dynamic_Arena
-	mem.dynamic_arena_init(&temp_arena)
-	defer mem.dynamic_arena_free_all(&temp_arena)
-	temp_alloc := mem.dynamic_arena_allocator(&temp_arena)
-	context.temp_allocator = temp_alloc
+	tempArena: mem.Dynamic_Arena
+	mem.dynamic_arena_init(&tempArena)
+	defer mem.dynamic_arena_free_all(&tempArena)
+	tempAlloc := mem.dynamic_arena_allocator(&tempArena)
+	context.temp_allocator = tempAlloc
 
-	star_tex := rl.LoadTexture("tex/sStar.png")
-	defer rl.UnloadTexture(star_tex)
-	star_sprdef := createSpriteDef(star_tex, 4, 5.0)
-	star_spr := createSprite(star_sprdef, 0.0)
-	web10_tex := web10CreateTexture(128, 128, star_sprdef, 16)
-	defer rl.UnloadTexture(web10_tex)
-	web10_sprdef := createSpriteDef(web10_tex, 128, 5.0)
-	web10_spr := createSprite(web10_sprdef, 0.0)
+	starTex := rl.LoadTexture("tex/sStar.png")
+	defer rl.UnloadTexture(starTex)
+	starSprDef := createSpriteDef(starTex, 4, 5.0)
+	starSpr := createSprite(starSprDef, 0.0)
+	web10TexSize := rl.Vector2{128.0, 128.0}
+	web10Tex := web10CreateTexture(
+		cast(i32)web10TexSize.x,
+		cast(i32)web10TexSize.y,
+		starSprDef,
+		16,
+	)
+	defer rl.UnloadTexture(web10Tex)
 	app_rtex := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
 	defer rl.UnloadRenderTexture(app_rtex)
-	passthrough_shd := loadShader("shd/passthrough")
-	defer rl.UnloadShader(passthrough_shd)
-	repeat_shd := loadShader("shd/repeat")
-	defer rl.UnloadShader(repeat_shd)
-	anim_shd := loadShader("shd/animatedTexture")
-	defer rl.UnloadShader(anim_shd)
+	anim_repeat_shd := loadShader("shd/animatedTextureRepeatPosition")
+	defer rl.UnloadShader(anim_repeat_shd)
 
-	repeatingStarBg := RepeatingStarBg{anim_shd, web10_tex, 0.0}
+	repeatingStarBg := createRepeatingStarBg(
+		anim_repeat_shd,
+		web10Tex,
+		web10TexSize,
+		4.0,
+		7,
+		rl.Vector2{30.0, 20.0},
+	)
 
-	mem.dynamic_arena_reset(&temp_arena)
+	mem.dynamic_arena_reset(&tempArena)
 
 	for !rl.WindowShouldClose() {
-		defer mem.dynamic_arena_reset(&temp_arena)
+		defer mem.dynamic_arena_reset(&tempArena)
 		rl.BeginDrawing()
 		rl.BeginTextureMode(app_rtex)
 		rl.ClearBackground(rl.BLACK)
