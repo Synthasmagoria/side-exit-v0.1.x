@@ -1,5 +1,6 @@
 package main
 
+import "core:c"
 import "core:fmt"
 import math "core:math"
 import rand "core:math/rand"
@@ -56,17 +57,12 @@ advanceSpriteFrame :: proc(spr: ^Sprite) {
 	spr.frame_ind = cast(i32)spr.frame_t
 }
 
-web10CreateTexture :: proc(
-	temp_alloc: Alloc,
-	w: i32,
-	h: i32,
-	spr_def: SpriteDef,
-	num: i32,
-) -> rl.Texture {
+web10CreateTexture :: proc(w: i32, h: i32, spr_def: SpriteDef, num: i32) -> rl.Texture {
+	context.allocator = context.temp_allocator
 	tex_w := w * spr_def.frame_count
 	assert(tex_w <= MAX_TEXTURE_SIZE)
-	spr_list := make([dynamic]Sprite, 16, 16, temp_alloc)
-	rect_list := make([dynamic]rl.Rectangle, 16, 16, temp_alloc)
+	spr_list := make([dynamic]Sprite, num, num)
+	rect_list := make([dynamic]rl.Rectangle, num, num)
 	frame_count := cast(f32)spr_def.frame_count
 	tex_size := getTextureSize(spr_def.tex)
 	for i: i32 = 0; i < num; i += 1 {
@@ -142,13 +138,30 @@ TARGET_TIME_STEP :: 1.0 / cast(f32)TARGET_FPS
 WINDOW_WIDTH :: 480
 WINDOW_HEIGHT :: 360
 
-drawRepeatingStarBg :: proc(spr: Sprite, repeat_shd: rl.Shader) {
-	rl.BeginShaderMode(repeat_shd)
-	texSizeLoc := rl.GetShaderLocation(repeat_shd, "texSize")
-	texSize := getTextureSize(spr.def.tex)
-	rl.SetShaderValue(repeat_shd, texSizeLoc, &texSize, .VEC2)
-	drawSpriteRect(spr, {0.0, 0.0, WINDOW_WIDTH, WINDOW_HEIGHT})
+RepeatingStarBg :: struct {
+	shd:        rl.Shader,
+	tex:        rl.Texture,
+	frameIndex: f32,
+}
+drawRepeatingStarBg :: proc(bg: ^RepeatingStarBg) {
+	rl.BeginShaderMode(bg.shd)
+	frameCount: c.int = 7
+	frameCountLoc := rl.GetShaderLocation(bg.shd, "frameCount")
+	rl.SetShaderValue(bg.shd, frameCountLoc, &frameCount, .INT)
+	frameIndexLoc := rl.GetShaderLocation(bg.shd, "frameInd")
+	rl.SetShaderValue(bg.shd, frameIndexLoc, &bg.frameIndex, .FLOAT)
+	bg.frameIndex += TARGET_TIME_STEP * 4.0
+	drawTextureRecDest(bg.tex, {0.0, 0.0, WINDOW_WIDTH, WINDOW_HEIGHT})
 	rl.EndShaderMode()
+}
+
+textureGetSourceRec :: proc(tex: rl.Texture) -> rl.Rectangle {
+	return {0.0, 0.0, cast(f32)tex.width, cast(f32)tex.height}
+}
+
+drawTextureRecDest :: proc(tex: rl.Texture, dest: rl.Rectangle) {
+	src := textureGetSourceRec(tex)
+	rl.DrawTexturePro(tex, src, dest, rl.Vector2{0.0, 0.0}, 0.0, rl.WHITE)
 }
 
 main :: proc() {
@@ -168,7 +181,7 @@ main :: proc() {
 	defer rl.UnloadTexture(star_tex)
 	star_sprdef := createSpriteDef(star_tex, 4, 5.0)
 	star_spr := createSprite(star_sprdef, 0.0)
-	web10_tex := web10CreateTexture(temp_alloc, 128, 128, star_sprdef, 16)
+	web10_tex := web10CreateTexture(128, 128, star_sprdef, 16)
 	defer rl.UnloadTexture(web10_tex)
 	web10_sprdef := createSpriteDef(web10_tex, 128, 5.0)
 	web10_spr := createSprite(web10_sprdef, 0.0)
@@ -178,6 +191,10 @@ main :: proc() {
 	defer rl.UnloadShader(passthrough_shd)
 	repeat_shd := loadShader("shd/repeat")
 	defer rl.UnloadShader(repeat_shd)
+	anim_shd := loadShader("shd/animatedTexture")
+	defer rl.UnloadShader(anim_shd)
+
+	repeatingStarBg := RepeatingStarBg{anim_shd, web10_tex, 0.0}
 
 	mem.dynamic_arena_reset(&temp_arena)
 
@@ -186,8 +203,7 @@ main :: proc() {
 		rl.BeginDrawing()
 		rl.BeginTextureMode(app_rtex)
 		rl.ClearBackground(rl.BLACK)
-		updateSprite(&web10_spr)
-		drawRepeatingStarBg(web10_spr, repeat_shd)
+		drawRepeatingStarBg(&repeatingStarBg)
 		rl.EndTextureMode()
 		drawAppRtex(app_rtex)
 		rl.EndDrawing()
