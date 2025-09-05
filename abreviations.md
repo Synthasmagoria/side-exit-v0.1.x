@@ -5,3 +5,5 @@ height: h
 texture: tex
 sprite: spr
 index: ind
+shader: shd
+background: bg
