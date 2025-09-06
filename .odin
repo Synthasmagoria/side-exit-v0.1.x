@@ -1,16 +1,29 @@
 package main
 
-import "core:c"
 import "core:fmt"
 import math "core:math"
 import rand "core:math/rand"
 import mem "core:mem"
-import "core:os"
 import "core:reflect"
 import string_util "core:strings"
 import rl "vendor:raylib"
 
 Alloc :: mem.Allocator
+
+MusicName :: enum {
+	KowloonSmokeBreak,
+	_MAX,
+}
+loadMusicStream :: proc(ind: MusicName) -> rl.Music {
+	context.allocator = context.temp_allocator
+	name, ok := reflect.enum_name_from_value(ind)
+	_ = ok
+	fileName := transmute([]byte)string_util.clone(name)
+	fileName[0] = charLower(fileName[0])
+	filePath := [?]string{"aud/", cast(string)fileName, ".mp3"}
+	joinedPath := string_util.join(filePath[:], "")
+	return rl.LoadMusicStream(string_util.clone_to_cstring(joinedPath))
+}
 
 TextureName :: enum {
 	Star,
@@ -198,6 +211,15 @@ getAppRtexDestRect :: proc(rtex: rl.RenderTexture) -> rl.Rectangle {
 		return {screen_size.x / 2.0 - w / 2.0, 0.0, w, screen_size.y}
 	}
 }
+getAppRtexZoom :: proc() -> f32 {
+	screenSize := rl.Vector2{f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
+	rtexSize := rl.Vector2{WINDOW_WIDTH, WINDOW_HEIGHT}
+	if screenSize.x < screenSize.y {
+		return screenSize.x / rtexSize.x
+	} else {
+		return screenSize.y / rtexSize.y
+	}
+}
 
 getTextureSize :: proc(tex: rl.Texture) -> rl.Vector2 {
 	return {cast(f32)tex.width, cast(f32)tex.height}
@@ -298,13 +320,14 @@ updateAndDrawPlayer :: proc(player: ^Player) {
 		blockCollision(getPlayerAbsColRec(player, {0.0, 1.0})) != nil && player.velocity.y >= 0.0
 	if onFloor {
 		player.airjumpIndex = 0
+	} else {
+		player.velocity.y += player.verticalGrav
 	}
 
 	player.velocity.x = walkInput * player.walkSpd
 	if 0.0 < math.abs(player.velocity.x) {
 		player.scale.x = math.abs(player.scale.x) * math.sign(player.velocity.x)
 	}
-	player.velocity.y += player.verticalGrav
 	jumpInput := rl.IsKeyPressed(.SPACE)
 	if jumpInput {
 		if onFloor {
@@ -335,7 +358,7 @@ updateAndDrawPlayer :: proc(player: ^Player) {
 	} else {
 		playerSetSprite(player, &player.idleSpr)
 	}
-	drawSpriteEx(player.currentSpr^, player.pos, player.scale)
+	drawSpriteEx(player.currentSpr^, vector2Floor(player.pos), player.scale)
 	updateSprite(player.currentSpr)
 }
 PlayerMoveAndCollideResult :: struct {
@@ -385,6 +408,12 @@ playerMoveAndCollide :: proc(
 	}
 	return result
 }
+getPlayerCenter :: proc(player: ^Player) -> rl.Vector2 {
+	return {
+		player.colRec.x + player.colRec.width / 2.0,
+		player.colRec.y + player.colRec.height / 2.0,
+	}
+}
 playerSetSprite :: proc(player: ^Player, spr: ^Sprite) {
 	if (player.currentSpr != spr) {
 		player.currentSpr = spr
@@ -420,6 +449,10 @@ blockCollision :: proc(rec: rl.Rectangle) -> BlockCollisionResult {
 	return nil
 }
 
+vector2Floor :: proc(v: rl.Vector2) -> rl.Vector2 {
+	return rl.Vector2{math.floor(v.x), math.floor(v.y)}
+}
+
 init :: proc() {
 	loadTextures()
 	initSpriteDefs()
@@ -436,8 +469,10 @@ main :: proc() {
 	// Raylib init
 	rl.SetConfigFlags({.WINDOW_RESIZABLE}) // TODO: Remove artifacts from main framebuffer
 	rl.SetTraceLogLevel(.WARNING)
-	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "The Great Seeker: Unruly Lands")
 	rl.SetTargetFPS(TARGET_FPS)
+	rl.InitAudioDevice()
+	defer rl.CloseAudioDevice()
+	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "The Great Seeker: Unruly Lands")
 	defer rl.CloseWindow()
 
 	// Engine init
@@ -458,7 +493,6 @@ main :: proc() {
 
 	solidBlocks := make([dynamic]rl.Rectangle, context.allocator)
 	globalSolidBlocks = &solidBlocks
-
 	append(globalSolidBlocks, rl.Rectangle{0.0, 0.0, WINDOW_WIDTH, 16.0})
 	append(globalSolidBlocks, rl.Rectangle{WINDOW_WIDTH - 16.0, 0.0, 16.0, WINDOW_HEIGHT})
 	append(globalSolidBlocks, rl.Rectangle{0.0, WINDOW_HEIGHT - 16.0, WINDOW_WIDTH, 16.0})
@@ -467,6 +501,9 @@ main :: proc() {
 		pos := rl.Vector2{rand.float32() * WINDOW_WIDTH, rand.float32() * WINDOW_HEIGHT}
 		append(globalSolidBlocks, rl.Rectangle{pos.x, pos.y, 32.0, 32.0})
 	}
+
+	gameMusic := loadMusicStream(.KowloonSmokeBreak)
+	rl.PlayMusicStream(gameMusic)
 
 	// Game init
 	web10TexSize := rl.Vector2{128.0, 128.0}
@@ -504,22 +541,33 @@ main :: proc() {
 	}
 	playerSetSprite(&player, &player.idleSpr)
 
+	camera := rl.Camera2D {
+		offset   = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},
+		target   = player.pos,
+		rotation = 0.0,
+		zoom     = 1.0,
+	}
+
 	mem.dynamic_arena_reset(&frameArena)
 
 	for !rl.WindowShouldClose() {
+		rl.UpdateMusicStream(gameMusic)
 		if rl.IsMouseButtonPressed(.LEFT) {
 			player.pos = rl.GetMousePosition()
 		}
+		zoom := getAppRtexZoom()
+		camera.offset = {WINDOW_WIDTH * zoom / 2, WINDOW_HEIGHT * zoom / 2}
+		camera.target = player.pos - getPlayerCenter(&player)
+		camera.zoom = getAppRtexZoom()
 		rl.BeginDrawing()
-		rl.BeginTextureMode(gameRenderTex)
+		rl.BeginMode2D(camera)
 		rl.ClearBackground(rl.BLACK)
 		drawRepeatingStarBg(&repeatingStarBg)
 		for block in globalSolidBlocks {
 			rl.DrawRectangleV({block.x, block.y}, {block.width, block.height}, rl.WHITE)
 		}
 		updateAndDrawPlayer(&player)
-		rl.EndTextureMode()
-		drawAppRtex(gameRenderTex)
+		rl.EndMode2D()
 		rl.EndDrawing()
 		mem.dynamic_arena_reset(&frameArena)
 	}
