@@ -15,3 +15,5 @@ vertical: vert
 collision rectangle: colRec
 rectangle: rec
 color: col
+source: src
+destination: dest

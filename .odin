@@ -2,6 +2,7 @@ package main
 
 import "core:fmt"
 import math "core:math"
+import linalg "core:math/linalg"
 import rand "core:math/rand"
 import mem "core:mem"
 import "core:reflect"
@@ -222,7 +223,10 @@ getAppRtexZoom :: proc() -> f32 {
 }
 
 getTextureSize :: proc(tex: rl.Texture) -> rl.Vector2 {
-	return {cast(f32)tex.width, cast(f32)tex.height}
+	return {f32(tex.width), f32(tex.height)}
+}
+getTextureRec :: proc(tex: rl.Texture) -> rl.Rectangle {
+	return {0.0, 0.0, f32(tex.width), f32(tex.height)}
 }
 
 drawAppRtex :: proc(rtex: rl.RenderTexture) {
@@ -449,8 +453,79 @@ blockCollision :: proc(rec: rl.Rectangle) -> BlockCollisionResult {
 	return nil
 }
 
+fract :: proc(val: f32) -> f32 {
+	return val - math.floor(val)
+}
 vector2Floor :: proc(v: rl.Vector2) -> rl.Vector2 {
-	return rl.Vector2{math.floor(v.x), math.floor(v.y)}
+	return {math.floor(v.x), math.floor(v.y)}
+}
+vector2Fract :: proc(v: rl.Vector2) -> rl.Vector2 {
+	return {fract(v.x), fract(v.y)}
+}
+vector2Smoothstep :: proc(edgeA: rl.Vector2, edgeB: rl.Vector2, v: rl.Vector2) -> rl.Vector2 {
+	return {math.smoothstep(edgeA.x, edgeB.x, v.x), math.smoothstep(edgeA.y, edgeB.y, v.y)}
+}
+
+deterministicFloat32Rand :: proc(st: rl.Vector2) -> f32 {
+	hash := rl.Vector2DotProduct(st, {38.28459, 53.9385})
+	return fract(math.abs(math.sin(hash) * 43028.28439))
+}
+deterministicValueNoise2d :: proc(st: rl.Vector2, octs: int) -> f32 {
+	n: f32 = 0.0
+	for i in 0 ..< octs {
+		f := f32(i)
+		nst := rl.Vector2{st.x * 2.0 * (f + 1.0) + 0.75 * f, st.y * 2.0 * (f + 1.0) + 0.495 * f}
+		ist := vector2Floor(nst)
+		fst := vector2Fract(nst)
+		a := deterministicFloat32Rand(ist)
+		b := deterministicFloat32Rand(ist + {1.0, 0.0})
+		c := deterministicFloat32Rand(ist + {0.0, 1.0})
+		d := deterministicFloat32Rand(ist + {1.0, 1.0})
+		grad := vector2Smoothstep({0.0, 0.0}, {1.0, 1.0}, fst)
+		nh := linalg.lerp(rl.Vector2{a, c}, rl.Vector2{b, d}, grad.x)
+		nv := linalg.lerp(nh.x, nh.y, grad.y)
+		significance := 1.0 / (f + 2.0)
+		n += nv * significance
+	}
+	return n
+}
+Grid :: struct {
+	data:      [dynamic]byte,
+	width:     i32,
+	blockSize: f32,
+}
+createGrid :: proc(alloc: Alloc, width: i32, height: i32, blockSize: f32) -> Grid {
+	size := width * height
+	return {make([dynamic]byte, size, size, alloc), width, blockSize}
+}
+fillGrid :: proc(grid: ^Grid, off: rl.Vector2, cutoff: f32) {
+	gridHeight := i32(len(grid.data)) / grid.width
+	gridSize := rl.Vector2{f32(grid.width), f32(gridHeight)}
+	for i in 0 ..< len(grid.data) {
+		ii := i32(i)
+		f := rl.Vector2{f32((ii + 1) % grid.width), f32((ii + 1) / grid.width)} / gridSize
+		n := deterministicValueNoise2d(f, 3)
+		fmt.println(n)
+		grid.data[i] = u8(math.step(cutoff, n))
+	}
+}
+getGridHeight :: proc(grid: ^Grid) -> i32 {
+	return i32(len(grid.data)) / grid.width
+}
+getGridIndexWorldPosition :: proc(grid: ^Grid, i: i32) -> rl.Vector2 {
+	return {f32(i % grid.width) * grid.blockSize, f32(i / getGridHeight(grid)) * grid.blockSize}
+}
+debugDrawGrid :: proc(grid: ^Grid, pos: rl.Vector2, tint: rl.Color) {
+	tex := getTexture(.White32)
+	texSrc := getTextureRec(tex)
+	texSize := rl.Vector2{texSrc.width, texSrc.height}
+	for block, i in grid.data {
+		if (block > 0) {
+			worldPos := getGridIndexWorldPosition(grid, i32(i))
+			texDest := rl.Rectangle{worldPos.x, worldPos.y, texSize.x, texSize.y}
+			rl.DrawTexturePro(tex, texSrc, texDest, {0.0, 0.0}, 0.0, tint)
+		}
+	}
 }
 
 init :: proc() {
@@ -548,6 +623,9 @@ main :: proc() {
 		zoom     = 1.0,
 	}
 
+	grid := createGrid(context.allocator, 32, 32, 16.0)
+	fillGrid(&grid, {0.0, 0.0}, 0.5)
+
 	mem.dynamic_arena_reset(&frameArena)
 
 	for !rl.WindowShouldClose() {
@@ -567,6 +645,7 @@ main :: proc() {
 			rl.DrawRectangleV({block.x, block.y}, {block.width, block.height}, rl.WHITE)
 		}
 		updateAndDrawPlayer(&player)
+		debugDrawGrid(&grid, {0.0, 0.0}, {0, 192, 0, 128})
 		rl.EndMode2D()
 		rl.EndDrawing()
 		mem.dynamic_arena_reset(&frameArena)
