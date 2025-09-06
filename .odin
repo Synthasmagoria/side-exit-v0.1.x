@@ -45,12 +45,15 @@ globalSpriteDefs: [TextureName._MAX]SpriteDef
 getSpriteDef :: proc(ind: TextureName) -> SpriteDef {
 	return globalSpriteDefs[ind]
 }
+_setSpriteDef :: proc(ind: TextureName, frame_w: i32, frame_spd: f32) {
+	globalSpriteDefs[ind] = createSpriteDef(getTexture(ind), frame_w, frame_spd)
+}
 initSpriteDefs :: proc() {
-	globalSpriteDefs[TextureName.Star] = createSpriteDef(getTexture(.Star), 4, 8.0)
-	globalSpriteDefs[TextureName.SynthIdle] = createSpriteDef(getTexture(.Star), 24, 8.0)
-	globalSpriteDefs[TextureName.SynthIdleBack] = createSpriteDef(getTexture(.Star), 24, 8.0)
-	globalSpriteDefs[TextureName.SynthWalk] = createSpriteDef(getTexture(.Star), 24, 8.0)
-	globalSpriteDefs[TextureName.SynthWalkBack] = createSpriteDef(getTexture(.Star), 24, 8.0)
+	_setSpriteDef(.Star, 4, 8.0)
+	_setSpriteDef(.SynthIdle, 24, 8.0)
+	_setSpriteDef(.SynthIdleBack, 24, 8.0)
+	_setSpriteDef(.SynthWalk, 24, 8.0)
+	_setSpriteDef(.SynthWalkBack, 24, 8.0)
 }
 
 ShaderNames :: enum {
@@ -103,9 +106,8 @@ Sprite :: struct {
 	frame_t:   f32,
 	frame_ind: i32,
 }
-createSprite :: proc(spr_def: SpriteDef, frame_ind: f32) -> Sprite {
-	// TODO: Make sure frame index isnt out of bounds
-	return {spr_def, frame_ind, cast(i32)frame_ind}
+createSprite :: proc(spr_def: SpriteDef) -> Sprite {
+	return {spr_def, 0, 0.0}
 }
 getSpriteSourceRect :: proc(spr: Sprite) -> rl.Rectangle {
 	return {
@@ -117,23 +119,27 @@ getSpriteSourceRect :: proc(spr: Sprite) -> rl.Rectangle {
 }
 drawSpriteEx :: proc(spr: Sprite, pos: rl.Vector2, scale: rl.Vector2) {
 	src := getSpriteSourceRect(spr)
-	frame_w := cast(f32)spr.def.frame_w
+	frame_w := f32(spr.def.frame_w)
 	size := rl.Vector2{frame_w, frame_w} * scale
 	dest := rl.Rectangle{pos.x, pos.y, size.x, size.y}
 	rl.DrawTexturePro(spr.def.tex, src, dest, {0.0, 0.0}, 0.0, rl.WHITE)
 }
 drawSpriteRect :: proc(spr: Sprite, dest: rl.Rectangle) {
 	src := getSpriteSourceRect(spr)
-	frame_w := cast(f32)spr.def.tex.width
+	frame_w := f32(spr.def.tex.width)
 	rl.DrawTexturePro(spr.def.tex, src, dest, {0.0, 0.0}, 0.0, rl.WHITE)
 }
-updateSprite :: proc(spr: ^Sprite, t_step := TARGET_TIME_STEP) {
-	spr.frame_t = math.mod(spr.frame_t + t_step * spr.def.frame_spd, cast(f32)spr.def.frame_count)
-	spr.frame_ind = cast(i32)spr.frame_t
+setSpriteFrame :: proc(spr: ^Sprite, frame: i32) {
+	spr.frame_t = math.mod(f32(frame), f32(spr.def.frame_count))
+	spr.frame_ind = i32(spr.frame_t)
+}
+updateSprite :: proc(spr: ^Sprite, t_step: f32 = TARGET_TIME_STEP) {
+	spr.frame_t = math.mod(spr.frame_t + t_step * spr.def.frame_spd, f32(spr.def.frame_count))
+	spr.frame_ind = i32(spr.frame_t)
 }
 advanceSpriteFrame :: proc(spr: ^Sprite) {
-	spr.frame_t = math.mod(spr.frame_t + 1.0, cast(f32)spr.def.frame_count)
-	spr.frame_ind = cast(i32)spr.frame_t
+	spr.frame_t = math.mod(spr.frame_t + 1.0, f32(spr.def.frame_count))
+	spr.frame_ind = i32(spr.frame_t)
 }
 
 web10CreateTexture :: proc(w: i32, h: i32, spr_def: SpriteDef, num: i32) -> rl.Texture {
@@ -142,13 +148,14 @@ web10CreateTexture :: proc(w: i32, h: i32, spr_def: SpriteDef, num: i32) -> rl.T
 	assert(tex_w <= MAX_TEXTURE_SIZE)
 	spr_list := make([dynamic]Sprite, num, num)
 	rect_list := make([dynamic]rl.Rectangle, num, num)
-	frame_count := cast(f32)spr_def.frame_count
+	frame_count := f32(spr_def.frame_count)
 	tex_size := getTextureSize(spr_def.tex)
 	for i: i32 = 0; i < num; i += 1 {
-		spr_list[i] = createSprite(spr_def, cast(f32)rand.int31_max(spr_def.frame_count))
+		spr_list[i] = createSprite(spr_def)
+		setSpriteFrame(&spr_list[i], rand.int31_max(spr_def.frame_count))
 		rect_list[i] = rl.Rectangle {
-			math.floor(cast(f32)(rand.int31_max(w - spr_def.tex.width))),
-			math.floor(cast(f32)(rand.int31_max(h - spr_def.tex.height))),
+			math.floor(f32(rand.int31_max(w - spr_def.tex.width))),
+			math.floor(f32(rand.int31_max(h - spr_def.tex.height))),
 			tex_size.x,
 			tex_size.y,
 		}
@@ -199,15 +206,6 @@ drawAppRtex :: proc(rtex: rl.RenderTexture) {
 	dest := getAppRtexDestRect(rtex)
 	origin := rl.Vector2{0.0, 0.0}
 	rl.DrawTexturePro(rtex.texture, src, dest, origin, 0.0, rl.WHITE)
-}
-
-Shader :: enum {
-	AnimatedTexture,
-	AnimatedTextureRepeatPosition,
-	FogParticleGen,
-	Passthrough,
-	Repeat,
-	_MAX,
 }
 
 MAX_TEXTURE_SIZE :: 4096
@@ -262,12 +260,33 @@ drawTextureRecDest :: proc(tex: rl.Texture, dest: rl.Rectangle) {
 }
 
 Player :: struct {
-	pos:          rl.Vector2,
-	idleSpr:      Sprite,
-	runSpr:       Sprite,
-	runSpeed:     f32,
-	jumpStrength: f32,
+	pos:        rl.Vector2,
+	idleSpr:    Sprite,
+	walkSpr:    Sprite,
+	currentSpr: ^Sprite,
+	walkSpd:    f32,
+	jumpStr:    f32,
 }
+updateAndDrawPlayer :: proc(player: ^Player) {
+	rightInput := rl.IsKeyDown(.RIGHT)
+	leftInput := rl.IsKeyDown(.LEFT)
+	walkInput := f32(int(rightInput)) - f32(int(leftInput))
+	if (math.abs(walkInput) > 0.0) {
+		playerSetSprite(player, &player.walkSpr)
+		player.pos.x += walkInput * 2.0
+	} else {
+		playerSetSprite(player, &player.idleSpr)
+	}
+	drawSpriteEx(player.currentSpr^, player.pos, {1.0, 1.0})
+	updateSprite(player.currentSpr)
+}
+playerSetSprite :: proc(player: ^Player, spr: ^Sprite) {
+	if (player.currentSpr != spr) {
+		player.currentSpr = spr
+		setSpriteFrame(player.currentSpr, 0)
+	}
+}
+
 
 init :: proc() {
 	loadTextures()
@@ -289,15 +308,20 @@ main :: proc() {
 	defer rl.CloseWindow()
 
 	// Engine init
-	tempArena: mem.Dynamic_Arena
-	mem.dynamic_arena_init(&tempArena)
-	defer mem.dynamic_arena_free_all(&tempArena)
-	tempAlloc := mem.dynamic_arena_allocator(&tempArena)
-	context.temp_allocator = tempAlloc
+	gameArena: mem.Dynamic_Arena
+	mem.dynamic_arena_init(&gameArena)
+	defer mem.dynamic_arena_free_all(&gameArena)
+	context.allocator = mem.dynamic_arena_allocator(&gameArena)
+
+	frameArena: mem.Dynamic_Arena
+	mem.dynamic_arena_init(&frameArena)
+	defer mem.dynamic_arena_free_all(&frameArena)
+	context.temp_allocator = mem.dynamic_arena_allocator(&frameArena)
+
 	init()
 	defer deinit()
-	appRtex := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
-	defer rl.UnloadRenderTexture(appRtex)
+	gameRenderTex := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
+	defer rl.UnloadRenderTexture(gameRenderTex)
 
 	// Game init
 	web10TexSize := rl.Vector2{128.0, 128.0}
@@ -317,16 +341,33 @@ main :: proc() {
 		rl.Vector2{30.0, 20.0},
 	)
 
-	mem.dynamic_arena_reset(&tempArena)
+	blocks := make([dynamic]rl.Rectangle, context.allocator)
+	append(&blocks, rl.Rectangle{32.0, 57.0, 280.0, 350.0})
+
+	player := Player {
+		pos        = rl.Vector2{32.0, 32.0},
+		idleSpr    = createSprite(getSpriteDef(.SynthIdle)),
+		walkSpr    = createSprite(getSpriteDef(.SynthWalk)),
+		currentSpr = nil,
+		jumpStr    = 8.5,
+		walkSpd    = 2.0,
+	}
+	playerSetSprite(&player, &player.idleSpr)
+
+	mem.dynamic_arena_reset(&frameArena)
 
 	for !rl.WindowShouldClose() {
 		rl.BeginDrawing()
-		rl.BeginTextureMode(appRtex)
+		rl.BeginTextureMode(gameRenderTex)
 		rl.ClearBackground(rl.BLACK)
 		drawRepeatingStarBg(&repeatingStarBg)
+		for block in blocks {
+			rl.DrawRectangleV({block.x, block.y}, {block.width, block.height}, rl.WHITE)
+		}
+		updateAndDrawPlayer(&player)
 		rl.EndTextureMode()
-		drawAppRtex(appRtex)
+		drawAppRtex(gameRenderTex)
 		rl.EndDrawing()
-		mem.dynamic_arena_reset(&tempArena)
+		mem.dynamic_arena_reset(&frameArena)
 	}
 }

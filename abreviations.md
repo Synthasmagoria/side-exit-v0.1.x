@@ -7,3 +7,4 @@ sprite: spr
 index: ind
 shader: shd
 background: bg
+strength: str
