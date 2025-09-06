@@ -5,10 +5,89 @@ import "core:fmt"
 import math "core:math"
 import rand "core:math/rand"
 import mem "core:mem"
+import "core:os"
+import "core:reflect"
 import string_util "core:strings"
 import rl "vendor:raylib"
 
 Alloc :: mem.Allocator
+
+TextureName :: enum {
+	Star,
+	SynthIdle,
+	SynthIdleBack,
+	SynthWalk,
+	SynthWalkBack,
+	White32,
+	_MAX,
+}
+globalTextures: [TextureName._MAX]rl.Texture
+getTexture :: proc(ind: TextureName) -> rl.Texture {
+	return globalTextures[ind]
+}
+loadTextures :: proc() {
+	context.allocator = context.temp_allocator
+	texNames := reflect.enum_field_names(TextureName)
+	for name, i in texNames[0:len(texNames) - 1] {
+		n := transmute([]u8)string_util.clone(name)
+		n[0] = charLower(n[0])
+		path := string_util.join({"tex/", cast(string)n, ".png"}, "")
+		globalTextures[i] = rl.LoadTexture(string_util.clone_to_cstring(path))
+	}
+}
+unloadTextures :: proc() {
+	for t in globalTextures {
+		rl.UnloadTexture(t)
+	}
+}
+
+globalSpriteDefs: [TextureName._MAX]SpriteDef
+getSpriteDef :: proc(ind: TextureName) -> SpriteDef {
+	return globalSpriteDefs[ind]
+}
+initSpriteDefs :: proc() {
+	globalSpriteDefs[TextureName.Star] = createSpriteDef(getTexture(.Star), 4, 8.0)
+	globalSpriteDefs[TextureName.SynthIdle] = createSpriteDef(getTexture(.Star), 24, 8.0)
+	globalSpriteDefs[TextureName.SynthIdleBack] = createSpriteDef(getTexture(.Star), 24, 8.0)
+	globalSpriteDefs[TextureName.SynthWalk] = createSpriteDef(getTexture(.Star), 24, 8.0)
+	globalSpriteDefs[TextureName.SynthWalkBack] = createSpriteDef(getTexture(.Star), 24, 8.0)
+}
+
+ShaderNames :: enum {
+	AnimatedTextureRepeatPosition,
+	_MAX,
+}
+globalShaders: [ShaderNames._MAX]rl.Shader
+getShader :: proc(ind: ShaderNames) -> rl.Shader {
+	return globalShaders[ind]
+}
+
+loadShaders :: proc() {
+	context.allocator = context.temp_allocator
+	names := reflect.enum_field_names(ShaderNames)
+	for name, i in names[0:len(names) - 1] {
+		n := transmute([]u8)string_util.clone(name)
+		n[0] = charLower(n[0])
+		vertPath := [?]string{"shd/", cast(string)n, ".vert"}
+		fragPath := [?]string{"shd/", cast(string)n, ".frag"}
+		globalShaders[i] = rl.LoadShader(
+			string_util.clone_to_cstring(string_util.join(vertPath[:], "")),
+			string_util.clone_to_cstring(string_util.join(fragPath[:], "")),
+		)
+	}
+}
+unloadShaders :: proc() {
+	for shd in globalShaders {
+		rl.UnloadShader(shd)
+	}
+}
+
+charLower :: proc(c: u8) -> u8 {
+	if c >= 'A' && c <= 'Z' {
+		return c + ('a' - 'A')
+	}
+	return c
+}
 
 SpriteDef :: struct {
 	tex:         rl.Texture,
@@ -122,14 +201,13 @@ drawAppRtex :: proc(rtex: rl.RenderTexture) {
 	rl.DrawTexturePro(rtex.texture, src, dest, origin, 0.0, rl.WHITE)
 }
 
-loadShader :: proc(path: string) -> rl.Shader {
-	context.allocator = context.temp_allocator
-	vertPath := [?]string{path, ".vert"}
-	fragPath := [?]string{path, ".frag"}
-	return rl.LoadShader(
-		string_util.clone_to_cstring(string_util.join(vertPath[:], "")),
-		string_util.clone_to_cstring(string_util.join(fragPath[:], "")),
-	)
+Shader :: enum {
+	AnimatedTexture,
+	AnimatedTextureRepeatPosition,
+	FogParticleGen,
+	Passthrough,
+	Repeat,
+	_MAX,
 }
 
 MAX_TEXTURE_SIZE :: 4096
@@ -183,38 +261,55 @@ drawTextureRecDest :: proc(tex: rl.Texture, dest: rl.Rectangle) {
 	rl.DrawTexturePro(tex, src, dest, rl.Vector2{0.0, 0.0}, 0.0, rl.WHITE)
 }
 
+Player :: struct {
+	pos:          rl.Vector2,
+	idleSpr:      Sprite,
+	runSpr:       Sprite,
+	runSpeed:     f32,
+	jumpStrength: f32,
+}
+
+init :: proc() {
+	loadTextures()
+	initSpriteDefs()
+	loadShaders()
+}
+
+deinit :: proc() {
+	unloadTextures()
+	unloadShaders()
+}
+
 main :: proc() {
+	// Raylib init
 	rl.SetConfigFlags({.WINDOW_RESIZABLE}) // TODO: Remove artifacts from main framebuffer
 	rl.SetTraceLogLevel(.WARNING)
 	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "The Great Seeker: Unruly Lands")
 	rl.SetTargetFPS(TARGET_FPS)
 	defer rl.CloseWindow()
 
+	// Engine init
 	tempArena: mem.Dynamic_Arena
 	mem.dynamic_arena_init(&tempArena)
 	defer mem.dynamic_arena_free_all(&tempArena)
 	tempAlloc := mem.dynamic_arena_allocator(&tempArena)
 	context.temp_allocator = tempAlloc
+	init()
+	defer deinit()
+	appRtex := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
+	defer rl.UnloadRenderTexture(appRtex)
 
-	starTex := rl.LoadTexture("tex/sStar.png")
-	defer rl.UnloadTexture(starTex)
-	starSprDef := createSpriteDef(starTex, 4, 5.0)
-	starSpr := createSprite(starSprDef, 0.0)
+	// Game init
 	web10TexSize := rl.Vector2{128.0, 128.0}
 	web10Tex := web10CreateTexture(
 		cast(i32)web10TexSize.x,
 		cast(i32)web10TexSize.y,
-		starSprDef,
+		getSpriteDef(.Star),
 		16,
 	)
 	defer rl.UnloadTexture(web10Tex)
-	app_rtex := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
-	defer rl.UnloadRenderTexture(app_rtex)
-	anim_repeat_shd := loadShader("shd/animatedTextureRepeatPosition")
-	defer rl.UnloadShader(anim_repeat_shd)
-
 	repeatingStarBg := createRepeatingStarBg(
-		anim_repeat_shd,
+		getShader(.AnimatedTextureRepeatPosition),
 		web10Tex,
 		web10TexSize,
 		4.0,
@@ -225,13 +320,13 @@ main :: proc() {
 	mem.dynamic_arena_reset(&tempArena)
 
 	for !rl.WindowShouldClose() {
-		defer mem.dynamic_arena_reset(&tempArena)
 		rl.BeginDrawing()
-		rl.BeginTextureMode(app_rtex)
+		rl.BeginTextureMode(appRtex)
 		rl.ClearBackground(rl.BLACK)
 		drawRepeatingStarBg(&repeatingStarBg)
 		rl.EndTextureMode()
-		drawAppRtex(app_rtex)
+		drawAppRtex(appRtex)
 		rl.EndDrawing()
+		mem.dynamic_arena_reset(&tempArena)
 	}
 }
