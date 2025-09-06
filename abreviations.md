@@ -12,6 +12,6 @@ position: pos
 rectangle: rec
 horizontal: hor
 vertical: vert
-colRec: collision rectangle
-rec: rectangle
-col: color
+collision rectangle: colRec
+rectangle: rec
+color: col

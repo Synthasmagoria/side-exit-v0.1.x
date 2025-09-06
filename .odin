@@ -278,6 +278,9 @@ Player :: struct {
 	airjumpCount:   i32,
 	airjumpIndex:   i32,
 }
+makeAbsoluteColRec :: proc(colRec: rl.Rectangle, pos: rl.Vector2) -> rl.Rectangle {
+	return {colRec.x + pos.x, colRec.y + pos.y, colRec.width, colRec.height}
+}
 getPlayerAbsColRec :: proc(player: ^Player, offset: rl.Vector2) -> rl.Rectangle {
 	return {
 		player.pos.x + player.colRec.x + offset.x,
@@ -318,50 +321,14 @@ updateAndDrawPlayer :: proc(player: ^Player) {
 
 	player.velocity = rl.Vector2Clamp(player.velocity, -player.maxVelocity, player.maxVelocity)
 
-	absColRecNext := getPlayerAbsColRec(player, player.velocity)
-	switch rect in blockCollision(absColRecNext) {
-	case rl.Rectangle:
-		absColRecVert := rl.Rectangle {
-			player.colRec.x + player.pos.x,
-			absColRecNext.y,
-			player.colRec.width,
-			player.colRec.height,
-		}
-		switch recVert in blockCollision(absColRecVert) {
-		case rl.Rectangle:
-			vertTrajectory := math.sign(player.velocity.y)
-			if (vertTrajectory == 1.0) {
-				player.pos.y = recVert.y - player.colRec.y - player.colRec.height - 1.0
-			} else {
-				player.pos.y = recVert.y + recVert.height - player.colRec.y + 1.0
-			}
-			player.velocity.y = 0.0
-		case nil:
-			player.pos.y += player.velocity.y
-		}
-
-		absColRecHor := rl.Rectangle {
-			absColRecNext.x,
-			player.colRec.y + player.pos.y,
-			player.colRec.width,
-			player.colRec.height,
-		}
-		switch recHor in blockCollision(absColRecHor) {
-		case rl.Rectangle:
-			facing := math.sign(player.scale.x)
-			if (facing == 1.0) {
-				player.pos.x = recHor.x - player.colRec.x - player.colRec.width - 1.0
-			} else {
-				player.pos.x = recHor.x + recHor.width - player.colRec.x + 1.0
-			}
-		case nil:
-			player.pos.x += player.velocity.x
-		}
-
-	case nil:
-		player.pos += player.velocity
-	}
-	player.pos += player.velocity
+	moveAndCollideResult := playerMoveAndCollide(
+		player.pos,
+		player.colRec,
+		player.velocity,
+		math.sign(player.scale.x),
+	)
+	player.pos = moveAndCollideResult.newPos
+	player.velocity = moveAndCollideResult.newVelocity
 
 	if math.abs(walkInput) > 0.0 {
 		playerSetSprite(player, &player.walkSpr)
@@ -370,6 +337,53 @@ updateAndDrawPlayer :: proc(player: ^Player) {
 	}
 	drawSpriteEx(player.currentSpr^, player.pos, player.scale)
 	updateSprite(player.currentSpr)
+}
+PlayerMoveAndCollideResult :: struct {
+	newPos:      rl.Vector2,
+	newVelocity: rl.Vector2,
+}
+playerMoveAndCollide :: proc(
+	pos: rl.Vector2,
+	colRec: rl.Rectangle,
+	velocity: rl.Vector2,
+	facing: f32,
+) -> PlayerMoveAndCollideResult {
+	result := PlayerMoveAndCollideResult {
+		newPos      = pos,
+		newVelocity = velocity,
+	}
+	absColRecNext := makeAbsoluteColRec(colRec, result.newPos + result.newVelocity)
+	switch rect in blockCollision(absColRecNext) {
+	case rl.Rectangle:
+		absColRecVert := makeAbsoluteColRec(colRec, result.newPos + {0.0, result.newVelocity.y})
+		switch recVert in blockCollision(absColRecVert) {
+		case rl.Rectangle:
+			vertTrajectory := math.sign(result.newVelocity.y)
+			if (vertTrajectory == 1.0) {
+				result.newPos.y = recVert.y - colRec.y - colRec.height - 1.0
+			} else {
+				result.newPos.y = recVert.y + recVert.height - colRec.y + 1.0
+			}
+			result.newVelocity.y = 0.0
+		case nil:
+			result.newPos.y += result.newVelocity.y
+		}
+
+		absColRecHor := makeAbsoluteColRec(colRec, result.newPos + {result.newVelocity.x, 0.0})
+		switch recHor in blockCollision(absColRecHor) {
+		case rl.Rectangle:
+			if (facing == 1.0) {
+				result.newPos.x = recHor.x - colRec.x - colRec.width - 1.0
+			} else {
+				result.newPos.x = recHor.x + recHor.width - colRec.x + 1.0
+			}
+		case nil:
+			result.newPos.x += result.newVelocity.x
+		}
+	case nil:
+		result.newPos += result.newVelocity
+	}
+	return result
 }
 playerSetSprite :: proc(player: ^Player, spr: ^Sprite) {
 	if (player.currentSpr != spr) {
@@ -444,7 +458,15 @@ main :: proc() {
 
 	solidBlocks := make([dynamic]rl.Rectangle, context.allocator)
 	globalSolidBlocks = &solidBlocks
-	append(globalSolidBlocks, rl.Rectangle{32.0, 57.0, 280.0, 350.0})
+
+	append(globalSolidBlocks, rl.Rectangle{0.0, 0.0, WINDOW_WIDTH, 16.0})
+	append(globalSolidBlocks, rl.Rectangle{WINDOW_WIDTH - 16.0, 0.0, 16.0, WINDOW_HEIGHT})
+	append(globalSolidBlocks, rl.Rectangle{0.0, WINDOW_HEIGHT - 16.0, WINDOW_WIDTH, 16.0})
+	append(globalSolidBlocks, rl.Rectangle{0.0, 0.0, 16.0, WINDOW_HEIGHT})
+	for i in 0 ..< 32 {
+		pos := rl.Vector2{rand.float32() * WINDOW_WIDTH, rand.float32() * WINDOW_HEIGHT}
+		append(globalSolidBlocks, rl.Rectangle{pos.x, pos.y, 32.0, 32.0})
+	}
 
 	// Game init
 	web10TexSize := rl.Vector2{128.0, 128.0}
@@ -465,18 +487,18 @@ main :: proc() {
 	)
 
 	player := Player {
-		pos            = {32.0, 32.0},
+		pos            = {64.0, 64.0},
 		idleSpr        = createSprite(getSpriteDef(.SynthIdle)),
 		walkSpr        = createSprite(getSpriteDef(.SynthWalk)),
-		maxVelocity    = {9.0, 9.0},
+		maxVelocity    = {6.5, 6.5},
 		currentSpr     = nil,
-		jumpStr        = 5.0,
+		jumpStr        = 7.0,
 		walkSpd        = 2.0,
-		verticalGrav   = 0.4,
+		verticalGrav   = 0.5,
 		verticalDampen = 0.7,
 		colRec         = {7.0, 3.0, 12.0, 20.0},
 		scale          = {1.0, 1.0},
-		airjumpStr     = 4.0,
+		airjumpStr     = 5.8,
 		airjumpCount   = 1,
 		airjumpIndex   = 0,
 	}
@@ -485,6 +507,9 @@ main :: proc() {
 	mem.dynamic_arena_reset(&frameArena)
 
 	for !rl.WindowShouldClose() {
+		if rl.IsMouseButtonPressed(.LEFT) {
+			player.pos = rl.GetMousePosition()
+		}
 		rl.BeginDrawing()
 		rl.BeginTextureMode(gameRenderTex)
 		rl.ClearBackground(rl.BLACK)
