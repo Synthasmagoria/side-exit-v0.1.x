@@ -109,23 +109,25 @@ Sprite :: struct {
 createSprite :: proc(spr_def: SpriteDef) -> Sprite {
 	return {spr_def, 0, 0.0}
 }
-getSpriteSourceRect :: proc(spr: Sprite) -> rl.Rectangle {
+getSpriteSourceRect :: proc(spr: Sprite, scale: rl.Vector2) -> rl.Rectangle {
+	scaleSign: f32 = math.sign(scale.x)
+	offX: i32 = scaleSign == 1.0 ? 0 : spr.def.frame_w
 	return {
-		cast(f32)(spr.frame_ind * spr.def.frame_w),
+		cast(f32)(spr.frame_ind * spr.def.frame_w + offX),
 		0.0,
-		cast(f32)spr.def.frame_w,
+		cast(f32)spr.def.frame_w * scaleSign,
 		cast(f32)spr.def.tex.height,
 	}
 }
 drawSpriteEx :: proc(spr: Sprite, pos: rl.Vector2, scale: rl.Vector2) {
-	src := getSpriteSourceRect(spr)
+	src := getSpriteSourceRect(spr, scale)
 	frame_w := f32(spr.def.frame_w)
 	size := rl.Vector2{frame_w, frame_w} * scale
 	dest := rl.Rectangle{pos.x, pos.y, size.x, size.y}
 	rl.DrawTexturePro(spr.def.tex, src, dest, {0.0, 0.0}, 0.0, rl.WHITE)
 }
 drawSpriteRect :: proc(spr: Sprite, dest: rl.Rectangle) {
-	src := getSpriteSourceRect(spr)
+	src := getSpriteSourceRect(spr, {1.0, 1.0})
 	frame_w := f32(spr.def.tex.width)
 	rl.DrawTexturePro(spr.def.tex, src, dest, {0.0, 0.0}, 0.0, rl.WHITE)
 }
@@ -260,24 +262,113 @@ drawTextureRecDest :: proc(tex: rl.Texture, dest: rl.Rectangle) {
 }
 
 Player :: struct {
-	pos:        rl.Vector2,
-	idleSpr:    Sprite,
-	walkSpr:    Sprite,
-	currentSpr: ^Sprite,
-	walkSpd:    f32,
-	jumpStr:    f32,
+	pos:            rl.Vector2,
+	idleSpr:        Sprite,
+	walkSpr:        Sprite,
+	currentSpr:     ^Sprite,
+	scale:          rl.Vector2,
+	colRec:         rl.Rectangle,
+	velocity:       rl.Vector2,
+	maxVelocity:    rl.Vector2,
+	walkSpd:        f32,
+	verticalGrav:   f32,
+	verticalDampen: f32,
+	jumpStr:        f32,
+	airjumpStr:     f32,
+	airjumpCount:   i32,
+	airjumpIndex:   i32,
+}
+getPlayerAbsColRec :: proc(player: ^Player, offset: rl.Vector2) -> rl.Rectangle {
+	return {
+		player.pos.x + player.colRec.x + offset.x,
+		player.pos.y + player.colRec.y + offset.y,
+		player.colRec.width,
+		player.colRec.height,
+	}
 }
 updateAndDrawPlayer :: proc(player: ^Player) {
 	rightInput := rl.IsKeyDown(.RIGHT)
 	leftInput := rl.IsKeyDown(.LEFT)
 	walkInput := f32(int(rightInput)) - f32(int(leftInput))
-	if (math.abs(walkInput) > 0.0) {
+
+	onFloor :=
+		blockCollision(getPlayerAbsColRec(player, {0.0, 1.0})) != nil && player.velocity.y >= 0.0
+	if onFloor {
+		player.airjumpIndex = 0
+	}
+
+	player.velocity.x = walkInput * player.walkSpd
+	if 0.0 < math.abs(player.velocity.x) {
+		player.scale.x = math.abs(player.scale.x) * math.sign(player.velocity.x)
+	}
+	player.velocity.y += player.verticalGrav
+	jumpInput := rl.IsKeyPressed(.SPACE)
+	if jumpInput {
+		if onFloor {
+			player.velocity.y = -player.jumpStr
+			onFloor = false
+		} else if player.airjumpIndex < player.airjumpCount {
+			player.velocity.y = -player.airjumpStr
+			player.airjumpIndex += 1
+		}
+	}
+	if !onFloor && player.velocity.y < 0.0 && rl.IsKeyReleased(.SPACE) {
+		player.velocity.y *= player.verticalDampen
+	}
+
+	player.velocity = rl.Vector2Clamp(player.velocity, -player.maxVelocity, player.maxVelocity)
+
+	absColRecNext := getPlayerAbsColRec(player, player.velocity)
+	switch rect in blockCollision(absColRecNext) {
+	case rl.Rectangle:
+		absColRecVert := rl.Rectangle {
+			player.colRec.x + player.pos.x,
+			absColRecNext.y,
+			player.colRec.width,
+			player.colRec.height,
+		}
+		switch recVert in blockCollision(absColRecVert) {
+		case rl.Rectangle:
+			vertTrajectory := math.sign(player.velocity.y)
+			if (vertTrajectory == 1.0) {
+				player.pos.y = recVert.y - player.colRec.y - player.colRec.height - 1.0
+			} else {
+				player.pos.y = recVert.y + recVert.height - player.colRec.y + 1.0
+			}
+			player.velocity.y = 0.0
+		case nil:
+			player.pos.y += player.velocity.y
+		}
+
+		absColRecHor := rl.Rectangle {
+			absColRecNext.x,
+			player.colRec.y + player.pos.y,
+			player.colRec.width,
+			player.colRec.height,
+		}
+		switch recHor in blockCollision(absColRecHor) {
+		case rl.Rectangle:
+			facing := math.sign(player.scale.x)
+			if (facing == 1.0) {
+				player.pos.x = recHor.x - player.colRec.x - player.colRec.width - 1.0
+			} else {
+				player.pos.x = recHor.x + recHor.width - player.colRec.x + 1.0
+			}
+		case nil:
+			player.pos.x += player.velocity.x
+		}
+
+	case nil:
+		player.pos += player.velocity
+	}
+	player.pos += player.velocity
+
+	if math.abs(walkInput) > 0.0 {
 		playerSetSprite(player, &player.walkSpr)
-		player.pos.x += walkInput * 2.0
 	} else {
 		playerSetSprite(player, &player.idleSpr)
 	}
-	drawSpriteEx(player.currentSpr^, player.pos, {1.0, 1.0})
+	drawSpriteEx(player.currentSpr^, player.pos, player.scale)
 	updateSprite(player.currentSpr)
 }
 playerSetSprite :: proc(player: ^Player, spr: ^Sprite) {
@@ -287,6 +378,33 @@ playerSetSprite :: proc(player: ^Player, spr: ^Sprite) {
 	}
 }
 
+pointInRec :: proc(point: rl.Vector2, rectangle: rl.Rectangle) -> bool {
+	return(
+		point.x >= rectangle.x &&
+		point.x < rectangle.x + rectangle.width &&
+		point.y >= rectangle.y &&
+		point.y < rectangle.y + rectangle.height \
+	)
+}
+recInRec :: proc(a: rl.Rectangle, b: rl.Rectangle) -> bool {
+	return(
+		pointInRec({a.x, a.y}, b) ||
+		pointInRec({a.x + a.width, a.y}, b) ||
+		pointInRec({a.x, a.y + a.height}, b) ||
+		pointInRec({a.x + a.width, a.y + a.height}, b) \
+	)
+}
+BlockCollisionResult :: union {
+	rl.Rectangle,
+}
+blockCollision :: proc(rec: rl.Rectangle) -> BlockCollisionResult {
+	for block in globalSolidBlocks {
+		if recInRec(rec, block) {
+			return block
+		}
+	}
+	return nil
+}
 
 init :: proc() {
 	loadTextures()
@@ -299,6 +417,7 @@ deinit :: proc() {
 	unloadShaders()
 }
 
+globalSolidBlocks: ^[dynamic]rl.Rectangle = nil
 main :: proc() {
 	// Raylib init
 	rl.SetConfigFlags({.WINDOW_RESIZABLE}) // TODO: Remove artifacts from main framebuffer
@@ -323,6 +442,10 @@ main :: proc() {
 	gameRenderTex := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
 	defer rl.UnloadRenderTexture(gameRenderTex)
 
+	solidBlocks := make([dynamic]rl.Rectangle, context.allocator)
+	globalSolidBlocks = &solidBlocks
+	append(globalSolidBlocks, rl.Rectangle{32.0, 57.0, 280.0, 350.0})
+
 	// Game init
 	web10TexSize := rl.Vector2{128.0, 128.0}
 	web10Tex := web10CreateTexture(
@@ -341,16 +464,21 @@ main :: proc() {
 		rl.Vector2{30.0, 20.0},
 	)
 
-	blocks := make([dynamic]rl.Rectangle, context.allocator)
-	append(&blocks, rl.Rectangle{32.0, 57.0, 280.0, 350.0})
-
 	player := Player {
-		pos        = rl.Vector2{32.0, 32.0},
-		idleSpr    = createSprite(getSpriteDef(.SynthIdle)),
-		walkSpr    = createSprite(getSpriteDef(.SynthWalk)),
-		currentSpr = nil,
-		jumpStr    = 8.5,
-		walkSpd    = 2.0,
+		pos            = {32.0, 32.0},
+		idleSpr        = createSprite(getSpriteDef(.SynthIdle)),
+		walkSpr        = createSprite(getSpriteDef(.SynthWalk)),
+		maxVelocity    = {9.0, 9.0},
+		currentSpr     = nil,
+		jumpStr        = 5.0,
+		walkSpd        = 2.0,
+		verticalGrav   = 0.4,
+		verticalDampen = 0.7,
+		colRec         = {7.0, 3.0, 12.0, 20.0},
+		scale          = {1.0, 1.0},
+		airjumpStr     = 4.0,
+		airjumpCount   = 1,
+		airjumpIndex   = 0,
 	}
 	playerSetSprite(&player, &player.idleSpr)
 
@@ -361,7 +489,7 @@ main :: proc() {
 		rl.BeginTextureMode(gameRenderTex)
 		rl.ClearBackground(rl.BLACK)
 		drawRepeatingStarBg(&repeatingStarBg)
-		for block in blocks {
+		for block in globalSolidBlocks {
 			rl.DrawRectangleV({block.x, block.y}, {block.width, block.height}, rl.WHITE)
 		}
 		updateAndDrawPlayer(&player)
