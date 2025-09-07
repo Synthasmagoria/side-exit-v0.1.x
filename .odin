@@ -9,6 +9,10 @@ import "core:reflect"
 import string_util "core:strings"
 import rl "vendor:raylib"
 
+printerr :: proc(msg: string) {
+
+}
+
 Alloc :: mem.Allocator
 
 MusicName :: enum {
@@ -161,10 +165,16 @@ objectCollisionType :: proc(object: ^GameObject, type: typeid, offset: rl.Vector
 	return nil
 }
 // TODO: objectCollisionList
-getObjectCenter :: proc(object: GameObject) -> rl.Vector2 {
+getObjCenter :: proc(object: GameObject) -> rl.Vector2 {
 	return {
 		object.colRec.x + object.colRec.width / 2.0,
 		object.colRec.y + object.colRec.height / 2.0,
+	}
+}
+getObjCenterPosition :: proc(object: GameObject) -> rl.Vector2 {
+	return {
+		object.colRec.x + object.colRec.width / 2.0 + object.pos.x,
+		object.colRec.y + object.colRec.height / 2.0 + object.pos.y,
 	}
 }
 getObjAbsColRec :: proc(object: ^GameObject, offset: rl.Vector2) -> rl.Rectangle {
@@ -389,7 +399,7 @@ createElevator :: proc(alloc: Alloc, pos: rl.Vector2) -> ^ElevatorObject {
 updateAndDrawElevator :: proc(elevator: ^ElevatorObject) {
 	rl.DrawTextureV(elevator.tex, elevator.object.pos, rl.WHITE)
 	if colObj := objectCollisionType(elevator.object, PlayerObject, {0.0, 0.0}); colObj != nil {
-		aboveOtherCenter := getObjectCenter(colObj^) - {0.0, colObj.colRec.height}
+		aboveOtherCenter := getObjCenter(colObj^) - {0.0, colObj.colRec.height}
 		drawSpriteEx(elevator.interactionArrowSpr, aboveOtherCenter, {1.0, 1.0})
 	}
 }
@@ -441,7 +451,7 @@ updateAndDrawPlayer :: proc(player: ^PlayerObject) {
 	walkInput := f32(int(rightInput)) - f32(int(leftInput))
 
 	onFloor :=
-		blockCollision(getObjAbsColRec(player.object, {0.0, 1.0})) != nil &&
+		chunkCollision(getObjAbsColRec(player.object, {0.0, 1.0})) != nil &&
 		player.velocity.y >= 0.0
 	if onFloor {
 		player.airjumpIndex = 0
@@ -501,10 +511,10 @@ playerMoveAndCollide :: proc(
 		newVelocity = velocity,
 	}
 	absColRecNext := makeAbsoluteColRec(colRec, result.newPos + result.newVelocity)
-	switch rect in blockCollision(absColRecNext) {
+	switch rect in chunkCollision(absColRecNext) {
 	case rl.Rectangle:
 		absColRecVert := makeAbsoluteColRec(colRec, result.newPos + {0.0, result.newVelocity.y})
-		switch recVert in blockCollision(absColRecVert) {
+		switch recVert in chunkCollision(absColRecVert) {
 		case rl.Rectangle:
 			vertTrajectory := math.sign(result.newVelocity.y)
 			if (vertTrajectory == 1.0) {
@@ -518,7 +528,7 @@ playerMoveAndCollide :: proc(
 		}
 
 		absColRecHor := makeAbsoluteColRec(colRec, result.newPos + {result.newVelocity.x, 0.0})
-		switch recHor in blockCollision(absColRecHor) {
+		switch recHor in chunkCollision(absColRecHor) {
 		case rl.Rectangle:
 			if (facing == 1.0) {
 				result.newPos.x = recHor.x - colRec.x - colRec.width - 1.0
@@ -556,19 +566,40 @@ recInRec :: proc(a: rl.Rectangle, b: rl.Rectangle) -> bool {
 		a.y < b.y + b.height \
 	)
 }
-BlockCollisionResult :: union {
-	rl.Rectangle,
-}
-globalSolidBlocks: ^[dynamic]rl.Rectangle = nil
-blockCollision :: proc(rec: rl.Rectangle) -> BlockCollisionResult {
-	for block in globalSolidBlocks {
-		if recInRec(rec, block) {
-			return block
-		}
-	}
-	return nil
+pointInIrec :: proc(point: iVector2, rectangle: iRectangle) -> bool {
+	return(
+		point.x >= rectangle.x &&
+		point.x < rectangle.x + rectangle.width &&
+		point.y >= rectangle.y &&
+		point.y < rectangle.y + rectangle.height \
+	)
 }
 
+iRectangle :: struct {
+	x:      i32,
+	y:      i32,
+	width:  i32,
+	height: i32,
+}
+iRectangleClampVal :: proc(irec: iRectangle, a: i32, b: i32) -> iRectangle {
+	x2 := irec.x + irec.width
+	y2 := irec.y + irec.height
+	xClamped := math.clamp(irec.x, a, b)
+	yClamped := math.clamp(irec.y, a, b)
+	widthClamped := math.clamp(x2, a, b + 1) - xClamped
+	heightClamped := math.clamp(y2, a, b + 1) - yClamped
+	return {xClamped, yClamped, widthClamped, heightClamped}
+}
+iRectangleAssertInv :: proc(irec: iRectangle) {
+	assert_contextless(irec.x <= irec.x + irec.width && irec.y <= irec.y + irec.height)
+}
+iRectangleGetInd :: proc(irec: iRectangle, maxWidth: i32) -> i32 {
+	return irec.x + irec.height * maxWidth
+}
+iVector2 :: struct {
+	x: i32,
+	y: i32,
+}
 fract :: proc(val: f32) -> f32 {
 	return val - math.floor(val)
 }
@@ -606,56 +637,236 @@ deterministicValueNoise2d :: proc(st: rl.Vector2, octs: int) -> f32 {
 	}
 	return n
 }
-Grid :: struct {
-	data:      [dynamic]byte,
-	width:     i32,
-	blockSize: f32,
+
+LOADED_CHUNK_SIZE :: 3
+LOADED_CHUNK_COUNT :: LOADED_CHUNK_SIZE * LOADED_CHUNK_SIZE
+CHUNK_BLOCK_WIDTH :: 16
+CHUNK_BLOCK_WIDTH_PX :: 16
+CHUNK_BLOCK_COUNT :: CHUNK_BLOCK_WIDTH * CHUNK_BLOCK_WIDTH
+CHUNK_WIDTH_PX :: CHUNK_BLOCK_WIDTH * CHUNK_BLOCK_WIDTH_PX
+ChunkDataMatrix :: [LOADED_CHUNK_COUNT][CHUNK_BLOCK_COUNT]byte
+ChunkDataRecs :: [LOADED_CHUNK_COUNT][dynamic]rl.Rectangle
+globalChunkWorld: ^ChunkWorld
+
+ChunkWorld :: struct {
+	data:      ChunkDataMatrix,
+	rects:     ChunkDataRecs,
+	genCutoff: f32,
+	x:         i32,
+	y:         i32,
 }
-createGrid :: proc(alloc: Alloc, width: i32, height: i32, blockSize: f32) -> Grid {
-	size := width * height
-	return {make([dynamic]byte, size, size, alloc), width, blockSize}
+chunkWorldCalculateX :: proc(target: GameObject) -> i32 {
+	targetCenter := getObjCenterPosition(target)
+	return i32(math.floor((targetCenter.x - CHUNK_WIDTH_PX) / CHUNK_WIDTH_PX))
 }
-fillGrid :: proc(grid: ^Grid, off: rl.Vector2, cutoff: f32) {
-	gridHeight := i32(len(grid.data)) / grid.width
-	gridSize := rl.Vector2{f32(grid.width), f32(gridHeight)}
-	for i in 0 ..< len(grid.data) {
-		ii := i32(i)
-		f := rl.Vector2{f32((ii + 1) % grid.width), f32((ii + 1) / grid.width)} / gridSize
-		n := deterministicValueNoise2d(f, 3)
-		grid.data[i] = u8(math.step(cutoff, n))
+chunkWorldCalculateY :: proc(target: GameObject) -> i32 {
+	targetCenter := getObjCenterPosition(target)
+	return i32(math.floor((targetCenter.y - CHUNK_WIDTH_PX) / CHUNK_WIDTH_PX))
+}
+getChunkMatrixX :: proc(i: i32) -> i32 {
+	return i % LOADED_CHUNK_SIZE
+}
+getChunkMatrixY :: proc(i: i32) -> i32 {
+	return i / LOADED_CHUNK_SIZE
+}
+getChunkMatrixPosition :: proc(i: i32) -> iVector2 {
+	return {getChunkMatrixX(i), getChunkMatrixY(i)}
+}
+updateChunkWorld :: proc(chunkWorld: ^ChunkWorld, target: GameObject) {
+	newX := chunkWorldCalculateX(target)
+	newY := chunkWorldCalculateY(target)
+	if (newX != chunkWorld.x || newY != chunkWorld.y) {
+		diffX := newX - chunkWorld.x
+		unloadableChunks: [LOADED_CHUNK_COUNT]byte
+		if diffX < 0 {
+			unloadArea := iRectangleClampVal(
+				{LOADED_CHUNK_SIZE + diffX, 0, math.abs(diffX), LOADED_CHUNK_SIZE},
+				0,
+				LOADED_CHUNK_SIZE - 1,
+			)
+			unloadableChunks = chunkBitmaskOrRec(unloadableChunks, unloadArea)
+		} else if diffX > 0 {
+			unloadArea := iRectangleClampVal(
+				iRectangle{0, 0, diffX, LOADED_CHUNK_SIZE},
+				0,
+				LOADED_CHUNK_SIZE - 1,
+			)
+			unloadableChunks = chunkBitmaskOrRec(unloadableChunks, unloadArea)
+		}
+
+		diffY := newY - chunkWorld.y
+		if diffY < 0 {
+			unloadArea := iRectangleClampVal(
+				{0, LOADED_CHUNK_SIZE + diffY, LOADED_CHUNK_SIZE, math.abs(diffY)},
+				0,
+				LOADED_CHUNK_SIZE - 1,
+			)
+			unloadableChunks = chunkBitmaskOrRec(unloadableChunks, unloadArea)
+		} else if diffY > 0 {
+			unloadArea := iRectangleClampVal(
+				{0, 0, LOADED_CHUNK_SIZE, diffY},
+				0,
+				LOADED_CHUNK_SIZE - 1,
+			)
+			unloadableChunks = chunkBitmaskOrRec(unloadableChunks, unloadArea)
+		}
+
+		moveChunks(chunkWorld, chunkBitmaskNot(unloadableChunks), {-diffX, -diffY})
+		chunkWorld.x = newX
+		chunkWorld.y = newY
+		regenerateChunks(chunkWorld, chunkBitmaskMirror(unloadableChunks))
 	}
 }
-pushGridAsSolids :: proc(grid: ^Grid) {
-	for val, i in grid.data {
-		if (val != 0) {
-			pos := getGridWorldPos(i32(i), grid)
-			append(globalSolidBlocks, rl.Rectangle{pos.x, pos.y, grid.blockSize, grid.blockSize})
+moveChunks :: proc(chunkWorld: ^ChunkWorld, chunkBitmask: ChunkBitmask, diff: iVector2) {
+	chunkDataMatrix: ChunkDataMatrix
+	chunkDataRecs: ChunkDataRecs
+	for i in 0 ..< len(chunkDataMatrix) {
+		if chunkBitmask[i] > 0 {
+			matPos := getChunkMatrixPosition(i32(i))
+			matRec := iRectangle{0, 0, LOADED_CHUNK_SIZE, LOADED_CHUNK_SIZE}
+			// TODO: Create error printing func
+			if !pointInIrec(matPos, matRec) {
+				posStr := fmt.tprintf("%v", matPos)
+				msgStrs := [?]string{"error (moveChunks): Invalid position ", posStr}
+				msg := string_util.join(msgStrs[:], "", context.temp_allocator)
+				fmt.println(msg)
+				continue
+			}
+			matPosNew := iVector2{matPos.x + diff.x, matPos.y + diff.y}
+			if !pointInIrec(matPosNew, matRec) {
+				posStr := fmt.tprintf("%v", matPosNew)
+				msgStrs := [?]string{"error (moveChunks): Invalid new position", posStr}
+				msg := string_util.join(msgStrs[:], "", context.temp_allocator)
+				fmt.println(msg)
+				continue
+			}
+			newInd := getChunkWorldInd(matPosNew.x, matPosNew.y)
+			mem.copy(&chunkDataMatrix[newInd], &chunkWorld.data[i], CHUNK_BLOCK_COUNT)
+			chunkDataRecs[newInd] = chunkWorld.rects[i]
+		}
+		free(&chunkWorld.rects[i])
+	}
+	chunkWorld.data = chunkDataMatrix
+	chunkWorld.rects = chunkDataRecs
+}
+regenerateChunks :: proc(chunkWorld: ^ChunkWorld, bitmask: ChunkBitmask) {
+	for val, i in bitmask {
+		if val > 0 {
+			regenerateChunk(chunkWorld, i32(i))
 		}
 	}
 }
-getGridHeight :: proc(grid: ^Grid) -> i32 {
-	return i32(len(grid.data)) / grid.width
+regenerateChunkWorld :: proc(chunkWorld: ^ChunkWorld) {
+	for i in 0 ..< LOADED_CHUNK_COUNT {
+		regenerateChunk(chunkWorld, i32(i))
+	}
 }
-getGridIndexWorldPosition :: proc(grid: ^Grid, i: i32) -> rl.Vector2 {
-	return {f32(i % grid.width) * grid.blockSize, f32(i / getGridHeight(grid)) * grid.blockSize}
+regenerateChunk :: proc(chunkWorld: ^ChunkWorld, chunkIndex: i32) {
+	clear(&chunkWorld.rects[chunkIndex])
+	chunkPos := getChunkMatrixPosition(chunkIndex)
+	chunkPos.x += chunkWorld.x
+	chunkPos.y += chunkWorld.y
+	chunkWorldPosition := rl.Vector2 {
+		f32(chunkPos.x * CHUNK_WIDTH_PX),
+		f32(chunkPos.y * CHUNK_WIDTH_PX),
+	}
+	for i in 0 ..< CHUNK_BLOCK_COUNT {
+		x := i % CHUNK_BLOCK_WIDTH
+		y := i / CHUNK_BLOCK_WIDTH
+		xf := f32(x + 1 + CHUNK_BLOCK_WIDTH * int(chunkPos.x))
+		yf := f32(y + 1 + CHUNK_BLOCK_WIDTH * int(chunkPos.y))
+		f := rl.Vector2{xf, yf} / rl.Vector2{CHUNK_BLOCK_WIDTH, CHUNK_BLOCK_WIDTH}
+		n := deterministicValueNoise2d(f, 3)
+		val := u8(math.step(chunkWorld.genCutoff, n))
+		chunkWorld.data[chunkIndex][i] = val
+		if val > 0 {
+			rect := rl.Rectangle {
+				chunkWorldPosition.x + f32(x * CHUNK_BLOCK_WIDTH_PX),
+				chunkWorldPosition.y + f32(y * CHUNK_BLOCK_WIDTH_PX),
+				CHUNK_BLOCK_WIDTH_PX,
+				CHUNK_BLOCK_WIDTH_PX,
+			}
+			append(&chunkWorld.rects[chunkIndex], rect)
+		}
+	}
 }
-getGridWorldX :: proc(i: i32, grid: ^Grid) -> f32 {
-	return f32(i % grid.width) * grid.blockSize
+getChunkWorldInd :: proc(x: i32, y: i32) -> i32 {
+	assert_contextless(x >= 0 && x < LOADED_CHUNK_COUNT && y >= 0 && y < LOADED_CHUNK_COUNT)
+	return x + y * LOADED_CHUNK_SIZE
 }
-getGridWorldY :: proc(i: i32, grid: ^Grid) -> f32 {
-	return f32(i / grid.width) * grid.blockSize
+ChunkBitmask :: [LOADED_CHUNK_COUNT]byte
+chunkBitmaskOrRec :: proc(a: ChunkBitmask, irec: iRectangle) -> ChunkBitmask {
+	iRectangleAssertInv(irec)
+	out := a
+	clampedRec := iRectangleClampVal(irec, 0, 2)
+	// TODO: Or bits instead of looping
+	for x in irec.x ..< irec.x + irec.width {
+		for y in irec.y ..< irec.y + irec.height {
+			i := getChunkWorldInd(x, y)
+			out[i] = 1
+		}
+	}
+	return out
 }
-getGridWorldPos :: proc(i: i32, grid: ^Grid) -> rl.Vector2 {
-	return {getGridWorldX(i, grid), getGridWorldY(i, grid)}
+chunkBitmaskNot :: proc(val: ChunkBitmask) -> ChunkBitmask {
+	newVal := val
+	for i in 0 ..< len(val) {
+		newVal[i] ~= 1
+	}
+	return newVal
 }
-debugDrawGrid :: proc(grid: ^Grid, pos: rl.Vector2, tint: rl.Color) {
+chunkBitmaskMirror :: proc(val: ChunkBitmask) -> ChunkBitmask {
+	newVal := val
+	for i in 0 ..< len(val) {
+		newVal[len(val) - 1 - i] = val[i]
+	}
+	return newVal
+}
+ChunkCollisionResult :: union {
+	rl.Rectangle,
+}
+chunkCollision :: proc(rec: rl.Rectangle) -> ChunkCollisionResult {
+	bitmask: ChunkBitmask
+	for i in 0 ..< len(bitmask) {
+		pos := getChunkMatrixPosition(i32(i))
+		pos.x += globalChunkWorld.x
+		pos.y += globalChunkWorld.y
+		matrixWorldRec := rl.Rectangle {
+			f32(pos.x * CHUNK_WIDTH_PX),
+			f32(pos.y * CHUNK_WIDTH_PX),
+			CHUNK_WIDTH_PX,
+			CHUNK_WIDTH_PX,
+		}
+		if recInRec(rec, matrixWorldRec) {
+			for solidRec in globalChunkWorld.rects[i] {
+				if recInRec(rec, solidRec) {
+					return solidRec
+				}
+			}
+		}
+	}
+	return nil
+}
+drawChunkWorld :: proc(chunkWorld: ^ChunkWorld) {
 	tex := getTexture(.White32)
 	texSrc := getTextureRec(tex)
-	for block, i in grid.data {
-		if (block > 0) {
-			worldPos := getGridIndexWorldPosition(grid, i32(i))
-			texDest := rl.Rectangle{worldPos.x, worldPos.y, texSrc.width, texSrc.height}
-			rl.DrawTexturePro(tex, texSrc, texDest, {0.0, 0.0}, 0.0, tint)
+	for i in 0 ..< LOADED_CHUNK_COUNT {
+		x := i32(i % LOADED_CHUNK_SIZE)
+		y := i32(i / LOADED_CHUNK_SIZE)
+		dx := (chunkWorld.x + x) * CHUNK_WIDTH_PX
+		dy := (chunkWorld.y + y) * CHUNK_WIDTH_PX
+		for val, j in chunkWorld.data[i] {
+			if val > 0 {
+				xx := i32(j % CHUNK_BLOCK_WIDTH)
+				yy := i32(j / CHUNK_BLOCK_WIDTH)
+				texDest := rl.Rectangle {
+					f32(dx + xx * CHUNK_BLOCK_WIDTH_PX),
+					f32(dy + yy * CHUNK_BLOCK_WIDTH_PX),
+					CHUNK_BLOCK_WIDTH_PX,
+					CHUNK_BLOCK_WIDTH_PX,
+				}
+				rl.DrawTexturePro(getTexture(.White32), texSrc, texDest, {0.0, 0.0}, 0.0, rl.WHITE)
+			}
 		}
 	}
 }
@@ -663,7 +874,7 @@ debugDrawGrid :: proc(grid: ^Grid, pos: rl.Vector2, tint: rl.Color) {
 updateCamera :: proc(camera: ^rl.Camera2D, target: GameObject) {
 	zoom := getAppRtexZoom()
 	camera.offset = {WINDOW_WIDTH * zoom / 2, WINDOW_HEIGHT * zoom / 2}
-	camera.target = target.pos - getObjectCenter(target)
+	camera.target = target.pos - getObjCenter(target)
 	camera.zoom = getAppRtexZoom()
 }
 
@@ -704,8 +915,6 @@ main :: proc() {
 	gameRenderTex := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
 	defer rl.UnloadRenderTexture(gameRenderTex)
 
-	solidBlocks := make([dynamic]rl.Rectangle, context.allocator)
-	globalSolidBlocks = &solidBlocks
 	// append(globalSolidBlocks, rl.Rectangle{0.0, 0.0, WINDOW_WIDTH, 16.0})
 	// append(globalSolidBlocks, rl.Rectangle{WINDOW_WIDTH - 16.0, 0.0, 16.0, WINDOW_HEIGHT})
 	// append(globalSolidBlocks, rl.Rectangle{0.0, WINDOW_HEIGHT - 16.0, WINDOW_WIDTH, 16.0})
@@ -714,6 +923,14 @@ main :: proc() {
 	// 	pos := rl.Vector2{rand.float32() * WINDOW_WIDTH, rand.float32() * WINDOW_HEIGHT}
 	// 	append(globalSolidBlocks, rl.Rectangle{pos.x, pos.y, 32.0, 32.0})
 	// }
+
+	chunkWorld := ChunkWorld {
+		x         = -1,
+		y         = -1,
+		genCutoff = 0.5,
+	}
+	globalChunkWorld = &chunkWorld
+	regenerateChunkWorld(&chunkWorld)
 
 	gameMusic := loadMusicStream(.KowloonSmokeBreak)
 	rl.PlayMusicStream(gameMusic)
@@ -748,10 +965,6 @@ main :: proc() {
 		zoom     = 1.0,
 	}
 
-	grid := createGrid(context.allocator, 32, 32, 16.0)
-	fillGrid(&grid, {0.0, 0.0}, 0.5)
-	pushGridAsSolids(&grid)
-
 	mem.dynamic_arena_reset(&frameArena)
 
 	for !rl.WindowShouldClose() {
@@ -760,18 +973,15 @@ main :: proc() {
 			player.object.pos = rl.GetMousePosition()
 		}
 		updateCamera(&camera, player.object^)
+		updateChunkWorld(&chunkWorld, player.object^)
 		rl.BeginDrawing()
 		rl.BeginMode2D(camera)
 		rl.ClearBackground(rl.BLACK)
 		drawRepeatingStarBg(&repeatingStarBg)
-		for block in globalSolidBlocks {
-			rl.DrawRectangleV({block.x, block.y}, {block.width, block.height}, rl.WHITE)
-		}
 		for object in gameObjects {
 			object.update(object.data)
 		}
-
-		debugDrawGrid(&grid, {0.0, 0.0}, {0, 192, 0, 128})
+		drawChunkWorld(&chunkWorld)
 		rl.EndMode2D()
 		rl.EndDrawing()
 		mem.dynamic_arena_reset(&frameArena)
