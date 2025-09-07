@@ -78,6 +78,7 @@ initSpriteDefs :: proc() {
 	_setSpriteDef(.SynthIdleBack, 24, 8.0)
 	_setSpriteDef(.SynthWalk, 24, 8.0)
 	_setSpriteDef(.SynthWalkBack, 24, 8.0)
+	_setSpriteDef(.InteractionIndicationArrow, 14, 8.0)
 }
 
 ShaderNames :: enum {
@@ -121,11 +122,45 @@ GameObject :: struct {
 	data:   rawptr,
 	pos:    rl.Vector2,
 	colRec: rl.Rectangle,
+	id:     i32,
+	type:   typeid,
 }
-createGameObject :: proc(update: proc(_: rawptr), data: rawptr) -> ^GameObject {
-	append(globalGameObjects, GameObject{update = update, data = data})
+globalGameObjects: ^[dynamic]GameObject = nil
+globalGameObjectIdCounter: i32 = min(i32)
+createGameObject :: proc($T: typeid, update: proc(_: ^T), data: rawptr) -> ^GameObject {
+	object := GameObject {
+		update = cast(proc(_: rawptr))update,
+		data   = data,
+		id     = globalGameObjectIdCounter,
+		type   = T,
+	}
+	append(globalGameObjects, object)
+	globalGameObjectIdCounter += 1
 	return &globalGameObjects[len(globalGameObjects) - 1]
 }
+objectCollision :: proc(object: ^GameObject, offset: rl.Vector2) -> ^GameObject {
+	rec := getObjAbsColRec(object, offset)
+	for i in 0 ..< len(globalGameObjects) {
+		otherObject := &globalGameObjects[i]
+		if object.id != otherObject.id && recInRec(rec, getObjAbsColRec(otherObject, {0.0, 0.0})) {
+			return &globalGameObjects[i]
+		}
+	}
+	return nil
+}
+objectCollisionType :: proc(object: ^GameObject, type: typeid, offset: rl.Vector2) -> ^GameObject {
+	rec := getObjAbsColRec(object, offset)
+	for i in 0 ..< len(globalGameObjects) {
+		otherObject := &globalGameObjects[i]
+		if object.id != otherObject.id &&
+		   otherObject.type == type &&
+		   recInRec(rec, getObjAbsColRec(otherObject, {0.0, 0.0})) {
+			return &globalGameObjects[i]
+		}
+	}
+	return nil
+}
+// TODO: objectCollisionList
 getObjectCenter :: proc(object: ^GameObject) -> rl.Vector2 {
 	return {
 		object.colRec.x + object.colRec.width / 2.0,
@@ -322,31 +357,33 @@ drawTextureRecDest :: proc(tex: rl.Texture, dest: rl.Rectangle) {
 	rl.DrawTexturePro(tex, src, dest, rl.Vector2{0.0, 0.0}, 0.0, rl.WHITE)
 }
 
-Elevator :: struct {
-	tex:    rl.Texture,
-	pos:    rl.Vector2,
-	object: ^GameObject,
+ElevatorObject :: struct {
+	tex:                 rl.Texture,
+	interactionArrowSpr: Sprite,
+	object:              ^GameObject,
 }
-createElevator :: proc(alloc: Alloc, pos: rl.Vector2) -> ^Elevator {
-	data := new(Elevator, alloc)
+createElevator :: proc(alloc: Alloc, pos: rl.Vector2) -> ^ElevatorObject {
+	data := new(ElevatorObject, alloc)
 	data.tex = getTexture(.Elevator)
-	data.pos = pos
+	data.interactionArrowSpr = createSprite(getSpriteDef(.InteractionIndicationArrow))
+	data.object = createGameObject(ElevatorObject, updateAndDrawElevator, data)
 
-	object := createGameObject(cast(proc(_: rawptr))updateAndDrawElevator, &data)
-	object.pos = pos
-	texSize := getTextureSize(data.tex)
-	object.colRec = {0.0, 0.0, texSize.x, -texSize.y}
-	data.object = object
-
+	data.object.pos = pos
+	data.object.colRec = getTextureRec(data.tex)
 	return data
 }
-updateAndDrawElevator :: proc(elevator: ^Elevator) {
-	rl.DrawTextureV(elevator.tex, elevator.pos - {0, f32(elevator.tex.height)}, rl.WHITE)
-	// TODO: Check collision with player
-	// TODO: Draw interaction arrow
+updateAndDrawElevator :: proc(elevator: ^ElevatorObject) {
+	rl.DrawTextureV(elevator.tex, elevator.object.pos, rl.WHITE)
+	if colObj := objectCollisionType(elevator.object, PlayerObject, {0.0, 0.0}); colObj != nil {
+		aboveOtherCenter := getObjectCenter(colObj) - {0.0, colObj.colRec.height}
+		drawSpriteEx(elevator.interactionArrowSpr, aboveOtherCenter, {1.0, 1.0})
+		fmt.println("yo")
+	} else {
+		fmt.println("no")
+	}
 }
 
-Player :: struct {
+PlayerObject :: struct {
 	object:         ^GameObject,
 	idleSpr:        Sprite,
 	walkSpr:        Sprite,
@@ -363,8 +400,8 @@ Player :: struct {
 	airjumpCount:   i32,
 	airjumpIndex:   i32,
 }
-createPlayer :: proc(alloc: Alloc, pos: rl.Vector2) -> ^Player {
-	data := new(Player, alloc)
+createPlayer :: proc(alloc: Alloc, pos: rl.Vector2) -> ^PlayerObject {
+	data := new(PlayerObject, alloc)
 	data.idleSpr = createSprite(getSpriteDef(.SynthIdle))
 	data.walkSpr = createSprite(getSpriteDef(.SynthWalk))
 	data.currentSpr = &data.idleSpr
@@ -377,18 +414,17 @@ createPlayer :: proc(alloc: Alloc, pos: rl.Vector2) -> ^Player {
 	data.airjumpStr = 5.8
 	data.airjumpCount = 1
 	data.airjumpIndex = 0
+	data.object = createGameObject(PlayerObject, updateAndDrawPlayer, data)
 
-	object := createGameObject(cast(proc(_: rawptr))updateAndDrawPlayer, data)
-	object.pos = pos
-	object.colRec = {7.0, 3.0, 12.0, 20.0}
+	data.object.pos = pos
+	data.object.colRec = {7.0, 3.0, 12.0, 20.0}
 
-	data.object = object
 	return data
 }
 makeAbsoluteColRec :: proc(colRec: rl.Rectangle, pos: rl.Vector2) -> rl.Rectangle {
 	return {colRec.x + pos.x, colRec.y + pos.y, colRec.width, colRec.height}
 }
-updateAndDrawPlayer :: proc(player: ^Player) {
+updateAndDrawPlayer :: proc(player: ^PlayerObject) {
 	rightInput := rl.IsKeyDown(.RIGHT)
 	leftInput := rl.IsKeyDown(.LEFT)
 	walkInput := f32(int(rightInput)) - f32(int(leftInput))
@@ -486,7 +522,7 @@ playerMoveAndCollide :: proc(
 	}
 	return result
 }
-playerSetSprite :: proc(player: ^Player, spr: ^Sprite) {
+playerSetSprite :: proc(player: ^PlayerObject, spr: ^Sprite) {
 	if (player.currentSpr != spr) {
 		player.currentSpr = spr
 		setSpriteFrame(player.currentSpr, 0)
@@ -503,15 +539,16 @@ pointInRec :: proc(point: rl.Vector2, rectangle: rl.Rectangle) -> bool {
 }
 recInRec :: proc(a: rl.Rectangle, b: rl.Rectangle) -> bool {
 	return(
-		pointInRec({a.x, a.y}, b) ||
-		pointInRec({a.x + a.width, a.y}, b) ||
-		pointInRec({a.x, a.y + a.height}, b) ||
-		pointInRec({a.x + a.width, a.y + a.height}, b) \
+		a.x + a.width >= b.x &&
+		a.x < b.x + b.width &&
+		a.y + a.height >= b.y &&
+		a.y < b.y + b.height \
 	)
 }
 BlockCollisionResult :: union {
 	rl.Rectangle,
 }
+globalSolidBlocks: ^[dynamic]rl.Rectangle = nil
 blockCollision :: proc(rec: rl.Rectangle) -> BlockCollisionResult {
 	for block in globalSolidBlocks {
 		if recInRec(rec, block) {
@@ -538,6 +575,7 @@ deterministicFloat32Rand :: proc(st: rl.Vector2) -> f32 {
 	hash := rl.Vector2DotProduct(st, {38.28459, 53.9385})
 	return fract(math.abs(math.sin(hash) * 43028.28439))
 }
+// TODO: SIMD
 deterministicValueNoise2d :: proc(st: rl.Vector2, octs: int) -> f32 {
 	n: f32 = 0.0
 	for i in 0 ..< octs {
@@ -606,8 +644,6 @@ deinit :: proc() {
 	unloadShaders()
 }
 
-globalSolidBlocks: ^[dynamic]rl.Rectangle = nil
-globalGameObjects: ^[dynamic]GameObject = nil
 main :: proc() {
 	// Raylib init
 	rl.SetConfigFlags({.WINDOW_RESIZABLE}) // TODO: Remove artifacts from main framebuffer
@@ -615,7 +651,7 @@ main :: proc() {
 	rl.SetTargetFPS(TARGET_FPS)
 	rl.InitAudioDevice()
 	defer rl.CloseAudioDevice()
-	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Elevator Game")
+	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "ElevatorObject Game")
 	defer rl.CloseWindow()
 
 	// Engine init
@@ -701,6 +737,18 @@ main :: proc() {
 		}
 		for object in gameObjects {
 			object.update(object.data)
+		}
+		whiteTex := getTexture(.White32)
+		whiteTexSrc := getTextureRec(whiteTex)
+		for i in 0 ..< len(gameObjects) {
+			rl.DrawTexturePro(
+				whiteTex,
+				whiteTexSrc,
+				getObjAbsColRec(&gameObjects[i], {0.0, 0.0}),
+				{0.0, 0.0},
+				0.0,
+				{0, 192, 0, 128},
+			)
 		}
 		debugDrawGrid(&grid, {0.0, 0.0}, {0, 192, 0, 128})
 		rl.EndMode2D()
