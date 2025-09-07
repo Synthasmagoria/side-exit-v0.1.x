@@ -57,10 +57,12 @@ loadTextures :: proc() {
 	context.allocator = context.temp_allocator
 	texNames := reflect.enum_field_names(TextureName)
 	for name, i in texNames[0:len(texNames) - 1] {
-		n := transmute([]u8)string_util.clone(name)
+		n := transmute([]u8)string_util.clone(name, context.temp_allocator)
 		n[0] = charLower(n[0])
-		path := string_util.join({"tex/", cast(string)n, ".png"}, "")
-		globalTextures[i] = rl.LoadTexture(string_util.clone_to_cstring(path))
+		path := string_util.join({"tex/", cast(string)n, ".png"}, "", context.temp_allocator)
+		globalTextures[i] = rl.LoadTexture(
+			string_util.clone_to_cstring(path, context.temp_allocator),
+		)
 	}
 }
 unloadTextures :: proc() {
@@ -73,8 +75,13 @@ globalSpriteDefs: [TextureName._Count]SpriteDef
 getSpriteDef :: proc(ind: TextureName) -> SpriteDef {
 	return globalSpriteDefs[ind]
 }
-_setSpriteDef :: proc(ind: TextureName, frame_w: i32, frame_spd: f32) {
-	globalSpriteDefs[ind] = createSpriteDef(getTexture(ind), frame_w, frame_spd)
+_setSpriteDef :: proc(
+	ind: TextureName,
+	frame_width: i32,
+	frame_spd: f32,
+	origin: rl.Vector2 = {0.0, 0.0},
+) {
+	globalSpriteDefs[ind] = createSpriteDef(getTexture(ind), frame_width, frame_spd, origin)
 }
 initSpriteDefs :: proc() {
 	_setSpriteDef(.Star, 4, 8.0)
@@ -82,7 +89,7 @@ initSpriteDefs :: proc() {
 	_setSpriteDef(.SynthIdleBack, 24, 8.0)
 	_setSpriteDef(.SynthWalk, 24, 8.0)
 	_setSpriteDef(.SynthWalkBack, 24, 8.0)
-	_setSpriteDef(.InteractionIndicationArrow, 14, 8.0)
+	_setSpriteDef(.InteractionIndicationArrow, 14, 8.0, {7.0, 7.0})
 }
 
 ShaderNames :: enum {
@@ -203,11 +210,23 @@ debugDrawGameObjectCollisions :: proc() {
 SpriteDef :: struct {
 	tex:         rl.Texture,
 	frame_count: i32,
-	frame_w:     i32,
+	frame_width: i32,
 	frame_spd:   f32,
+	origin:      rl.Vector2,
 }
-createSpriteDef :: proc(tex: rl.Texture, frame_w: i32, frame_spd: f32) -> SpriteDef {
-	return {tex, tex.width / frame_w, frame_w, frame_spd}
+createSpriteDef :: proc(
+	tex: rl.Texture,
+	frame_width: i32,
+	frame_spd: f32,
+	origin := rl.Vector2{0.0, 0.0},
+) -> SpriteDef {
+	return {
+		tex = tex,
+		frame_count = tex.width / frame_width,
+		frame_width = frame_width,
+		frame_spd = frame_spd,
+		origin = origin,
+	}
 }
 Sprite :: struct {
 	def:       SpriteDef,
@@ -219,24 +238,24 @@ createSprite :: proc(spr_def: SpriteDef) -> Sprite {
 }
 getSpriteSourceRect :: proc(spr: Sprite, scale: rl.Vector2) -> rl.Rectangle {
 	scaleSign: f32 = math.sign(scale.x)
-	offX: i32 = scaleSign == 1.0 ? 0 : spr.def.frame_w
+	offX: i32 = scaleSign == 1.0 ? 0 : spr.def.frame_width
 	return {
-		cast(f32)(spr.frame_ind * spr.def.frame_w + offX),
+		cast(f32)(spr.frame_ind * spr.def.frame_width + offX),
 		0.0,
-		cast(f32)spr.def.frame_w * scaleSign,
+		cast(f32)spr.def.frame_width * scaleSign,
 		cast(f32)spr.def.tex.height,
 	}
 }
 drawSpriteEx :: proc(spr: Sprite, pos: rl.Vector2, scale: rl.Vector2) {
 	src := getSpriteSourceRect(spr, scale)
-	frame_w := f32(spr.def.frame_w)
-	size := rl.Vector2{frame_w, frame_w} * scale
-	dest := rl.Rectangle{pos.x, pos.y, size.x, size.y}
+	frame_width := f32(spr.def.frame_width)
+	size := rl.Vector2{frame_width, frame_width} * scale
+	dest := rl.Rectangle{pos.x - spr.def.origin.x, pos.y - spr.def.origin.y, size.x, size.y}
 	rl.DrawTexturePro(spr.def.tex, src, dest, {0.0, 0.0}, 0.0, rl.WHITE)
 }
 drawSpriteRect :: proc(spr: Sprite, dest: rl.Rectangle) {
 	src := getSpriteSourceRect(spr, {1.0, 1.0})
-	frame_w := f32(spr.def.tex.width)
+	frame_width := f32(spr.def.tex.width)
 	rl.DrawTexturePro(spr.def.tex, src, dest, {0.0, 0.0}, 0.0, rl.WHITE)
 }
 setSpriteFrame :: proc(spr: ^Sprite, frame: i32) {
@@ -399,8 +418,9 @@ createElevator :: proc(alloc: Alloc, pos: rl.Vector2) -> ^ElevatorObject {
 updateAndDrawElevator :: proc(elevator: ^ElevatorObject) {
 	rl.DrawTextureV(elevator.tex, elevator.object.pos, rl.WHITE)
 	if colObj := objectCollisionType(elevator.object, PlayerObject, {0.0, 0.0}); colObj != nil {
-		aboveOtherCenter := getObjCenter(colObj^) - {0.0, colObj.colRec.height}
+		aboveOtherCenter := getObjCenterPosition(colObj^) - {0.0, colObj.colRec.height}
 		drawSpriteEx(elevator.interactionArrowSpr, aboveOtherCenter, {1.0, 1.0})
+		updateSprite(&elevator.interactionArrowSpr)
 	}
 }
 
@@ -903,7 +923,11 @@ main :: proc() {
 	gameArena: mem.Dynamic_Arena
 	mem.dynamic_arena_init(&gameArena)
 	defer mem.dynamic_arena_free_all(&gameArena)
-	context.allocator = mem.dynamic_arena_allocator(&gameArena)
+	gameAlloc := mem.dynamic_arena_allocator(&gameArena)
+	context.allocator = gameAlloc
+	// TODO: Only ever explicitly pass gameAlloc so that long-term memory allocations are explicit
+	// Currently this causes errors, I don't understand how this works apparently
+	//context.allocator = mem.panic_allocator()
 
 	frameArena: mem.Dynamic_Arena
 	mem.dynamic_arena_init(&frameArena)
@@ -914,15 +938,6 @@ main :: proc() {
 	defer deinit()
 	gameRenderTex := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
 	defer rl.UnloadRenderTexture(gameRenderTex)
-
-	// append(globalSolidBlocks, rl.Rectangle{0.0, 0.0, WINDOW_WIDTH, 16.0})
-	// append(globalSolidBlocks, rl.Rectangle{WINDOW_WIDTH - 16.0, 0.0, 16.0, WINDOW_HEIGHT})
-	// append(globalSolidBlocks, rl.Rectangle{0.0, WINDOW_HEIGHT - 16.0, WINDOW_WIDTH, 16.0})
-	// append(globalSolidBlocks, rl.Rectangle{0.0, 0.0, 16.0, WINDOW_HEIGHT})
-	// for i in 0 ..< 32 {
-	// 	pos := rl.Vector2{rand.float32() * WINDOW_WIDTH, rand.float32() * WINDOW_HEIGHT}
-	// 	append(globalSolidBlocks, rl.Rectangle{pos.x, pos.y, 32.0, 32.0})
-	// }
 
 	chunkWorld := ChunkWorld {
 		x         = -1,
