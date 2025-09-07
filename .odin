@@ -161,7 +161,7 @@ objectCollisionType :: proc(object: ^GameObject, type: typeid, offset: rl.Vector
 	return nil
 }
 // TODO: objectCollisionList
-getObjectCenter :: proc(object: ^GameObject) -> rl.Vector2 {
+getObjectCenter :: proc(object: GameObject) -> rl.Vector2 {
 	return {
 		object.colRec.x + object.colRec.width / 2.0,
 		object.colRec.y + object.colRec.height / 2.0,
@@ -173,6 +173,20 @@ getObjAbsColRec :: proc(object: ^GameObject, offset: rl.Vector2) -> rl.Rectangle
 		object.pos.y + object.colRec.y + offset.y,
 		object.colRec.width,
 		object.colRec.height,
+	}
+}
+debugDrawGameObjectCollisions :: proc() {
+	whiteTex := getTexture(.White32)
+	whiteTexSrc := getTextureRec(whiteTex)
+	for i in 0 ..< len(globalGameObjects) {
+		rl.DrawTexturePro(
+			whiteTex,
+			whiteTexSrc,
+			getObjAbsColRec(&globalGameObjects[i], {0.0, 0.0}),
+			{0.0, 0.0},
+			0.0,
+			{0, 192, 0, 128},
+		)
 	}
 }
 
@@ -375,11 +389,8 @@ createElevator :: proc(alloc: Alloc, pos: rl.Vector2) -> ^ElevatorObject {
 updateAndDrawElevator :: proc(elevator: ^ElevatorObject) {
 	rl.DrawTextureV(elevator.tex, elevator.object.pos, rl.WHITE)
 	if colObj := objectCollisionType(elevator.object, PlayerObject, {0.0, 0.0}); colObj != nil {
-		aboveOtherCenter := getObjectCenter(colObj) - {0.0, colObj.colRec.height}
+		aboveOtherCenter := getObjectCenter(colObj^) - {0.0, colObj.colRec.height}
 		drawSpriteEx(elevator.interactionArrowSpr, aboveOtherCenter, {1.0, 1.0})
-		fmt.println("yo")
-	} else {
-		fmt.println("no")
 	}
 }
 
@@ -614,23 +625,46 @@ fillGrid :: proc(grid: ^Grid, off: rl.Vector2, cutoff: f32) {
 		grid.data[i] = u8(math.step(cutoff, n))
 	}
 }
+pushGridAsSolids :: proc(grid: ^Grid) {
+	for val, i in grid.data {
+		if (val != 0) {
+			pos := getGridWorldPos(i32(i), grid)
+			append(globalSolidBlocks, rl.Rectangle{pos.x, pos.y, grid.blockSize, grid.blockSize})
+		}
+	}
+}
 getGridHeight :: proc(grid: ^Grid) -> i32 {
 	return i32(len(grid.data)) / grid.width
 }
 getGridIndexWorldPosition :: proc(grid: ^Grid, i: i32) -> rl.Vector2 {
 	return {f32(i % grid.width) * grid.blockSize, f32(i / getGridHeight(grid)) * grid.blockSize}
 }
+getGridWorldX :: proc(i: i32, grid: ^Grid) -> f32 {
+	return f32(i % grid.width) * grid.blockSize
+}
+getGridWorldY :: proc(i: i32, grid: ^Grid) -> f32 {
+	return f32(i / grid.width) * grid.blockSize
+}
+getGridWorldPos :: proc(i: i32, grid: ^Grid) -> rl.Vector2 {
+	return {getGridWorldX(i, grid), getGridWorldY(i, grid)}
+}
 debugDrawGrid :: proc(grid: ^Grid, pos: rl.Vector2, tint: rl.Color) {
 	tex := getTexture(.White32)
 	texSrc := getTextureRec(tex)
-	texSize := rl.Vector2{texSrc.width, texSrc.height}
 	for block, i in grid.data {
 		if (block > 0) {
 			worldPos := getGridIndexWorldPosition(grid, i32(i))
-			texDest := rl.Rectangle{worldPos.x, worldPos.y, texSize.x, texSize.y}
+			texDest := rl.Rectangle{worldPos.x, worldPos.y, texSrc.width, texSrc.height}
 			rl.DrawTexturePro(tex, texSrc, texDest, {0.0, 0.0}, 0.0, tint)
 		}
 	}
+}
+
+updateCamera :: proc(camera: ^rl.Camera2D, target: GameObject) {
+	zoom := getAppRtexZoom()
+	camera.offset = {WINDOW_WIDTH * zoom / 2, WINDOW_HEIGHT * zoom / 2}
+	camera.target = target.pos - getObjectCenter(target)
+	camera.zoom = getAppRtexZoom()
 }
 
 init :: proc() {
@@ -672,14 +706,14 @@ main :: proc() {
 
 	solidBlocks := make([dynamic]rl.Rectangle, context.allocator)
 	globalSolidBlocks = &solidBlocks
-	append(globalSolidBlocks, rl.Rectangle{0.0, 0.0, WINDOW_WIDTH, 16.0})
-	append(globalSolidBlocks, rl.Rectangle{WINDOW_WIDTH - 16.0, 0.0, 16.0, WINDOW_HEIGHT})
-	append(globalSolidBlocks, rl.Rectangle{0.0, WINDOW_HEIGHT - 16.0, WINDOW_WIDTH, 16.0})
-	append(globalSolidBlocks, rl.Rectangle{0.0, 0.0, 16.0, WINDOW_HEIGHT})
-	for i in 0 ..< 32 {
-		pos := rl.Vector2{rand.float32() * WINDOW_WIDTH, rand.float32() * WINDOW_HEIGHT}
-		append(globalSolidBlocks, rl.Rectangle{pos.x, pos.y, 32.0, 32.0})
-	}
+	// append(globalSolidBlocks, rl.Rectangle{0.0, 0.0, WINDOW_WIDTH, 16.0})
+	// append(globalSolidBlocks, rl.Rectangle{WINDOW_WIDTH - 16.0, 0.0, 16.0, WINDOW_HEIGHT})
+	// append(globalSolidBlocks, rl.Rectangle{0.0, WINDOW_HEIGHT - 16.0, WINDOW_WIDTH, 16.0})
+	// append(globalSolidBlocks, rl.Rectangle{0.0, 0.0, 16.0, WINDOW_HEIGHT})
+	// for i in 0 ..< 32 {
+	// 	pos := rl.Vector2{rand.float32() * WINDOW_WIDTH, rand.float32() * WINDOW_HEIGHT}
+	// 	append(globalSolidBlocks, rl.Rectangle{pos.x, pos.y, 32.0, 32.0})
+	// }
 
 	gameMusic := loadMusicStream(.KowloonSmokeBreak)
 	rl.PlayMusicStream(gameMusic)
@@ -716,6 +750,7 @@ main :: proc() {
 
 	grid := createGrid(context.allocator, 32, 32, 16.0)
 	fillGrid(&grid, {0.0, 0.0}, 0.5)
+	pushGridAsSolids(&grid)
 
 	mem.dynamic_arena_reset(&frameArena)
 
@@ -724,10 +759,7 @@ main :: proc() {
 		if rl.IsMouseButtonPressed(.LEFT) {
 			player.object.pos = rl.GetMousePosition()
 		}
-		zoom := getAppRtexZoom()
-		camera.offset = {WINDOW_WIDTH * zoom / 2, WINDOW_HEIGHT * zoom / 2}
-		camera.target = player.object.pos - getObjectCenter(player.object)
-		camera.zoom = getAppRtexZoom()
+		updateCamera(&camera, player.object^)
 		rl.BeginDrawing()
 		rl.BeginMode2D(camera)
 		rl.ClearBackground(rl.BLACK)
@@ -738,18 +770,7 @@ main :: proc() {
 		for object in gameObjects {
 			object.update(object.data)
 		}
-		whiteTex := getTexture(.White32)
-		whiteTexSrc := getTextureRec(whiteTex)
-		for i in 0 ..< len(gameObjects) {
-			rl.DrawTexturePro(
-				whiteTex,
-				whiteTexSrc,
-				getObjAbsColRec(&gameObjects[i], {0.0, 0.0}),
-				{0.0, 0.0},
-				0.0,
-				{0, 192, 0, 128},
-			)
-		}
+
 		debugDrawGrid(&grid, {0.0, 0.0}, {0, 192, 0, 128})
 		rl.EndMode2D()
 		rl.EndDrawing()
