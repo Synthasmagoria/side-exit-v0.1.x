@@ -13,7 +13,7 @@ Alloc :: mem.Allocator
 
 MusicName :: enum {
 	KowloonSmokeBreak,
-	_MAX,
+	_Count,
 }
 loadMusicStream :: proc(ind: MusicName) -> rl.Music {
 	context.allocator = context.temp_allocator
@@ -33,9 +33,19 @@ TextureName :: enum {
 	SynthWalk,
 	SynthWalkBack,
 	White32,
-	_MAX,
+	Elevator,
+	ElevatorPanel,
+	ElevatorPanelBg,
+	ElevatorPanelButtonHint,
+	ElevatorPanelButtonInputIndicator,
+	ElevatorPanelKnob,
+	ElevatorPanelKnobInputHint,
+	ElevatorPanelLever,
+	ElevatorPanelLeverInputHint,
+	InteractionIndicationArrow,
+	_Count,
 }
-globalTextures: [TextureName._MAX]rl.Texture
+globalTextures: [TextureName._Count]rl.Texture
 getTexture :: proc(ind: TextureName) -> rl.Texture {
 	return globalTextures[ind]
 }
@@ -55,7 +65,7 @@ unloadTextures :: proc() {
 	}
 }
 
-globalSpriteDefs: [TextureName._MAX]SpriteDef
+globalSpriteDefs: [TextureName._Count]SpriteDef
 getSpriteDef :: proc(ind: TextureName) -> SpriteDef {
 	return globalSpriteDefs[ind]
 }
@@ -72,9 +82,9 @@ initSpriteDefs :: proc() {
 
 ShaderNames :: enum {
 	AnimatedTextureRepeatPosition,
-	_MAX,
+	_Count,
 }
-globalShaders: [ShaderNames._MAX]rl.Shader
+globalShaders: [ShaderNames._Count]rl.Shader
 getShader :: proc(ind: ShaderNames) -> rl.Shader {
 	return globalShaders[ind]
 }
@@ -104,6 +114,31 @@ charLower :: proc(c: u8) -> u8 {
 		return c + ('a' - 'A')
 	}
 	return c
+}
+
+GameObject :: struct {
+	update: proc(data: rawptr),
+	data:   rawptr,
+	pos:    rl.Vector2,
+	colRec: rl.Rectangle,
+}
+createGameObject :: proc(update: proc(_: rawptr), data: rawptr) -> ^GameObject {
+	append(globalGameObjects, GameObject{update = update, data = data})
+	return &globalGameObjects[len(globalGameObjects) - 1]
+}
+getObjectCenter :: proc(object: ^GameObject) -> rl.Vector2 {
+	return {
+		object.colRec.x + object.colRec.width / 2.0,
+		object.colRec.y + object.colRec.height / 2.0,
+	}
+}
+getObjAbsColRec :: proc(object: ^GameObject, offset: rl.Vector2) -> rl.Rectangle {
+	return {
+		object.pos.x + object.colRec.x + offset.x,
+		object.pos.y + object.colRec.y + offset.y,
+		object.colRec.width,
+		object.colRec.height,
+	}
 }
 
 SpriteDef :: struct {
@@ -287,8 +322,32 @@ drawTextureRecDest :: proc(tex: rl.Texture, dest: rl.Rectangle) {
 	rl.DrawTexturePro(tex, src, dest, rl.Vector2{0.0, 0.0}, 0.0, rl.WHITE)
 }
 
+Elevator :: struct {
+	tex:    rl.Texture,
+	pos:    rl.Vector2,
+	object: ^GameObject,
+}
+createElevator :: proc(alloc: Alloc, pos: rl.Vector2) -> ^Elevator {
+	data := new(Elevator, alloc)
+	data.tex = getTexture(.Elevator)
+	data.pos = pos
+
+	object := createGameObject(cast(proc(_: rawptr))updateAndDrawElevator, &data)
+	object.pos = pos
+	texSize := getTextureSize(data.tex)
+	object.colRec = {0.0, 0.0, texSize.x, -texSize.y}
+	data.object = object
+
+	return data
+}
+updateAndDrawElevator :: proc(elevator: ^Elevator) {
+	rl.DrawTextureV(elevator.tex, elevator.pos - {0, f32(elevator.tex.height)}, rl.WHITE)
+	// TODO: Check collision with player
+	// TODO: Draw interaction arrow
+}
+
 Player :: struct {
-	pos:            rl.Vector2,
+	object:         ^GameObject,
 	idleSpr:        Sprite,
 	walkSpr:        Sprite,
 	currentSpr:     ^Sprite,
@@ -304,16 +363,30 @@ Player :: struct {
 	airjumpCount:   i32,
 	airjumpIndex:   i32,
 }
+createPlayer :: proc(alloc: Alloc, pos: rl.Vector2) -> ^Player {
+	data := new(Player, alloc)
+	data.idleSpr = createSprite(getSpriteDef(.SynthIdle))
+	data.walkSpr = createSprite(getSpriteDef(.SynthWalk))
+	data.currentSpr = &data.idleSpr
+	data.maxVelocity = {6.5, 6.5}
+	data.jumpStr = 7.0
+	data.walkSpd = 2.0
+	data.verticalGrav = 0.5
+	data.verticalDampen = 0.7
+	data.scale = {1.0, 1.0}
+	data.airjumpStr = 5.8
+	data.airjumpCount = 1
+	data.airjumpIndex = 0
+
+	object := createGameObject(cast(proc(_: rawptr))updateAndDrawPlayer, data)
+	object.pos = pos
+	object.colRec = {7.0, 3.0, 12.0, 20.0}
+
+	data.object = object
+	return data
+}
 makeAbsoluteColRec :: proc(colRec: rl.Rectangle, pos: rl.Vector2) -> rl.Rectangle {
 	return {colRec.x + pos.x, colRec.y + pos.y, colRec.width, colRec.height}
-}
-getPlayerAbsColRec :: proc(player: ^Player, offset: rl.Vector2) -> rl.Rectangle {
-	return {
-		player.pos.x + player.colRec.x + offset.x,
-		player.pos.y + player.colRec.y + offset.y,
-		player.colRec.width,
-		player.colRec.height,
-	}
 }
 updateAndDrawPlayer :: proc(player: ^Player) {
 	rightInput := rl.IsKeyDown(.RIGHT)
@@ -321,7 +394,8 @@ updateAndDrawPlayer :: proc(player: ^Player) {
 	walkInput := f32(int(rightInput)) - f32(int(leftInput))
 
 	onFloor :=
-		blockCollision(getPlayerAbsColRec(player, {0.0, 1.0})) != nil && player.velocity.y >= 0.0
+		blockCollision(getObjAbsColRec(player.object, {0.0, 1.0})) != nil &&
+		player.velocity.y >= 0.0
 	if onFloor {
 		player.airjumpIndex = 0
 	} else {
@@ -349,12 +423,12 @@ updateAndDrawPlayer :: proc(player: ^Player) {
 	player.velocity = rl.Vector2Clamp(player.velocity, -player.maxVelocity, player.maxVelocity)
 
 	moveAndCollideResult := playerMoveAndCollide(
-		player.pos,
-		player.colRec,
+		player.object.pos,
+		player.object.colRec,
 		player.velocity,
 		math.sign(player.scale.x),
 	)
-	player.pos = moveAndCollideResult.newPos
+	player.object.pos = moveAndCollideResult.newPos
 	player.velocity = moveAndCollideResult.newVelocity
 
 	if math.abs(walkInput) > 0.0 {
@@ -362,7 +436,7 @@ updateAndDrawPlayer :: proc(player: ^Player) {
 	} else {
 		playerSetSprite(player, &player.idleSpr)
 	}
-	drawSpriteEx(player.currentSpr^, vector2Floor(player.pos), player.scale)
+	drawSpriteEx(player.currentSpr^, player.object.pos, player.scale)
 	updateSprite(player.currentSpr)
 }
 PlayerMoveAndCollideResult :: struct {
@@ -411,12 +485,6 @@ playerMoveAndCollide :: proc(
 		result.newPos += result.newVelocity
 	}
 	return result
-}
-getPlayerCenter :: proc(player: ^Player) -> rl.Vector2 {
-	return {
-		player.colRec.x + player.colRec.width / 2.0,
-		player.colRec.y + player.colRec.height / 2.0,
-	}
 }
 playerSetSprite :: proc(player: ^Player, spr: ^Sprite) {
 	if (player.currentSpr != spr) {
@@ -505,7 +573,6 @@ fillGrid :: proc(grid: ^Grid, off: rl.Vector2, cutoff: f32) {
 		ii := i32(i)
 		f := rl.Vector2{f32((ii + 1) % grid.width), f32((ii + 1) / grid.width)} / gridSize
 		n := deterministicValueNoise2d(f, 3)
-		fmt.println(n)
 		grid.data[i] = u8(math.step(cutoff, n))
 	}
 }
@@ -540,6 +607,7 @@ deinit :: proc() {
 }
 
 globalSolidBlocks: ^[dynamic]rl.Rectangle = nil
+globalGameObjects: ^[dynamic]GameObject = nil
 main :: proc() {
 	// Raylib init
 	rl.SetConfigFlags({.WINDOW_RESIZABLE}) // TODO: Remove artifacts from main framebuffer
@@ -547,7 +615,7 @@ main :: proc() {
 	rl.SetTargetFPS(TARGET_FPS)
 	rl.InitAudioDevice()
 	defer rl.CloseAudioDevice()
-	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "The Great Seeker: Unruly Lands")
+	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Elevator Game")
 	defer rl.CloseWindow()
 
 	// Engine init
@@ -579,6 +647,8 @@ main :: proc() {
 
 	gameMusic := loadMusicStream(.KowloonSmokeBreak)
 	rl.PlayMusicStream(gameMusic)
+	gameObjects := make([dynamic]GameObject, context.allocator)
+	globalGameObjects = &gameObjects
 
 	// Game init
 	web10TexSize := rl.Vector2{128.0, 128.0}
@@ -598,27 +668,12 @@ main :: proc() {
 		rl.Vector2{30.0, 20.0},
 	)
 
-	player := Player {
-		pos            = {64.0, 64.0},
-		idleSpr        = createSprite(getSpriteDef(.SynthIdle)),
-		walkSpr        = createSprite(getSpriteDef(.SynthWalk)),
-		maxVelocity    = {6.5, 6.5},
-		currentSpr     = nil,
-		jumpStr        = 7.0,
-		walkSpd        = 2.0,
-		verticalGrav   = 0.5,
-		verticalDampen = 0.7,
-		colRec         = {7.0, 3.0, 12.0, 20.0},
-		scale          = {1.0, 1.0},
-		airjumpStr     = 5.8,
-		airjumpCount   = 1,
-		airjumpIndex   = 0,
-	}
-	playerSetSprite(&player, &player.idleSpr)
+	elevator := createElevator(context.allocator, {128.0, 128.0})
+	player := createPlayer(context.allocator, {64.0, 64.0})
 
 	camera := rl.Camera2D {
 		offset   = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},
-		target   = player.pos,
+		target   = player.object.pos,
 		rotation = 0.0,
 		zoom     = 1.0,
 	}
@@ -631,11 +686,11 @@ main :: proc() {
 	for !rl.WindowShouldClose() {
 		rl.UpdateMusicStream(gameMusic)
 		if rl.IsMouseButtonPressed(.LEFT) {
-			player.pos = rl.GetMousePosition()
+			player.object.pos = rl.GetMousePosition()
 		}
 		zoom := getAppRtexZoom()
 		camera.offset = {WINDOW_WIDTH * zoom / 2, WINDOW_HEIGHT * zoom / 2}
-		camera.target = player.pos - getPlayerCenter(&player)
+		camera.target = player.object.pos - getObjectCenter(player.object)
 		camera.zoom = getAppRtexZoom()
 		rl.BeginDrawing()
 		rl.BeginMode2D(camera)
@@ -644,7 +699,9 @@ main :: proc() {
 		for block in globalSolidBlocks {
 			rl.DrawRectangleV({block.x, block.y}, {block.width, block.height}, rl.WHITE)
 		}
-		updateAndDrawPlayer(&player)
+		for object in gameObjects {
+			object.update(object.data)
+		}
 		debugDrawGrid(&grid, {0.0, 0.0}, {0, 192, 0, 128})
 		rl.EndMode2D()
 		rl.EndDrawing()
