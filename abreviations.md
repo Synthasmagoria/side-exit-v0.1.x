@@ -1,7 +1,10 @@
 definition: def
 time: t
 duration: dur
+signature: sig
+exponential: exp
 width: w
+distance: dist
 height: h
 texture: tex
 sprite: spr

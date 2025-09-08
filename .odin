@@ -1,13 +1,6 @@
 package game
 
-import "core:fmt"
-import math "core:math"
-import "core:math/linalg"
-import "core:math/linalg/glsl"
-import "core:math/noise"
-import rand "core:math/rand"
 import mem "core:mem"
-import "core:reflect"
 import rl "vendor:raylib"
 
 MAX_TEXTURE_SIZE :: 4096
@@ -109,5 +102,8 @@ main :: proc() {
 		}
 		rl.EndDrawing()
 		mem.dynamic_arena_reset(&frameArena)
+	}
+	for object in globalGameObjects {
+		object.destroyProc(object.data)
 	}
 }

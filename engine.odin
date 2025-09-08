@@ -508,3 +508,79 @@ drawChunkWorld :: proc(chunkWorld: ^ChunkWorld) {
 		}
 	}
 }
+
+TweenF32Range :: struct {
+	from: f32,
+	to:   f32,
+}
+TweenI32Range :: struct {
+	from: i32,
+	to:   i32,
+}
+TweenU8Range :: struct {
+	from: u8,
+	to:   u8,
+}
+TweenVector2Range :: struct {
+	from: rl.Vector2,
+	to:   rl.Vector2,
+}
+TweenRange :: union #no_nil {
+	TweenF32Range,
+	TweenI32Range,
+	TweenU8Range,
+	TweenVector2Range,
+}
+TweenValue :: union #no_nil {
+	f32,
+	i32,
+	u8,
+	rl.Vector2,
+}
+TweenCurve :: enum {
+	Linear,
+	Exp,
+	InvExp,
+}
+Tween :: struct {
+	range: TweenRange,
+	curve: TweenCurve,
+	t:     f32,
+	dur:   f32,
+	delay: f32,
+}
+createTween :: proc(range: TweenRange, curve: TweenCurve, dur: f32, delay: f32 = 0.0) -> Tween {
+	assert(dur > 0.0, "Tween duration cannot equal to or less than 0.0")
+	assert(delay >= 0.0, "Tween delay cannot be less than 0.0")
+	return {range = range, curve = curve, t = 0.0, dur = dur, delay = delay}
+}
+updateAndStepTween :: proc(tween: ^Tween) -> TweenValue {
+	tween.t = math.min(tween.t + TARGET_TIME_STEP, tween.dur + tween.delay)
+	active_t := math.max(0.0, tween.t - tween.delay)
+	progress: f32
+	switch tween.curve {
+	case .Linear:
+		progress = active_t / tween.dur
+	case .Exp:
+		progress = math.pow(active_t / tween.dur, 2)
+	case .InvExp:
+		progress = 1.0 - math.pow((tween.dur - active_t) / tween.dur, 2)
+	}
+	switch range in tween.range {
+	case TweenF32Range:
+		return math.lerp(range.from, range.to, progress)
+	case TweenI32Range:
+		return i32(math.lerp(f32(range.from), f32(range.to), progress))
+	case TweenVector2Range:
+		return math.lerp(range.from, range.to, progress)
+	case TweenU8Range:
+		return u8(math.lerp(f32(range.from), f32(range.to), progress))
+	}
+	panic("Unreachable, invalid tween type")
+}
+tweenIsFinished :: proc(tween: Tween) -> bool {
+	return tween.t == tween.dur + tween.delay
+}
+tweenIsWaiting :: proc(tween: Tween) -> bool {
+	return tween.t <= tween.delay
+}

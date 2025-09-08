@@ -1,5 +1,6 @@
 package game
 import rl "vendor:raylib"
+import "core:fmt"
 import "core:math/linalg"
 import "core:math"
 
@@ -161,6 +162,16 @@ setPlayerSprite :: proc(player: ^Player, spr: ^Sprite) {
 ElevatorState :: enum {
     Gone,
     Arriving,
+    Interactable,
+    Leaving,
+}
+ElevatorArrivingStateData :: struct {
+    movementTween: Tween,
+    alphaTween: Tween,
+}
+ElevatorLeavingStateData :: struct {
+    movementTween: Tween,
+    alphaTween: Tween,
 }
 Elevator :: struct {
 	interactionArrowSpr: Sprite,
@@ -168,6 +179,8 @@ Elevator :: struct {
 	object: ^GameObject,
 	player: ^Player,
 	state: ElevatorState,
+	arrivingStateData: ElevatorArrivingStateData,
+	leavingStateData: ElevatorLeavingStateData,
 	blend: rl.Color,
 }
 createElevator :: proc(alloc: Alloc, pos: rl.Vector2) -> ^Elevator {
@@ -181,6 +194,7 @@ createElevator :: proc(alloc: Alloc, pos: rl.Vector2) -> ^Elevator {
 		data,
 		updateProc = cast(proc(_: rawptr))updateElevator,
 	)
+	setElevatorState(data, .Gone)
 	data.object.pos = pos
 	data.object.colRec = getTextureRec(getTexture(.Elevator))
 	return data
@@ -190,29 +204,47 @@ updateElevator :: proc(self: ^Elevator) {
     case .Gone:
         if player := getFirstGameObjectOfType(Player); player != nil {
             if linalg.distance(player.pos, self.object.pos) < 64.0 {
-                self.state = .Arriving
+                setElevatorState(self, .Arriving)
             }
         }
     case .Arriving:
-
+        self.drawOffset = updateAndStepTween(&self.arrivingStateData.movementTween).(rl.Vector2)
+        self.blend.a = updateAndStepTween(&self.arrivingStateData.alphaTween).(u8)
+        if tweenIsFinished(self.arrivingStateData.movementTween) &&
+           tweenIsFinished(self.arrivingStateData.alphaTween) {
+            setElevatorState(self, .Interactable)
+        }
+    case .Interactable:
+        if player := getFirstGameObjectOfType(Player); player != nil {
+            if linalg.distance(player.pos, self.object.pos) >= 64.0 {
+                setElevatorState(self, .Leaving)
+            }
+        }
+    case .Leaving:
+        self.drawOffset = updateAndStepTween(&self.leavingStateData.movementTween).(rl.Vector2)
+        self.blend.a = updateAndStepTween(&self.leavingStateData.alphaTween).(u8)
+        if tweenIsFinished(self.leavingStateData.alphaTween) && tweenIsFinished(self.leavingStateData.alphaTween) {
+            setElevatorState(self, .Gone)
+        }
     }
-	rl.DrawTextureV(getTexture(.Elevator), self.object.pos, rl.WHITE)
-	if colObj := objectCollisionType(self.object, Player, {0.0, 0.0}); colObj != nil {
-		aboveOtherCenter := getObjCenterPosition(colObj^) - {0.0, colObj.colRec.height}
-		drawSpriteEx(self.interactionArrowSpr, aboveOtherCenter, {1.0, 1.0})
-		updateSprite(&self.interactionArrowSpr)
-		if rl.IsKeyPressed(.UP) {
-			player := cast(^Player)colObj.data
-			player.frozen = 1
-			self.player = player
-		}
-	}
-	if (self.player != nil && self.player.frozen == 1) {
-		if rl.IsKeyPressed(.BACKSPACE) {
-			self.player.frozen = 0
-			self.player = nil
-		}
-	}
+
+	rl.DrawTextureV(getTexture(.Elevator), self.object.pos + self.drawOffset, self.blend)
+	// if colObj := objectCollisionType(self.object, Player, {0.0, 0.0}); colObj != nil {
+	// 	aboveOtherCenter := getObjCenterPosition(colObj^) - {0.0, colObj.colRec.height}
+	// 	drawSpriteEx(self.interactionArrowSpr, aboveOtherCenter, {1.0, 1.0})
+	// 	updateSprite(&self.interactionArrowSpr)
+	// 	if rl.IsKeyPressed(.UP) {
+	// 		player := cast(^Player)colObj.data
+	// 		player.frozen = 1
+	// 		self.player = player
+	// 	}
+	// }
+	// if (self.player != nil && self.player.frozen == 1) {
+	// 	if rl.IsKeyPressed(.BACKSPACE) {
+	// 		self.player.frozen = 0
+	// 		self.player = nil
+	// 	}
+	// }
 }
 setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
     if (self.state == newState) {
@@ -224,6 +256,13 @@ setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
         self.blend = {255, 255, 255, 0}
     case .Arriving:
         self.blend = rl.WHITE
+        self.arrivingStateData.movementTween = createTween(TweenVector2Range{{0.0, -224.0}, {0.0, 0.0}}, .InvExp, 2.0)
+        self.arrivingStateData.alphaTween = createTween(TweenU8Range{0, 255}, .Linear, 0.7)
+    case .Interactable:
+    case .Leaving:
+        self.blend = rl.WHITE
+        self.leavingStateData.movementTween = createTween(TweenVector2Range{{0.0, 0.0}, {0.0, -224.0}}, .Exp, 2.0)
+        self.leavingStateData.alphaTween = createTween(TweenU8Range{255, 0}, .Linear, 0.7, 1.3)
     }
 }
 
