@@ -1,5 +1,6 @@
 definition: def
 time: t
+duration: dur
 width: w
 height: h
 texture: tex

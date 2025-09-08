@@ -6,7 +6,7 @@ uniform sampler2D texture0;
 uniform vec4 colDiffuse;
 uniform int frameCount;
 uniform float frameInd;
-uniform vec2 texSize;
+uniform vec2 frameSize;
 uniform vec2 scrollPx;
 
 float random(vec2 st) {
@@ -25,8 +25,8 @@ void main() {
     float fc = float(frameCount);
     float animationOffset = floor(frameInd) / fc;
     vec2 pos = fragPos + scrollPx;
-    vec2 st = fract(pos / texSize);
-    vec2 ist = floor(pos / texSize);
+    vec2 st = fract(pos / frameSize);
+    vec2 ist = floor(pos / frameSize);
 
     vec2 r = vec2(random(ist), random(ist + 0.638548));
     vec2 flip = step(vec2(0.5), r);

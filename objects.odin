@@ -22,74 +22,74 @@ Player :: struct {
 	airjumpIndex:   i32,
 }
 createPlayer :: proc(alloc: Alloc, pos: rl.Vector2) -> ^Player {
-	data := new(Player, alloc)
-	data.idleSpr = createSprite(getSpriteDef(.SynthIdle))
-	data.walkSpr = createSprite(getSpriteDef(.SynthWalk))
-	data.currentSpr = &data.idleSpr
-	data.maxVelocity = {6.5, 6.5}
-	data.jumpStr = 7.0
-	data.walkSpd = 2.0
-	data.verticalGrav = 0.5
-	data.verticalDampen = 0.7
-	data.scale = {1.0, 1.0}
-	data.airjumpStr = 5.8
-	data.airjumpCount = 1
-	data.airjumpIndex = 0
-	data.object = createGameObject(
+	self := new(Player, alloc)
+	self.idleSpr = createSprite(getSpriteDef(.SynthIdle))
+	self.walkSpr = createSprite(getSpriteDef(.SynthWalk))
+	self.currentSpr = &self.idleSpr
+	self.maxVelocity = {6.5, 6.5}
+	self.jumpStr = 7.0
+	self.walkSpd = 2.0
+	self.verticalGrav = 0.5
+	self.verticalDampen = 0.7
+	self.scale = {1.0, 1.0}
+	self.airjumpStr = 5.8
+	self.airjumpCount = 1
+	self.airjumpIndex = 0
+	self.object = createGameObject(
 		Player,
-		data,
+		self,
 		updateProc = cast(proc(_: rawptr))updatePlayer,
 		drawProc = cast(proc(_: rawptr))drawPlayer,
 	)
-	data.object.pos = pos
-	data.object.colRec = {7.0, 3.0, 12.0, 20.0}
-	return data
+	self.object.pos = pos
+	self.object.colRec = {7.0, 3.0, 12.0, 20.0}
+	return self
 }
-updatePlayer :: proc(player: ^Player) {
+updatePlayer :: proc(self: ^Player) {
 	rightInput := rl.IsKeyDown(.RIGHT)
 	leftInput := rl.IsKeyDown(.LEFT)
 	walkInput := f32(int(rightInput)) - f32(int(leftInput))
 
 	onFloor :=
-		chunkCollision(getObjAbsColRec(player.object, {0.0, 1.0})) != nil &&
-		player.velocity.y >= 0.0
+		chunkCollision(getObjAbsColRec(self.object, {0.0, 1.0})) != nil &&
+		self.velocity.y >= 0.0
 	if onFloor {
-		player.airjumpIndex = 0
+		self.airjumpIndex = 0
 	} else {
-		player.velocity.y += player.verticalGrav
+		self.velocity.y += self.verticalGrav
 	}
 
-	player.velocity.x = walkInput * player.walkSpd * f32(player.frozen ~ 1)
-	if 0.0 < math.abs(player.velocity.x) {
-		player.scale.x = math.abs(player.scale.x) * math.sign(player.velocity.x)
+	self.velocity.x = walkInput * self.walkSpd * f32(self.frozen ~ 1)
+	if 0.0 < math.abs(self.velocity.x) {
+		self.scale.x = math.abs(self.scale.x) * math.sign(self.velocity.x)
 	}
 	jumpInput := rl.IsKeyPressed(.SPACE)
 	if jumpInput {
 		if onFloor {
-			player.velocity.y = -player.jumpStr
+			self.velocity.y = -self.jumpStr
 			onFloor = false
-		} else if player.airjumpIndex < player.airjumpCount {
-			player.velocity.y = -player.airjumpStr
-			player.airjumpIndex += 1
+		} else if self.airjumpIndex < self.airjumpCount {
+			self.velocity.y = -self.airjumpStr
+			self.airjumpIndex += 1
 		}
 	}
-	if !onFloor && player.velocity.y < 0.0 && rl.IsKeyReleased(.SPACE) {
-		player.velocity.y *= player.verticalDampen
+	if !onFloor && self.velocity.y < 0.0 && rl.IsKeyReleased(.SPACE) {
+		self.velocity.y *= self.verticalDampen
 	}
 
-	player.velocity = rl.Vector2Clamp(player.velocity, -player.maxVelocity, player.maxVelocity)
+	self.velocity = rl.Vector2Clamp(self.velocity, -self.maxVelocity, self.maxVelocity)
 
 	moveAndCollideResult := moveAndCollidePlayer(
-		player.object.pos,
-		player.object.colRec,
-		player.velocity,
-		math.sign(player.scale.x),
+		self.object.pos,
+		self.object.colRec,
+		self.velocity,
+		math.sign(self.scale.x),
 	)
-	player.object.pos = moveAndCollideResult.newPos
-	player.velocity = moveAndCollideResult.newVelocity
+	self.object.pos = moveAndCollideResult.newPos
+	self.velocity = moveAndCollideResult.newVelocity
 }
 drawPlayer :: proc(self: ^Player) {
-	if self.velocity.x > 0.0 {
+	if math.abs(self.velocity.x) > 0.0 {
 		if self.frozen == 0 {
 			setPlayerSprite(self, &self.walkSpr)
 		}
@@ -161,38 +161,41 @@ setPlayerSprite :: proc(player: ^Player, spr: ^Sprite) {
 ElevatorState :: enum {
     Gone,
     Arriving,
-    Enterable,
-    BeingEntered,
-    Interacting,
 }
 Elevator :: struct {
 	interactionArrowSpr: Sprite,
+	drawOffset: rl.Vector2,
 	object: ^GameObject,
 	player: ^Player,
 	state: ElevatorState,
+	blend: rl.Color,
 }
 createElevator :: proc(alloc: Alloc, pos: rl.Vector2) -> ^Elevator {
 	data := new(Elevator, alloc)
 	data.interactionArrowSpr = createSprite(getSpriteDef(.InteractionIndicationArrow))
 	data.state = .Gone
+	data.drawOffset = {0.0, -224.0}
+	data.blend = rl.WHITE
 	data.object = createGameObject(
 		Elevator,
 		data,
 		updateProc = cast(proc(_: rawptr))updateElevator,
 	)
-
 	data.object.pos = pos
 	data.object.colRec = getTextureRec(getTexture(.Elevator))
 	return data
 }
 updateElevator :: proc(self: ^Elevator) {
+    switch (self.state) {
+    case .Gone:
+        if player := getFirstGameObjectOfType(Player); player != nil {
+            if linalg.distance(player.pos, self.object.pos) < 64.0 {
+                self.state = .Arriving
+            }
+        }
+    case .Arriving:
 
-    // switch (self.state) {
-    // case .Gone:
-    //     if player := getFirstGameObjectOfType(Player); player != nil {
-
-    //     }
-    // }
+    }
 	rl.DrawTextureV(getTexture(.Elevator), self.object.pos, rl.WHITE)
 	if colObj := objectCollisionType(self.object, Player, {0.0, 0.0}); colObj != nil {
 		aboveOtherCenter := getObjCenterPosition(colObj^) - {0.0, colObj.colRec.height}
@@ -210,4 +213,60 @@ updateElevator :: proc(self: ^Elevator) {
 			self.player = nil
 		}
 	}
+}
+setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
+    if (self.state == newState) {
+        return
+    }
+    self.state = newState
+    switch (self.state) {
+    case .Gone:
+        self.blend = {255, 255, 255, 0}
+    case .Arriving:
+        self.blend = rl.WHITE
+    }
+}
+
+StarBg :: struct {
+	genTex:     rl.Texture,
+	frameSize:  rl.Vector2,
+	frameIndex: f32,
+	frameSpd:   f32,
+	frameCount: i32,
+	scroll:     rl.Vector2,
+	scrollSpd:  rl.Vector2,
+	object:     ^GameObject,
+}
+createStarBg :: proc(alloc: Alloc) -> ^StarBg {
+    self := new(StarBg, alloc)
+	self.genTex = web10CreateTexture({128, 128}, getSpriteDef(.Star), 16)
+	self.frameSize = {128.0, 128.0}
+	self.frameSpd = 4.0
+	self.frameCount = getSpriteDef(.Star).frame_count
+	self.scrollSpd = rl.Vector2{30.0, 30.0}
+	self.object = createGameObject(
+	    StarBg,
+		self,
+		drawProc = cast(proc(_: rawptr))drawStarBg,
+		destroyProc = cast(proc(_: rawptr))destroyStarBg)
+	return self
+}
+drawStarBg :: proc(self: ^StarBg) {
+    shd := getShader(.AnimatedTextureRepeatPosition)
+	rl.BeginShaderMode(shd)
+	frameCountLoc := rl.GetShaderLocation(shd, "frameCount")
+	rl.SetShaderValue(shd, frameCountLoc, &self.frameCount, .INT)
+	frameIndexLoc := rl.GetShaderLocation(shd, "frameInd")
+	rl.SetShaderValue(shd, frameIndexLoc, &self.frameIndex, .FLOAT)
+	texSizeLoc := rl.GetShaderLocation(shd, "frameSize")
+	rl.SetShaderValue(shd, texSizeLoc, &self.frameSize, .VEC2)
+	self.frameIndex += TARGET_TIME_STEP * self.frameSpd
+	scrollPxLoc := rl.GetShaderLocation(shd, "scrollPx")
+	rl.SetShaderValue(shd, scrollPxLoc, &self.scroll, .VEC2)
+	self.scroll += self.scrollSpd * TARGET_TIME_STEP
+	drawTextureRecDest(self.genTex, {self.object.pos.x, self.object.pos.y, WINDOW_WIDTH, WINDOW_HEIGHT})
+	rl.EndShaderMode()
+}
+destroyStarBg :: proc(self: ^StarBg) {
+    rl.UnloadTexture(self.genTex)
 }
