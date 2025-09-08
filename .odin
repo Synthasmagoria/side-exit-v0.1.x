@@ -21,6 +21,12 @@ deinit :: proc() {
 }
 
 Alloc :: mem.Allocator
+updateCamera :: proc(camera: ^rl.Camera2D, target: GameObject) {
+	zoom := getScreenZoom()
+	camera.offset = {WINDOW_WIDTH * zoom / 2, WINDOW_HEIGHT * zoom / 2}
+	camera.target = getObjCenterPosition(target)
+	camera.zoom = zoom
+}
 globalCamera := rl.Camera2D {
 	offset   = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},
 	target   = {0.0, 0.0},
@@ -70,7 +76,7 @@ main :: proc() {
 	globalGameObjects = &gameObjects
 
 	// Game init
-	elevator := createElevator(context.allocator, {128.0, 128.0})
+	elevator := createElevator(context.allocator, {160.0, 202.0})
 	player := createPlayer(context.allocator, {64.0, 64.0})
 	_ = createStarBg(context.allocator)
 

@@ -161,10 +161,13 @@ getGameObjectsOfType :: proc(type: typeid) -> [dynamic]^GameObject {
 	}
 	return objs
 }
-getFirstGameObjectOfType :: proc(type: typeid) -> ^GameObject {
+getGameObjectScreenPos :: proc(obj: ^GameObject) -> rl.Vector2 {
+	return obj.pos - globalCamera.target + globalCamera.offset
+}
+getFirstGameObjectOfType :: proc($T: typeid) -> ^T {
 	for i in 0 ..< len(globalGameObjects) {
-		if globalGameObjects[i].type == type {
-			return &globalGameObjects[i]
+		if globalGameObjects[i].type == T {
+			return cast(^T)globalGameObjects[i].data
 		}
 	}
 	return nil

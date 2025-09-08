@@ -14,7 +14,9 @@ getTextureSize :: proc(tex: rl.Texture) -> rl.Vector2 {
 getTextureRec :: proc(tex: rl.Texture) -> rl.Rectangle {
 	return {0.0, 0.0, f32(tex.width), f32(tex.height)}
 }
-
+getScreenSize :: proc() -> rl.Vector2 {
+    return {f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
+}
 textureGetSourceRec :: proc(tex: rl.Texture) -> rl.Rectangle {
 	return {0.0, 0.0, cast(f32)tex.width, cast(f32)tex.height}
 }
@@ -70,10 +72,4 @@ iRectangleAssertInv :: proc(irec: iRectangle) {
 }
 iRectangleGetInd :: proc(irec: iRectangle, maxWidth: i32) -> i32 {
 	return irec.x + irec.height * maxWidth
-}
-updateCamera :: proc(camera: ^rl.Camera2D, target: GameObject) {
-	zoom := getScreenZoom()
-	camera.offset = {WINDOW_WIDTH * zoom / 2, WINDOW_HEIGHT * zoom / 2}
-	camera.target = target.pos - getObjCenter(target)
-	camera.zoom = zoom
 }
