@@ -129,25 +129,48 @@ charLower :: proc(c: u8) -> u8 {
 }
 
 GameObject :: struct {
-	update: proc(data: rawptr),
-	data:   rawptr,
-	pos:    rl.Vector2,
-	colRec: rl.Rectangle,
-	id:     i32,
-	type:   typeid,
+	startProc:  proc(data: rawptr),
+	updateProc: proc(data: rawptr),
+	guiProc:    proc(data: rawptr),
+	data:       rawptr,
+	pos:        rl.Vector2,
+	colRec:     rl.Rectangle,
+	id:         i32,
+	type:       typeid,
 }
+GameObjectFuncs :: struct {}
 globalGameObjects: ^[dynamic]GameObject = nil
 globalGameObjectIdCounter: i32 = min(i32)
-createGameObject :: proc($T: typeid, update: proc(_: ^T), data: rawptr) -> ^GameObject {
+gameObjectEmptyProc :: proc(_: rawptr) {}
+createGameObject :: proc(
+	$T: typeid,
+	data: rawptr,
+	startProc: proc(_: rawptr) = gameObjectEmptyProc,
+	updateProc: proc(_: rawptr) = gameObjectEmptyProc,
+	guiProc: proc(_: rawptr) = gameObjectEmptyProc,
+) -> ^GameObject {
 	object := GameObject {
-		update = cast(proc(_: rawptr))update,
-		data   = data,
-		id     = globalGameObjectIdCounter,
-		type   = T,
+		startProc  = startProc,
+		updateProc = updateProc,
+		guiProc    = guiProc,
+		data       = data,
+		id         = globalGameObjectIdCounter,
+		type       = T,
 	}
 	append(globalGameObjects, object)
 	globalGameObjectIdCounter += 1
 	return &globalGameObjects[len(globalGameObjects) - 1]
+}
+setGameObjectStartFunc :: proc()
+getGameObjectsOfType :: proc(type: typeid) -> [dynamic]^GameObject {
+	context.allocator = context.temp_allocator
+	objs := make([dynamic]^GameObject, 0, 10)
+	for i in 0 ..< len(globalGameObjects) {
+		if globalGameObjects[i].type == type {
+			append(&objs, &globalGameObjects[i])
+		}
+	}
+	return objs
 }
 objectCollision :: proc(object: ^GameObject, offset: rl.Vector2) -> ^GameObject {
 	rec := getObjAbsColRec(object, offset)
@@ -404,24 +427,79 @@ ElevatorObject :: struct {
 	tex:                 rl.Texture,
 	interactionArrowSpr: Sprite,
 	object:              ^GameObject,
+	playerObject:        ^PlayerObject,
+	panelObject:         ^ElevatorPanelObject,
 }
-createElevator :: proc(alloc: Alloc, pos: rl.Vector2) -> ^ElevatorObject {
+createElevatorObject :: proc(alloc: Alloc, pos: rl.Vector2) -> ^ElevatorObject {
 	data := new(ElevatorObject, alloc)
 	data.tex = getTexture(.Elevator)
 	data.interactionArrowSpr = createSprite(getSpriteDef(.InteractionIndicationArrow))
-	data.object = createGameObject(ElevatorObject, updateAndDrawElevator, data)
+	data.object = createGameObject(
+		ElevatorObject,
+		data,
+		startProc = cast(proc(_: rawptr))startElevatorObject,
+		updateProc = cast(proc(_: rawptr))updateAndDrawElevatorObject,
+		guiProc = gameObjectEmptyProc,
+	)
 
 	data.object.pos = pos
 	data.object.colRec = getTextureRec(data.tex)
 	return data
 }
-updateAndDrawElevator :: proc(elevator: ^ElevatorObject) {
+startElevatorObject :: proc(elevator: ^ElevatorObject) {
+	objs := getGameObjectsOfType(ElevatorObject)
+	if len(objs) > 0 {
+		elevator.panelObject = cast(^ElevatorPanelObject)objs[0].data
+	}
+}
+updateAndDrawElevatorObject :: proc(elevator: ^ElevatorObject) {
 	rl.DrawTextureV(elevator.tex, elevator.object.pos, rl.WHITE)
 	if colObj := objectCollisionType(elevator.object, PlayerObject, {0.0, 0.0}); colObj != nil {
 		aboveOtherCenter := getObjCenterPosition(colObj^) - {0.0, colObj.colRec.height}
 		drawSpriteEx(elevator.interactionArrowSpr, aboveOtherCenter, {1.0, 1.0})
 		updateSprite(&elevator.interactionArrowSpr)
+		if rl.IsKeyPressed(.UP) {
+			player := cast(^PlayerObject)colObj.data
+			player.frozen = 1
+			elevator.playerObject = player
+		}
 	}
+	if (elevator.playerObject != nil && elevator.playerObject.frozen == 1) {
+		if rl.IsKeyPressed(.BACKSPACE) {
+			elevator.playerObject.frozen = 0
+			elevator.playerObject = nil
+		}
+	}
+}
+
+ElevatorPanelObject :: struct {
+	bgTex: rl.Texture,
+	tex:   rl.Texture,
+}
+createElevatorObjectPanel :: proc(alloc: Alloc, pos: rl.Vector2) -> ^ElevatorPanelObject {
+	data := new(ElevatorPanelObject, alloc)
+	data.bgTex = getTexture(.ElevatorPanelBg)
+	data.tex = getTexture(.ElevatorPanel)
+	object := createGameObject(
+		ElevatorPanelObject,
+		data,
+		updateProc = cast(proc(_: rawptr))updateAndDrawElevatorPanel,
+	)
+	return data
+}
+updateAndDrawElevatorPanel :: proc(ep: ^ElevatorPanelObject) {
+	uiPos := camera.target - {WINDOW_WIDTH, WINDOW_HEIGHT} / 2.0
+	bgTexSrc := getTextureRec(ep.bgTex)
+	bgTexDest := rl.Rectangle{uiPos.x, uiPos.y, WINDOW_WIDTH, WINDOW_HEIGHT}
+	rl.DrawTexturePro(ep.bgTex, bgTexSrc, bgTexDest, {0.0, 0.0}, 0.0, rl.WHITE)
+	texSrc := getTextureRec(ep.tex)
+	texDest := rl.Rectangle {
+		WINDOW_WIDTH / 2.0 - texSrc.width / 2.0,
+		WINDOW_HEIGHT / 2.0 - texSrc.height / 2.0,
+		WINDOW_WIDTH,
+		WINDOW_HEIGHT,
+	}
+	rl.DrawTexturePro(ep.tex, texSrc, texDest, {0.0, 0.0}, 0.0, rl.WHITE)
 }
 
 PlayerObject :: struct {
@@ -433,6 +511,7 @@ PlayerObject :: struct {
 	colRec:         rl.Rectangle,
 	velocity:       rl.Vector2,
 	maxVelocity:    rl.Vector2,
+	frozen:         i32,
 	walkSpd:        f32,
 	verticalGrav:   f32,
 	verticalDampen: f32,
@@ -455,15 +534,14 @@ createPlayer :: proc(alloc: Alloc, pos: rl.Vector2) -> ^PlayerObject {
 	data.airjumpStr = 5.8
 	data.airjumpCount = 1
 	data.airjumpIndex = 0
-	data.object = createGameObject(PlayerObject, updateAndDrawPlayer, data)
-
+	data.object = createGameObject(
+		PlayerObject,
+		data,
+		updateProc = cast(proc(_: rawptr))updateAndDrawPlayer,
+	)
 	data.object.pos = pos
 	data.object.colRec = {7.0, 3.0, 12.0, 20.0}
-
 	return data
-}
-makeAbsoluteColRec :: proc(colRec: rl.Rectangle, pos: rl.Vector2) -> rl.Rectangle {
-	return {colRec.x + pos.x, colRec.y + pos.y, colRec.width, colRec.height}
 }
 updateAndDrawPlayer :: proc(player: ^PlayerObject) {
 	rightInput := rl.IsKeyDown(.RIGHT)
@@ -479,7 +557,7 @@ updateAndDrawPlayer :: proc(player: ^PlayerObject) {
 		player.velocity.y += player.verticalGrav
 	}
 
-	player.velocity.x = walkInput * player.walkSpd
+	player.velocity.x = walkInput * player.walkSpd * f32(player.frozen ~ 1)
 	if 0.0 < math.abs(player.velocity.x) {
 		player.scale.x = math.abs(player.scale.x) * math.sign(player.velocity.x)
 	}
@@ -509,12 +587,19 @@ updateAndDrawPlayer :: proc(player: ^PlayerObject) {
 	player.velocity = moveAndCollideResult.newVelocity
 
 	if math.abs(walkInput) > 0.0 {
-		playerSetSprite(player, &player.walkSpr)
+		if player.frozen == 0 {
+			playerSetSprite(player, &player.walkSpr)
+		}
 	} else {
 		playerSetSprite(player, &player.idleSpr)
 	}
 	drawSpriteEx(player.currentSpr^, player.object.pos, player.scale)
-	updateSprite(player.currentSpr)
+	if player.frozen == 0 {
+		updateSprite(player.currentSpr)
+	}
+}
+makeAbsoluteColRec :: proc(colRec: rl.Rectangle, pos: rl.Vector2) -> rl.Rectangle {
+	return {colRec.x + pos.x, colRec.y + pos.y, colRec.width, colRec.height}
 }
 PlayerMoveAndCollideResult :: struct {
 	newPos:      rl.Vector2,
@@ -891,7 +976,7 @@ drawChunkWorld :: proc(chunkWorld: ^ChunkWorld) {
 	}
 }
 
-updateCamera :: proc(camera: ^rl.Camera2D, target: GameObject) {
+updateCamera :: proc(target: GameObject) {
 	zoom := getAppRtexZoom()
 	camera.offset = {WINDOW_WIDTH * zoom / 2, WINDOW_HEIGHT * zoom / 2}
 	camera.target = target.pos - getObjCenter(target)
@@ -908,6 +993,8 @@ deinit :: proc() {
 	unloadTextures()
 	unloadShaders()
 }
+
+camera: rl.Camera2D
 
 main :: proc() {
 	// Raylib init
@@ -970,10 +1057,11 @@ main :: proc() {
 		rl.Vector2{30.0, 20.0},
 	)
 
-	elevator := createElevator(context.allocator, {128.0, 128.0})
+	elevator := createElevatorObject(context.allocator, {128.0, 128.0})
 	player := createPlayer(context.allocator, {64.0, 64.0})
+	//_ = createElevatorObjectPanel(context.allocator, {0.0, 0.0})
 
-	camera := rl.Camera2D {
+	camera = rl.Camera2D {
 		offset   = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},
 		target   = player.object.pos,
 		rotation = 0.0,
@@ -982,22 +1070,28 @@ main :: proc() {
 
 	mem.dynamic_arena_reset(&frameArena)
 
+	for object in globalGameObjects {
+		object.startProc(object.data)
+	}
 	for !rl.WindowShouldClose() {
 		rl.UpdateMusicStream(gameMusic)
 		if rl.IsMouseButtonPressed(.LEFT) {
 			player.object.pos = rl.GetMousePosition()
 		}
-		updateCamera(&camera, player.object^)
+		updateCamera(player.object^)
 		updateChunkWorld(&chunkWorld, player.object^)
 		rl.BeginDrawing()
 		rl.BeginMode2D(camera)
 		rl.ClearBackground(rl.BLACK)
 		drawRepeatingStarBg(&repeatingStarBg)
-		for object in gameObjects {
-			object.update(object.data)
-		}
 		drawChunkWorld(&chunkWorld)
+		for object in globalGameObjects {
+			object.updateProc(object.data)
+		}
 		rl.EndMode2D()
+		for object in globalGameObjects {
+			object.guiProc(object.data)
+		}
 		rl.EndDrawing()
 		mem.dynamic_arena_reset(&frameArena)
 	}
