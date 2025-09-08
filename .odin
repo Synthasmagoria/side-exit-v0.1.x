@@ -1,4 +1,4 @@
-package main
+package game
 
 import "core:fmt"
 import math "core:math"
@@ -8,10 +8,6 @@ import mem "core:mem"
 import "core:reflect"
 import string_util "core:strings"
 import rl "vendor:raylib"
-
-printerr :: proc(msg: string) {
-
-}
 
 Alloc :: mem.Allocator
 
@@ -131,6 +127,7 @@ charLower :: proc(c: u8) -> u8 {
 GameObject :: struct {
 	startProc:  proc(data: rawptr),
 	updateProc: proc(data: rawptr),
+	drawProc:   proc(data: rawptr),
 	guiProc:    proc(data: rawptr),
 	data:       rawptr,
 	pos:        rl.Vector2,
@@ -147,11 +144,13 @@ createGameObject :: proc(
 	data: rawptr,
 	startProc: proc(_: rawptr) = gameObjectEmptyProc,
 	updateProc: proc(_: rawptr) = gameObjectEmptyProc,
+	drawProc: proc(_: rawptr) = gameObjectEmptyProc,
 	guiProc: proc(_: rawptr) = gameObjectEmptyProc,
 ) -> ^GameObject {
 	object := GameObject {
 		startProc  = startProc,
 		updateProc = updateProc,
+		drawProc   = drawProc,
 		guiProc    = guiProc,
 		data       = data,
 		id         = globalGameObjectIdCounter,
@@ -194,7 +193,6 @@ objectCollisionType :: proc(object: ^GameObject, type: typeid, offset: rl.Vector
 	}
 	return nil
 }
-// TODO: objectCollisionList
 getObjCenter :: proc(object: GameObject) -> rl.Vector2 {
 	return {
 		object.colRec.x + object.colRec.width / 2.0,
@@ -421,238 +419,6 @@ textureGetSourceRec :: proc(tex: rl.Texture) -> rl.Rectangle {
 drawTextureRecDest :: proc(tex: rl.Texture, dest: rl.Rectangle) {
 	src := textureGetSourceRec(tex)
 	rl.DrawTexturePro(tex, src, dest, rl.Vector2{0.0, 0.0}, 0.0, rl.WHITE)
-}
-
-ElevatorObject :: struct {
-	tex:                 rl.Texture,
-	interactionArrowSpr: Sprite,
-	object:              ^GameObject,
-	playerObject:        ^PlayerObject,
-	panelObject:         ^ElevatorPanelObject,
-}
-createElevatorObject :: proc(alloc: Alloc, pos: rl.Vector2) -> ^ElevatorObject {
-	data := new(ElevatorObject, alloc)
-	data.tex = getTexture(.Elevator)
-	data.interactionArrowSpr = createSprite(getSpriteDef(.InteractionIndicationArrow))
-	data.object = createGameObject(
-		ElevatorObject,
-		data,
-		startProc = cast(proc(_: rawptr))startElevatorObject,
-		updateProc = cast(proc(_: rawptr))updateAndDrawElevatorObject,
-		guiProc = gameObjectEmptyProc,
-	)
-
-	data.object.pos = pos
-	data.object.colRec = getTextureRec(data.tex)
-	return data
-}
-startElevatorObject :: proc(elevator: ^ElevatorObject) {
-	objs := getGameObjectsOfType(ElevatorObject)
-	if len(objs) > 0 {
-		elevator.panelObject = cast(^ElevatorPanelObject)objs[0].data
-	}
-}
-updateAndDrawElevatorObject :: proc(elevator: ^ElevatorObject) {
-	rl.DrawTextureV(elevator.tex, elevator.object.pos, rl.WHITE)
-	if colObj := objectCollisionType(elevator.object, PlayerObject, {0.0, 0.0}); colObj != nil {
-		aboveOtherCenter := getObjCenterPosition(colObj^) - {0.0, colObj.colRec.height}
-		drawSpriteEx(elevator.interactionArrowSpr, aboveOtherCenter, {1.0, 1.0})
-		updateSprite(&elevator.interactionArrowSpr)
-		if rl.IsKeyPressed(.UP) {
-			player := cast(^PlayerObject)colObj.data
-			player.frozen = 1
-			elevator.playerObject = player
-		}
-	}
-	if (elevator.playerObject != nil && elevator.playerObject.frozen == 1) {
-		if rl.IsKeyPressed(.BACKSPACE) {
-			elevator.playerObject.frozen = 0
-			elevator.playerObject = nil
-		}
-	}
-}
-
-ElevatorPanelObject :: struct {
-	bgTex: rl.Texture,
-	tex:   rl.Texture,
-}
-createElevatorObjectPanel :: proc(alloc: Alloc, pos: rl.Vector2) -> ^ElevatorPanelObject {
-	data := new(ElevatorPanelObject, alloc)
-	data.bgTex = getTexture(.ElevatorPanelBg)
-	data.tex = getTexture(.ElevatorPanel)
-	object := createGameObject(
-		ElevatorPanelObject,
-		data,
-		updateProc = cast(proc(_: rawptr))updateAndDrawElevatorPanel,
-	)
-	return data
-}
-updateAndDrawElevatorPanel :: proc(ep: ^ElevatorPanelObject) {
-	uiPos := camera.target - {WINDOW_WIDTH, WINDOW_HEIGHT} / 2.0
-	bgTexSrc := getTextureRec(ep.bgTex)
-	bgTexDest := rl.Rectangle{uiPos.x, uiPos.y, WINDOW_WIDTH, WINDOW_HEIGHT}
-	rl.DrawTexturePro(ep.bgTex, bgTexSrc, bgTexDest, {0.0, 0.0}, 0.0, rl.WHITE)
-	texSrc := getTextureRec(ep.tex)
-	texDest := rl.Rectangle {
-		WINDOW_WIDTH / 2.0 - texSrc.width / 2.0,
-		WINDOW_HEIGHT / 2.0 - texSrc.height / 2.0,
-		WINDOW_WIDTH,
-		WINDOW_HEIGHT,
-	}
-	rl.DrawTexturePro(ep.tex, texSrc, texDest, {0.0, 0.0}, 0.0, rl.WHITE)
-}
-
-PlayerObject :: struct {
-	object:         ^GameObject,
-	idleSpr:        Sprite,
-	walkSpr:        Sprite,
-	currentSpr:     ^Sprite,
-	scale:          rl.Vector2,
-	colRec:         rl.Rectangle,
-	velocity:       rl.Vector2,
-	maxVelocity:    rl.Vector2,
-	frozen:         i32,
-	walkSpd:        f32,
-	verticalGrav:   f32,
-	verticalDampen: f32,
-	jumpStr:        f32,
-	airjumpStr:     f32,
-	airjumpCount:   i32,
-	airjumpIndex:   i32,
-}
-createPlayer :: proc(alloc: Alloc, pos: rl.Vector2) -> ^PlayerObject {
-	data := new(PlayerObject, alloc)
-	data.idleSpr = createSprite(getSpriteDef(.SynthIdle))
-	data.walkSpr = createSprite(getSpriteDef(.SynthWalk))
-	data.currentSpr = &data.idleSpr
-	data.maxVelocity = {6.5, 6.5}
-	data.jumpStr = 7.0
-	data.walkSpd = 2.0
-	data.verticalGrav = 0.5
-	data.verticalDampen = 0.7
-	data.scale = {1.0, 1.0}
-	data.airjumpStr = 5.8
-	data.airjumpCount = 1
-	data.airjumpIndex = 0
-	data.object = createGameObject(
-		PlayerObject,
-		data,
-		updateProc = cast(proc(_: rawptr))updateAndDrawPlayer,
-	)
-	data.object.pos = pos
-	data.object.colRec = {7.0, 3.0, 12.0, 20.0}
-	return data
-}
-updateAndDrawPlayer :: proc(player: ^PlayerObject) {
-	rightInput := rl.IsKeyDown(.RIGHT)
-	leftInput := rl.IsKeyDown(.LEFT)
-	walkInput := f32(int(rightInput)) - f32(int(leftInput))
-
-	onFloor :=
-		chunkCollision(getObjAbsColRec(player.object, {0.0, 1.0})) != nil &&
-		player.velocity.y >= 0.0
-	if onFloor {
-		player.airjumpIndex = 0
-	} else {
-		player.velocity.y += player.verticalGrav
-	}
-
-	player.velocity.x = walkInput * player.walkSpd * f32(player.frozen ~ 1)
-	if 0.0 < math.abs(player.velocity.x) {
-		player.scale.x = math.abs(player.scale.x) * math.sign(player.velocity.x)
-	}
-	jumpInput := rl.IsKeyPressed(.SPACE)
-	if jumpInput {
-		if onFloor {
-			player.velocity.y = -player.jumpStr
-			onFloor = false
-		} else if player.airjumpIndex < player.airjumpCount {
-			player.velocity.y = -player.airjumpStr
-			player.airjumpIndex += 1
-		}
-	}
-	if !onFloor && player.velocity.y < 0.0 && rl.IsKeyReleased(.SPACE) {
-		player.velocity.y *= player.verticalDampen
-	}
-
-	player.velocity = rl.Vector2Clamp(player.velocity, -player.maxVelocity, player.maxVelocity)
-
-	moveAndCollideResult := playerMoveAndCollide(
-		player.object.pos,
-		player.object.colRec,
-		player.velocity,
-		math.sign(player.scale.x),
-	)
-	player.object.pos = moveAndCollideResult.newPos
-	player.velocity = moveAndCollideResult.newVelocity
-
-	if math.abs(walkInput) > 0.0 {
-		if player.frozen == 0 {
-			playerSetSprite(player, &player.walkSpr)
-		}
-	} else {
-		playerSetSprite(player, &player.idleSpr)
-	}
-	drawSpriteEx(player.currentSpr^, player.object.pos, player.scale)
-	if player.frozen == 0 {
-		updateSprite(player.currentSpr)
-	}
-}
-makeAbsoluteColRec :: proc(colRec: rl.Rectangle, pos: rl.Vector2) -> rl.Rectangle {
-	return {colRec.x + pos.x, colRec.y + pos.y, colRec.width, colRec.height}
-}
-PlayerMoveAndCollideResult :: struct {
-	newPos:      rl.Vector2,
-	newVelocity: rl.Vector2,
-}
-playerMoveAndCollide :: proc(
-	pos: rl.Vector2,
-	colRec: rl.Rectangle,
-	velocity: rl.Vector2,
-	facing: f32,
-) -> PlayerMoveAndCollideResult {
-	result := PlayerMoveAndCollideResult {
-		newPos      = pos,
-		newVelocity = velocity,
-	}
-	absColRecNext := makeAbsoluteColRec(colRec, result.newPos + result.newVelocity)
-	switch rect in chunkCollision(absColRecNext) {
-	case rl.Rectangle:
-		absColRecVert := makeAbsoluteColRec(colRec, result.newPos + {0.0, result.newVelocity.y})
-		switch recVert in chunkCollision(absColRecVert) {
-		case rl.Rectangle:
-			vertTrajectory := math.sign(result.newVelocity.y)
-			if (vertTrajectory == 1.0) {
-				result.newPos.y = recVert.y - colRec.y - colRec.height - 1.0
-			} else {
-				result.newPos.y = recVert.y + recVert.height - colRec.y + 1.0
-			}
-			result.newVelocity.y = 0.0
-		case nil:
-			result.newPos.y += result.newVelocity.y
-		}
-
-		absColRecHor := makeAbsoluteColRec(colRec, result.newPos + {result.newVelocity.x, 0.0})
-		switch recHor in chunkCollision(absColRecHor) {
-		case rl.Rectangle:
-			if (facing == 1.0) {
-				result.newPos.x = recHor.x - colRec.x - colRec.width - 1.0
-			} else {
-				result.newPos.x = recHor.x + recHor.width - colRec.x + 1.0
-			}
-		case nil:
-			result.newPos.x += result.newVelocity.x
-		}
-	case nil:
-		result.newPos += result.newVelocity
-	}
-	return result
-}
-playerSetSprite :: proc(player: ^PlayerObject, spr: ^Sprite) {
-	if (player.currentSpr != spr) {
-		player.currentSpr = spr
-		setSpriteFrame(player.currentSpr, 0)
-	}
 }
 
 pointInRec :: proc(point: rl.Vector2, rectangle: rl.Rectangle) -> bool {
@@ -1057,7 +823,7 @@ main :: proc() {
 		rl.Vector2{30.0, 20.0},
 	)
 
-	elevator := createElevatorObject(context.allocator, {128.0, 128.0})
+	elevator := createElevator(context.allocator, {128.0, 128.0})
 	player := createPlayer(context.allocator, {64.0, 64.0})
 	//_ = createElevatorObjectPanel(context.allocator, {0.0, 0.0})
 
@@ -1087,6 +853,9 @@ main :: proc() {
 		drawChunkWorld(&chunkWorld)
 		for object in globalGameObjects {
 			object.updateProc(object.data)
+		}
+		for object in globalGameObjects {
+			object.drawProc(object.data)
 		}
 		rl.EndMode2D()
 		for object in globalGameObjects {
