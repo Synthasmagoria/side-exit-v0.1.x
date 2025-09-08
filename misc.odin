@@ -40,34 +40,3 @@ web10CreateTexture :: proc(size: iVector2, spr_def: SpriteDef, num: i32) -> rl.T
 	img := rl.LoadImageFromTexture(rtex.texture)
 	return rl.LoadTextureFromImage(img)
 }
-
-getAppRtexSrcRect :: proc(rtex: rl.RenderTexture) -> rl.Rectangle {
-	rtex_size := getTextureSize(rtex.texture)
-	return {0.0, rtex_size.y, rtex_size.x, -rtex_size.y}
-}
-getAppRtexDestRect :: proc(rtex: rl.RenderTexture) -> rl.Rectangle {
-	screen_size := rl.Vector2{cast(f32)rl.GetScreenWidth(), cast(f32)rl.GetScreenHeight()}
-	rtex_size := getTextureSize(rtex.texture)
-	if screen_size.x < screen_size.y {
-		h := screen_size.x / rtex_size.x * rtex_size.y
-		return {0.0, screen_size.y / 2.0 - h / 2.0, screen_size.x, h}
-	} else {
-		w := screen_size.y / rtex_size.y * rtex_size.x
-		return {screen_size.x / 2.0 - w / 2.0, 0.0, w, screen_size.y}
-	}
-}
-getScreenZoom :: proc() -> f32 {
-	screenSize := rl.Vector2{f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
-	rtexSize := rl.Vector2{WINDOW_WIDTH, WINDOW_HEIGHT}
-	if screenSize.x < screenSize.y {
-		return screenSize.x / rtexSize.x
-	} else {
-		return screenSize.y / rtexSize.y
-	}
-}
-drawAppRtex :: proc(rtex: rl.RenderTexture) {
-	src := getAppRtexSrcRect(rtex)
-	dest := getAppRtexDestRect(rtex)
-	origin := rl.Vector2{0.0, 0.0}
-	rl.DrawTexturePro(rtex.texture, src, dest, origin, 0.0, rl.WHITE)
-}

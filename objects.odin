@@ -206,7 +206,7 @@ createElevator :: proc(alloc: Alloc, pos: rl.Vector2) -> ^Elevator {
 		self,
 		updateProc = cast(proc(_: rawptr))updateElevator,
 		drawProc = cast(proc(_: rawptr))drawElevator,
-	    guiProc = cast(proc(_: rawptr))drawElevatorGui
+	    drawEndProc = cast(proc(_: rawptr))drawElevatorEnd
 	)
 	setElevatorState(self, .Gone)
 	self.object.pos = pos
@@ -271,21 +271,20 @@ updateElevator :: proc(self: ^Elevator) {
 drawElevator :: proc(self: ^Elevator) {
     rl.DrawTextureV(getTexture(.Elevator), self.object.pos + self.drawOffset, self.blend)
 }
-drawElevatorGui :: proc(self: ^Elevator) {
+drawElevatorEnd :: proc(self: ^Elevator) {
     if self.drawInteractionArrow {
         if player := getFirstGameObjectOfType(Player); player != nil {
-            abovePlayerCenter := getGameObjectScreenPos(player.object) + getObjCenter(player.object^) - {0.0, player.object.colRec.height}
+            abovePlayerCenter :=
+                getGameObjectScreenPos(player.object) +
+                getObjCenter(player.object^) -
+                {0.0, player.object.colRec.height}
       		drawSpriteEx(self.interactionArrowSpr, abovePlayerCenter, {1.0, 1.0})
       		updateSprite(&self.interactionArrowSpr)
         }
     }
     #partial switch self.state {
     case .PanelFadeIn, .Panel, .PanelFadeOut:
-        panel := getTexture(.ElevatorPanel)
-        panelSrc := getTextureRec(panel)
-        screenSize := getScreenSize()
-        panelDest := rl.Rectangle{0.0, 0.0, screenSize.x, screenSize.y}
-        rl.DrawTexturePro(getTexture(.ElevatorPanel), getTextureRec(panel), panelDest, {0.0, 0.0}, 0.0, self.panelBlend)
+        // TODO: Draw panel
     }
 }
 setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {

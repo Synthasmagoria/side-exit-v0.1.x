@@ -21,12 +21,6 @@ deinit :: proc() {
 }
 
 Alloc :: mem.Allocator
-updateCamera :: proc(camera: ^rl.Camera2D, target: GameObject) {
-	zoom := getScreenZoom()
-	camera.offset = {WINDOW_WIDTH * zoom / 2, WINDOW_HEIGHT * zoom / 2}
-	camera.target = getObjCenterPosition(target)
-	camera.zoom = zoom
-}
 globalCamera := rl.Camera2D {
 	offset   = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},
 	target   = {0.0, 0.0},
@@ -36,6 +30,12 @@ globalCamera := rl.Camera2D {
 globalChunkWorld := ChunkWorld {
 	pos       = {-1, -1},
 	genCutoff = 0.5,
+}
+globalGuiCamera := rl.Camera2D {
+	offset   = {0.0, 0.0},
+	target   = {0.0, 0.0},
+	rotation = 0.0,
+	zoom     = 1.0,
 }
 
 main :: proc() {
@@ -90,9 +90,11 @@ main :: proc() {
 		if rl.IsMouseButtonPressed(.LEFT) {
 			player.object.pos = rl.GetMousePosition()
 		}
-		updateCamera(&globalCamera, player.object^)
+		globalCamera.offset =
+			-getObjCenterPosition(player.object^) + {WINDOW_WIDTH, WINDOW_HEIGHT} / 2.0
 		updateChunkWorld(&globalChunkWorld, player.object^)
 		rl.BeginDrawing()
+		rl.BeginTextureMode(gameRenderTex)
 		rl.BeginMode2D(globalCamera)
 		rl.ClearBackground(rl.BLACK)
 		drawChunkWorld(&globalChunkWorld)
@@ -102,10 +104,12 @@ main :: proc() {
 		for object in globalGameObjects {
 			object.drawProc(object.data)
 		}
-		rl.EndMode2D()
 		for object in globalGameObjects {
-			object.guiProc(object.data)
+			object.drawEndProc(object.data)
 		}
+		rl.EndMode2D()
+		rl.EndTextureMode()
+		drawGameRenderTexture(gameRenderTex)
 		rl.EndDrawing()
 		mem.dynamic_arena_reset(&frameArena)
 	}

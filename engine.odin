@@ -115,7 +115,7 @@ GameObject :: struct {
 	startProc:   proc(data: rawptr),
 	updateProc:  proc(data: rawptr),
 	drawProc:    proc(data: rawptr),
-	guiProc:     proc(data: rawptr),
+	drawEndProc: proc(data: rawptr),
 	destroyProc: proc(data: rawptr),
 	data:        rawptr,
 	pos:         rl.Vector2,
@@ -133,14 +133,14 @@ createGameObject :: proc(
 	startProc: proc(_: rawptr) = gameObjectEmptyProc,
 	updateProc: proc(_: rawptr) = gameObjectEmptyProc,
 	drawProc: proc(_: rawptr) = gameObjectEmptyProc,
-	guiProc: proc(_: rawptr) = gameObjectEmptyProc,
+	drawEndProc: proc(_: rawptr) = gameObjectEmptyProc,
 	destroyProc: proc(_: rawptr) = gameObjectEmptyProc,
 ) -> ^GameObject {
 	object := GameObject {
 		startProc   = startProc,
 		updateProc  = updateProc,
 		drawProc    = drawProc,
-		guiProc     = guiProc,
+		drawEndProc = drawEndProc,
 		destroyProc = destroyProc,
 		data        = data,
 		id          = globalGameObjectIdCounter,
@@ -544,7 +544,9 @@ TweenCurve :: enum {
 	Linear,
 	Exp,
 	InvExp,
+	Hermite,
 }
+
 Tween :: struct {
 	range: TweenRange,
 	curve: TweenCurve,
@@ -568,6 +570,8 @@ updateAndStepTween :: proc(tween: ^Tween) -> TweenValue {
 		progress = math.pow(active_t / tween.dur, 2)
 	case .InvExp:
 		progress = 1.0 - math.pow((tween.dur - active_t) / tween.dur, 2)
+	case .Hermite:
+		progress = math.smoothstep(f32(0.0), f32(1.0), active_t / tween.dur)
 	}
 	switch range in tween.range {
 	case TweenF32Range:
