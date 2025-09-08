@@ -1,5 +1,6 @@
 package game
 import rl "vendor:raylib"
+import "core:math/linalg"
 import "core:math"
 
 Player :: struct {
@@ -157,36 +158,42 @@ setPlayerSprite :: proc(player: ^Player, spr: ^Sprite) {
 	}
 }
 
+ElevatorState :: enum {
+    Gone,
+    Arriving,
+    Enterable,
+    BeingEntered,
+    Interacting,
+}
 Elevator :: struct {
-	tex:                 rl.Texture,
 	interactionArrowSpr: Sprite,
-	object:              ^GameObject,
-	player:        ^Player,
-	panel:         ^ElevatorPanel,
+	object: ^GameObject,
+	player: ^Player,
+	state: ElevatorState,
 }
 createElevator :: proc(alloc: Alloc, pos: rl.Vector2) -> ^Elevator {
 	data := new(Elevator, alloc)
-	data.tex = getTexture(.Elevator)
 	data.interactionArrowSpr = createSprite(getSpriteDef(.InteractionIndicationArrow))
+	data.state = .Gone
 	data.object = createGameObject(
 		Elevator,
 		data,
-		startProc = cast(proc(_: rawptr))startElevator,
-		updateProc = cast(proc(_: rawptr))updateAndDrawElevator,
+		updateProc = cast(proc(_: rawptr))updateElevator,
 	)
 
 	data.object.pos = pos
-	data.object.colRec = getTextureRec(data.tex)
+	data.object.colRec = getTextureRec(getTexture(.Elevator))
 	return data
 }
-startElevator :: proc(self: ^Elevator) {
-	objs := getGameObjectsOfType(Elevator)
-	if len(objs) > 0 {
-		self.panel = cast(^ElevatorPanel)objs[0].data
-	}
-}
-updateAndDrawElevator :: proc(self: ^Elevator) {
-	rl.DrawTextureV(self.tex, self.object.pos, rl.WHITE)
+updateElevator :: proc(self: ^Elevator) {
+
+    // switch (self.state) {
+    // case .Gone:
+    //     if player := getFirstGameObjectOfType(Player); player != nil {
+
+    //     }
+    // }
+	rl.DrawTextureV(getTexture(.Elevator), self.object.pos, rl.WHITE)
 	if colObj := objectCollisionType(self.object, Player, {0.0, 0.0}); colObj != nil {
 		aboveOtherCenter := getObjCenterPosition(colObj^) - {0.0, colObj.colRec.height}
 		drawSpriteEx(self.interactionArrowSpr, aboveOtherCenter, {1.0, 1.0})
@@ -203,34 +210,4 @@ updateAndDrawElevator :: proc(self: ^Elevator) {
 			self.player = nil
 		}
 	}
-}
-
-ElevatorPanel :: struct {
-	bgTex: rl.Texture,
-	tex:   rl.Texture,
-}
-createElevatorPanel :: proc(alloc: Alloc, pos: rl.Vector2) -> ^ElevatorPanel {
-	data := new(ElevatorPanel, alloc)
-	data.bgTex = getTexture(.ElevatorPanelBg)
-	data.tex = getTexture(.ElevatorPanel)
-	object := createGameObject(
-		ElevatorPanel,
-		data,
-		updateProc = cast(proc(_: rawptr))updateAndDrawElevatorPanel,
-	)
-	return data
-}
-updateAndDrawElevatorPanel :: proc(ep: ^ElevatorPanel) {
-	uiPos := camera.target - {WINDOW_WIDTH, WINDOW_HEIGHT} / 2.0
-	bgTexSrc := getTextureRec(ep.bgTex)
-	bgTexDest := rl.Rectangle{uiPos.x, uiPos.y, WINDOW_WIDTH, WINDOW_HEIGHT}
-	rl.DrawTexturePro(ep.bgTex, bgTexSrc, bgTexDest, {0.0, 0.0}, 0.0, rl.WHITE)
-	texSrc := getTextureRec(ep.tex)
-	texDest := rl.Rectangle {
-		WINDOW_WIDTH / 2.0 - texSrc.width / 2.0,
-		WINDOW_HEIGHT / 2.0 - texSrc.height / 2.0,
-		WINDOW_WIDTH,
-		WINDOW_HEIGHT,
-	}
-	rl.DrawTexturePro(ep.tex, texSrc, texDest, {0.0, 0.0}, 0.0, rl.WHITE)
 }

@@ -3,6 +3,8 @@ package game
 import "core:fmt"
 import math "core:math"
 import linalg "core:math/linalg"
+import "core:math/linalg/glsl"
+import "core:math/noise"
 import rand "core:math/rand"
 import mem "core:mem"
 import "core:reflect"
@@ -170,6 +172,14 @@ getGameObjectsOfType :: proc(type: typeid) -> [dynamic]^GameObject {
 		}
 	}
 	return objs
+}
+getFirstGameObjectOfType :: proc(type: typeid) -> ^GameObject {
+	for i in 0 ..< len(globalGameObjects) {
+		if globalGameObjects[i].type == type {
+			return &globalGameObjects[i]
+		}
+	}
+	return nil
 }
 objectCollision :: proc(object: ^GameObject, offset: rl.Vector2) -> ^GameObject {
 	rec := getObjAbsColRec(object, offset)
@@ -446,6 +456,7 @@ pointInIrec :: proc(point: iVector2, rectangle: iRectangle) -> bool {
 	)
 }
 
+iVector2 :: [2]i32
 iRectangle :: struct {
 	x:      i32,
 	y:      i32,
@@ -467,47 +478,6 @@ iRectangleAssertInv :: proc(irec: iRectangle) {
 iRectangleGetInd :: proc(irec: iRectangle, maxWidth: i32) -> i32 {
 	return irec.x + irec.height * maxWidth
 }
-iVector2 :: struct {
-	x: i32,
-	y: i32,
-}
-fract :: proc(val: f32) -> f32 {
-	return val - math.floor(val)
-}
-vector2Floor :: proc(v: rl.Vector2) -> rl.Vector2 {
-	return {math.floor(v.x), math.floor(v.y)}
-}
-vector2Fract :: proc(v: rl.Vector2) -> rl.Vector2 {
-	return {fract(v.x), fract(v.y)}
-}
-vector2Smoothstep :: proc(edgeA: rl.Vector2, edgeB: rl.Vector2, v: rl.Vector2) -> rl.Vector2 {
-	return {math.smoothstep(edgeA.x, edgeB.x, v.x), math.smoothstep(edgeA.y, edgeB.y, v.y)}
-}
-
-deterministicFloat32Rand :: proc(st: rl.Vector2) -> f32 {
-	hash := rl.Vector2DotProduct(st, {38.28459, 53.9385})
-	return fract(math.abs(math.sin(hash) * 43028.28439))
-}
-// TODO: SIMD
-deterministicValueNoise2d :: proc(st: rl.Vector2, octs: int) -> f32 {
-	n: f32 = 0.0
-	for i in 0 ..< octs {
-		f := f32(i)
-		nst := rl.Vector2{st.x * 2.0 * (f + 1.0) + 0.75 * f, st.y * 2.0 * (f + 1.0) + 0.495 * f}
-		ist := vector2Floor(nst)
-		fst := vector2Fract(nst)
-		a := deterministicFloat32Rand(ist)
-		b := deterministicFloat32Rand(ist + {1.0, 0.0})
-		c := deterministicFloat32Rand(ist + {0.0, 1.0})
-		d := deterministicFloat32Rand(ist + {1.0, 1.0})
-		grad := vector2Smoothstep({0.0, 0.0}, {1.0, 1.0}, fst)
-		nh := linalg.lerp(rl.Vector2{a, c}, rl.Vector2{b, d}, grad.x)
-		nv := linalg.lerp(nh.x, nh.y, grad.y)
-		significance := 1.0 / (f + 2.0)
-		n += nv * significance
-	}
-	return n
-}
 
 LOADED_CHUNK_SIZE :: 3
 LOADED_CHUNK_COUNT :: LOADED_CHUNK_SIZE * LOADED_CHUNK_SIZE
@@ -523,31 +493,19 @@ ChunkWorld :: struct {
 	data:      ChunkDataMatrix,
 	rects:     ChunkDataRecs,
 	genCutoff: f32,
-	x:         i32,
-	y:         i32,
+	pos:       iVector2,
 }
-chunkWorldCalculateX :: proc(target: GameObject) -> i32 {
+chunkWorldCalcPos :: proc(target: GameObject) -> iVector2 {
 	targetCenter := getObjCenterPosition(target)
-	return i32(math.floor((targetCenter.x - CHUNK_WIDTH_PX) / CHUNK_WIDTH_PX))
-}
-chunkWorldCalculateY :: proc(target: GameObject) -> i32 {
-	targetCenter := getObjCenterPosition(target)
-	return i32(math.floor((targetCenter.y - CHUNK_WIDTH_PX) / CHUNK_WIDTH_PX))
-}
-getChunkMatrixX :: proc(i: i32) -> i32 {
-	return i % LOADED_CHUNK_SIZE
-}
-getChunkMatrixY :: proc(i: i32) -> i32 {
-	return i / LOADED_CHUNK_SIZE
-}
-getChunkMatrixPosition :: proc(i: i32) -> iVector2 {
-	return {getChunkMatrixX(i), getChunkMatrixY(i)}
+	return iVector2 {
+		i32(math.floor((targetCenter.x - CHUNK_WIDTH_PX) / CHUNK_WIDTH_PX)),
+		i32(math.floor((targetCenter.y - CHUNK_WIDTH_PX) / CHUNK_WIDTH_PX)),
+	}
 }
 updateChunkWorld :: proc(chunkWorld: ^ChunkWorld, target: GameObject) {
-	newX := chunkWorldCalculateX(target)
-	newY := chunkWorldCalculateY(target)
-	if (newX != chunkWorld.x || newY != chunkWorld.y) {
-		diffX := newX - chunkWorld.x
+	newPos := chunkWorldCalcPos(target)
+	if (newPos.x != chunkWorld.pos.x || newPos.y != chunkWorld.pos.y) {
+		diffX := newPos.x - chunkWorld.pos.x
 		unloadableChunks: [LOADED_CHUNK_COUNT]byte
 		if diffX < 0 {
 			unloadArea := iRectangleClampVal(
@@ -565,7 +523,7 @@ updateChunkWorld :: proc(chunkWorld: ^ChunkWorld, target: GameObject) {
 			unloadableChunks = chunkBitmaskOrRec(unloadableChunks, unloadArea)
 		}
 
-		diffY := newY - chunkWorld.y
+		diffY := newPos.y - chunkWorld.pos.y
 		if diffY < 0 {
 			unloadArea := iRectangleClampVal(
 				{0, LOADED_CHUNK_SIZE + diffY, LOADED_CHUNK_SIZE, math.abs(diffY)},
@@ -583,8 +541,8 @@ updateChunkWorld :: proc(chunkWorld: ^ChunkWorld, target: GameObject) {
 		}
 
 		moveChunks(chunkWorld, chunkBitmaskNot(unloadableChunks), {-diffX, -diffY})
-		chunkWorld.x = newX
-		chunkWorld.y = newY
+		chunkWorld.pos.x = newPos.x
+		chunkWorld.pos.y = newPos.y
 		regenerateChunks(chunkWorld, chunkBitmaskMirror(unloadableChunks))
 	}
 }
@@ -593,7 +551,7 @@ moveChunks :: proc(chunkWorld: ^ChunkWorld, chunkBitmask: ChunkBitmask, diff: iV
 	chunkDataRecs: ChunkDataRecs
 	for i in 0 ..< len(chunkDataMatrix) {
 		if chunkBitmask[i] > 0 {
-			matPos := getChunkMatrixPosition(i32(i))
+			matPos := iVector2{i32(i) % LOADED_CHUNK_SIZE, i32(i) / LOADED_CHUNK_SIZE}
 			matRec := iRectangle{0, 0, LOADED_CHUNK_SIZE, LOADED_CHUNK_SIZE}
 			// TODO: Create error printing func
 			if !pointInIrec(matPos, matRec) {
@@ -634,9 +592,8 @@ regenerateChunkWorld :: proc(chunkWorld: ^ChunkWorld) {
 }
 regenerateChunk :: proc(chunkWorld: ^ChunkWorld, chunkIndex: i32) {
 	clear(&chunkWorld.rects[chunkIndex])
-	chunkPos := getChunkMatrixPosition(chunkIndex)
-	chunkPos.x += chunkWorld.x
-	chunkPos.y += chunkWorld.y
+	chunkPos :=
+		iVector2{chunkIndex % LOADED_CHUNK_SIZE, chunkIndex / LOADED_CHUNK_SIZE} + chunkWorld.pos
 	chunkWorldPosition := rl.Vector2 {
 		f32(chunkPos.x * CHUNK_WIDTH_PX),
 		f32(chunkPos.y * CHUNK_WIDTH_PX),
@@ -647,7 +604,7 @@ regenerateChunk :: proc(chunkWorld: ^ChunkWorld, chunkIndex: i32) {
 		xf := f32(x + 1 + CHUNK_BLOCK_WIDTH * int(chunkPos.x))
 		yf := f32(y + 1 + CHUNK_BLOCK_WIDTH * int(chunkPos.y))
 		f := rl.Vector2{xf, yf} / rl.Vector2{CHUNK_BLOCK_WIDTH, CHUNK_BLOCK_WIDTH}
-		n := deterministicValueNoise2d(f, 3)
+		n := noise.noise_2d(0, {f64(f.x), f64(f.y)})
 		val := u8(math.step(chunkWorld.genCutoff, n))
 		chunkWorld.data[chunkIndex][i] = val
 		if val > 0 {
@@ -699,9 +656,8 @@ ChunkCollisionResult :: union {
 chunkCollision :: proc(rec: rl.Rectangle) -> ChunkCollisionResult {
 	bitmask: ChunkBitmask
 	for i in 0 ..< len(bitmask) {
-		pos := getChunkMatrixPosition(i32(i))
-		pos.x += globalChunkWorld.x
-		pos.y += globalChunkWorld.y
+		pos :=
+			iVector2{i32(i) % LOADED_CHUNK_SIZE, i32(i) / LOADED_CHUNK_SIZE} + globalChunkWorld.pos
 		matrixWorldRec := rl.Rectangle {
 			f32(pos.x * CHUNK_WIDTH_PX),
 			f32(pos.y * CHUNK_WIDTH_PX),
@@ -724,8 +680,8 @@ drawChunkWorld :: proc(chunkWorld: ^ChunkWorld) {
 	for i in 0 ..< LOADED_CHUNK_COUNT {
 		x := i32(i % LOADED_CHUNK_SIZE)
 		y := i32(i / LOADED_CHUNK_SIZE)
-		dx := (chunkWorld.x + x) * CHUNK_WIDTH_PX
-		dy := (chunkWorld.y + y) * CHUNK_WIDTH_PX
+		dx := (chunkWorld.pos.x + x) * CHUNK_WIDTH_PX
+		dy := (chunkWorld.pos.y + y) * CHUNK_WIDTH_PX
 		for val, j in chunkWorld.data[i] {
 			if val > 0 {
 				xx := i32(j % CHUNK_BLOCK_WIDTH)
@@ -793,8 +749,7 @@ main :: proc() {
 	defer rl.UnloadRenderTexture(gameRenderTex)
 
 	chunkWorld := ChunkWorld {
-		x         = -1,
-		y         = -1,
+		pos       = {-1, -1},
 		genCutoff = 0.5,
 	}
 	globalChunkWorld = &chunkWorld
