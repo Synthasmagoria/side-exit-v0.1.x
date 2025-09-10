@@ -5,7 +5,8 @@ import "core:math/noise"
 import "core:mem"
 import "core:reflect"
 import "core:strings"
-import rl "vendor:raylib"
+import rl "lib/raylib"
+
 
 MusicName :: enum {
 	KowloonSmokeBreak,

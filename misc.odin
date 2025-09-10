@@ -1,7 +1,7 @@
 package game
 import "core:math"
 import "core:math/rand"
-import rl "vendor:raylib"
+import rl "lib/raylib"
 
 web10CreateTexture :: proc(size: iVector2, spr_def: SpriteDef, num: i32) -> rl.Texture {
 	context.allocator = context.temp_allocator

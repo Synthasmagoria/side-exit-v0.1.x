@@ -1,8 +1,8 @@
 package game
-import rl "vendor:raylib"
 import "core:fmt"
-import "core:math/linalg"
 import "core:math"
+import "core:math/linalg"
+import rl "lib/raylib"
 
 Player :: struct {
 	object:         ^GameObject,
@@ -52,8 +52,7 @@ updatePlayer :: proc(self: ^Player) {
 	walkInput := f32(int(rightInput)) - f32(int(leftInput))
 
 	onFloor :=
-		chunkCollision(getObjAbsColRec(self.object, {0.0, 1.0})) != nil &&
-		self.velocity.y >= 0.0
+		chunkCollision(getObjAbsColRec(self.object, {0.0, 1.0})) != nil && self.velocity.y >= 0.0
 	if onFloor {
 		self.airjumpIndex = 0
 	} else {
@@ -160,38 +159,38 @@ setPlayerSprite :: proc(player: ^Player, spr: ^Sprite) {
 }
 
 ElevatorState :: enum {
-    Gone,
-    Arriving,
-    Interactable,
-    PanelFadeIn,
-    Panel,
-    PanelFadeOut,
-    Leaving,
+	Gone,
+	Arriving,
+	Interactable,
+	PanelFadeIn,
+	Panel,
+	PanelFadeOut,
+	Leaving,
 }
 ElevatorArrivingStateData :: struct {
-    movementTween: Tween,
-    alphaTween: Tween,
+	movementTween: Tween,
+	alphaTween:    Tween,
 }
 ElevatorLeavingStateData :: struct {
-    movementTween: Tween,
-    alphaTween: Tween,
+	movementTween: Tween,
+	alphaTween:    Tween,
 }
 ElevatorPanelFadeStateData :: struct {
-    alphaTween: Tween
+	alphaTween: Tween,
 }
 Elevator :: struct {
-	interactionArrowSpr: Sprite,
-	drawOffset: rl.Vector2,
-	object: ^GameObject,
-	player: ^Player,
-	state: ElevatorState,
-	arrivingStateData: ElevatorArrivingStateData,
-	leavingStateData: ElevatorLeavingStateData,
-	panelFadeStateData: ElevatorPanelFadeStateData,
+	interactionArrowSpr:  Sprite,
+	drawOffset:           rl.Vector2,
+	object:               ^GameObject,
+	player:               ^Player,
+	state:                ElevatorState,
+	arrivingStateData:    ElevatorArrivingStateData,
+	leavingStateData:     ElevatorLeavingStateData,
+	panelFadeStateData:   ElevatorPanelFadeStateData,
 	drawInteractionArrow: bool,
-	blend: rl.Color,
-	panelBlend: rl.Color,
-	activationDist: f32,
+	blend:                rl.Color,
+	panelBlend:           rl.Color,
+	activationDist:       f32,
 }
 createElevator :: proc(alloc: Alloc, pos: rl.Vector2) -> ^Elevator {
 	self := new(Elevator, alloc)
@@ -202,11 +201,11 @@ createElevator :: proc(alloc: Alloc, pos: rl.Vector2) -> ^Elevator {
 	self.panelBlend = rl.WHITE
 	self.activationDist = 128.0
 	self.object = createGameObject(
-	    Elevator,
+		Elevator,
 		self,
 		updateProc = cast(proc(_: rawptr))updateElevator,
 		drawProc = cast(proc(_: rawptr))drawElevator,
-	    drawEndProc = cast(proc(_: rawptr))drawElevatorEnd
+		drawEndProc = cast(proc(_: rawptr))drawElevatorEnd,
 	)
 	setElevatorState(self, .Gone)
 	self.object.pos = pos
@@ -214,108 +213,121 @@ createElevator :: proc(alloc: Alloc, pos: rl.Vector2) -> ^Elevator {
 	return self
 }
 updateElevator :: proc(self: ^Elevator) {
-    switch (self.state) {
-    case .Gone:
-        if player := getFirstGameObjectOfType(Player); player != nil {
-            if linalg.distance(player.object.pos, self.object.pos) < self.activationDist {
-                setElevatorState(self, .Arriving)
-            }
-        }
-    case .Arriving:
-        self.drawOffset = updateAndStepTween(&self.arrivingStateData.movementTween).(rl.Vector2)
-        self.blend.a = updateAndStepTween(&self.arrivingStateData.alphaTween).(u8)
-        if tweenIsFinished(self.arrivingStateData.movementTween) &&
-           tweenIsFinished(self.arrivingStateData.alphaTween) {
-            setElevatorState(self, .Interactable)
-        }
-    case .Interactable:
-        if player := getFirstGameObjectOfType(Player); player != nil {
-            if linalg.distance(player.object.pos, self.object.pos) >= self.activationDist {
-                setElevatorState(self, .Leaving)
-                break
-            } else {
-                if pointInRec(getObjCenterAbs(player.object^), getObjAbsColRec(self.object, {0.0, 0.0})) {
-                    self.drawInteractionArrow = true;
-                    if rl.IsKeyPressed(.UP) {
-             			player.frozen = 1
-                        setElevatorState(self, .PanelFadeIn)
-                        break
-              		}
-                } else {
-                    self.drawInteractionArrow = false
-                }
-            }
-        }
-    case .Leaving:
-        self.drawOffset = updateAndStepTween(&self.leavingStateData.movementTween).(rl.Vector2)
-        self.blend.a = updateAndStepTween(&self.leavingStateData.alphaTween).(u8)
-        if tweenIsFinished(self.leavingStateData.alphaTween) && tweenIsFinished(self.leavingStateData.alphaTween) {
-            setElevatorState(self, .Gone)
-        }
-    case .PanelFadeIn:
-        self.panelBlend.a = updateAndStepTween(&self.panelFadeStateData.alphaTween).(u8)
-        if tweenIsFinished(self.panelFadeStateData.alphaTween) {
-            setElevatorState(self, .Panel)
-        }
-    case .Panel:
-        if rl.IsKeyPressed(.BACKSPACE) {
-            setElevatorState(self, .PanelFadeOut)
-        }
-    case .PanelFadeOut:
-        self.panelBlend.a = updateAndStepTween(&self.panelFadeStateData.alphaTween).(u8)
-        if tweenIsFinished(self.panelFadeStateData.alphaTween) {
-            setElevatorState(self, .Interactable)
-        }
-    }
+	switch (self.state) {
+	case .Gone:
+		if player := getFirstGameObjectOfType(Player); player != nil {
+			if linalg.distance(player.object.pos, self.object.pos) < self.activationDist {
+				setElevatorState(self, .Arriving)
+			}
+		}
+	case .Arriving:
+		self.drawOffset = updateAndStepTween(&self.arrivingStateData.movementTween).(rl.Vector2)
+		self.blend.a = updateAndStepTween(&self.arrivingStateData.alphaTween).(u8)
+		if tweenIsFinished(self.arrivingStateData.movementTween) &&
+		   tweenIsFinished(self.arrivingStateData.alphaTween) {
+			setElevatorState(self, .Interactable)
+		}
+	case .Interactable:
+		if player := getFirstGameObjectOfType(Player); player != nil {
+			if linalg.distance(player.object.pos, self.object.pos) >= self.activationDist {
+				setElevatorState(self, .Leaving)
+				break
+			} else {
+				if pointInRec(
+					getObjCenterAbs(player.object^),
+					getObjAbsColRec(self.object, {0.0, 0.0}),
+				) {
+					self.drawInteractionArrow = true
+					if rl.IsKeyPressed(.UP) {
+						player.frozen = 1
+						setElevatorState(self, .PanelFadeIn)
+						break
+					}
+				} else {
+					self.drawInteractionArrow = false
+				}
+			}
+		}
+	case .Leaving:
+		self.drawOffset = updateAndStepTween(&self.leavingStateData.movementTween).(rl.Vector2)
+		self.blend.a = updateAndStepTween(&self.leavingStateData.alphaTween).(u8)
+		if tweenIsFinished(self.leavingStateData.alphaTween) &&
+		   tweenIsFinished(self.leavingStateData.alphaTween) {
+			setElevatorState(self, .Gone)
+		}
+	case .PanelFadeIn:
+		self.panelBlend.a = updateAndStepTween(&self.panelFadeStateData.alphaTween).(u8)
+		if tweenIsFinished(self.panelFadeStateData.alphaTween) {
+			setElevatorState(self, .Panel)
+		}
+	case .Panel:
+		if rl.IsKeyPressed(.BACKSPACE) {
+			setElevatorState(self, .PanelFadeOut)
+		}
+	case .PanelFadeOut:
+		self.panelBlend.a = updateAndStepTween(&self.panelFadeStateData.alphaTween).(u8)
+		if tweenIsFinished(self.panelFadeStateData.alphaTween) {
+			setElevatorState(self, .Interactable)
+		}
+	}
 }
 drawElevator :: proc(self: ^Elevator) {
-    rl.DrawTextureV(getTexture(.Elevator), self.object.pos + self.drawOffset, self.blend)
+	rl.DrawTextureV(getTexture(.Elevator), self.object.pos + self.drawOffset, self.blend)
 }
 drawElevatorEnd :: proc(self: ^Elevator) {
-    if self.drawInteractionArrow {
-        if player := getFirstGameObjectOfType(Player); player != nil {
-            abovePlayerCenter := getObjCenterAbs(player.object^) - {0.0, player.object.colRec.height}
-      		drawSpriteEx(self.interactionArrowSpr, abovePlayerCenter, {1.0, 1.0})
-      		updateSprite(&self.interactionArrowSpr)
-        }
-    }
-    #partial switch self.state {
-    case .PanelFadeIn, .Panel, .PanelFadeOut:
+	if self.drawInteractionArrow {
+		if player := getFirstGameObjectOfType(Player); player != nil {
+			abovePlayerCenter :=
+				getObjCenterAbs(player.object^) - {0.0, player.object.colRec.height}
+			drawSpriteEx(self.interactionArrowSpr, abovePlayerCenter, {1.0, 1.0})
+			updateSprite(&self.interactionArrowSpr)
+		}
+	}
+	#partial switch self.state {
+	case .PanelFadeIn, .Panel, .PanelFadeOut:
 
-    }
+	}
 }
 setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
-    if (self.state == newState) {
-        return
-    }
-    #partial switch (self.state) {
-    case .Interactable:
-        self.drawInteractionArrow = false
-    case .PanelFadeOut:
-        player := getFirstGameObjectOfType(Player)
-        player.frozen = 0
-    }
-    self.state = newState
-    switch (self.state) {
-    case .Gone:
-        self.blend = {255, 255, 255, 0}
-    case .Arriving:
-        self.blend = {255, 255, 255, 0}
-        self.arrivingStateData.movementTween = createTween(TweenVector2Range{{0.0, -224.0}, {0.0, 0.0}}, .InvExp, 2.0)
-        self.arrivingStateData.alphaTween = createTween(TweenU8Range{0, 255}, .Linear, 0.7)
-    case .Interactable:
-    case .PanelFadeIn:
-        self.panelBlend = {255, 255, 255, 0}
-        self.panelFadeStateData.alphaTween = createTween(TweenU8Range{0, 255}, .Linear, 0.5)
-    case .Panel:
-    case .PanelFadeOut:
-        self.panelBlend = {255, 255, 255, 255}
-        self.panelFadeStateData.alphaTween = createTween(TweenU8Range{255, 0}, .Linear, 0.5)
-    case .Leaving:
-        self.blend = rl.WHITE
-        self.leavingStateData.movementTween = createTween(TweenVector2Range{{0.0, 0.0}, {0.0, -224.0}}, .Exp, 2.0)
-        self.leavingStateData.alphaTween = createTween(TweenU8Range{255, 0}, .Linear, 0.7, 1.3)
-    }
+	if (self.state == newState) {
+		return
+	}
+	#partial switch (self.state) {
+	case .Interactable:
+		self.drawInteractionArrow = false
+	case .PanelFadeOut:
+		player := getFirstGameObjectOfType(Player)
+		player.frozen = 0
+	}
+	self.state = newState
+	switch (self.state) {
+	case .Gone:
+		self.blend = {255, 255, 255, 0}
+	case .Arriving:
+		self.blend = {255, 255, 255, 0}
+		self.arrivingStateData.movementTween = createTween(
+			TweenVector2Range{{0.0, -224.0}, {0.0, 0.0}},
+			.InvExp,
+			2.0,
+		)
+		self.arrivingStateData.alphaTween = createTween(TweenU8Range{0, 255}, .Linear, 0.7)
+	case .Interactable:
+	case .PanelFadeIn:
+		self.panelBlend = {255, 255, 255, 0}
+		self.panelFadeStateData.alphaTween = createTween(TweenU8Range{0, 255}, .Linear, 0.5)
+	case .Panel:
+	case .PanelFadeOut:
+		self.panelBlend = {255, 255, 255, 255}
+		self.panelFadeStateData.alphaTween = createTween(TweenU8Range{255, 0}, .Linear, 0.5)
+	case .Leaving:
+		self.blend = rl.WHITE
+		self.leavingStateData.movementTween = createTween(
+			TweenVector2Range{{0.0, 0.0}, {0.0, -224.0}},
+			.Exp,
+			2.0,
+		)
+		self.leavingStateData.alphaTween = createTween(TweenU8Range{255, 0}, .Linear, 0.7, 1.3)
+	}
 }
 
 StarBg :: struct {
@@ -329,21 +341,22 @@ StarBg :: struct {
 	object:     ^GameObject,
 }
 createStarBg :: proc(alloc: Alloc) -> ^StarBg {
-    self := new(StarBg, alloc)
+	self := new(StarBg, alloc)
 	self.genTex = web10CreateTexture({128, 128}, getSpriteDef(.Star), 16)
 	self.frameSize = {128.0, 128.0}
 	self.frameSpd = 4.0
 	self.frameCount = getSpriteDef(.Star).frame_count
 	self.scrollSpd = rl.Vector2{30.0, 30.0}
 	self.object = createGameObject(
-	    StarBg,
+		StarBg,
 		self,
 		drawProc = cast(proc(_: rawptr))drawStarBg,
-		destroyProc = cast(proc(_: rawptr))destroyStarBg)
+		destroyProc = cast(proc(_: rawptr))destroyStarBg,
+	)
 	return self
 }
 drawStarBg :: proc(self: ^StarBg) {
-    shd := getShader(.AnimatedTextureRepeatPosition)
+	shd := getShader(.AnimatedTextureRepeatPosition)
 	rl.BeginShaderMode(shd)
 	frameCountLoc := rl.GetShaderLocation(shd, "frameCount")
 	rl.SetShaderValue(shd, frameCountLoc, &self.frameCount, .INT)
@@ -355,9 +368,12 @@ drawStarBg :: proc(self: ^StarBg) {
 	scrollPxLoc := rl.GetShaderLocation(shd, "scrollPx")
 	rl.SetShaderValue(shd, scrollPxLoc, &self.scroll, .VEC2)
 	self.scroll += self.scrollSpd * TARGET_TIME_STEP
-	drawTextureRecDest(self.genTex, {self.object.pos.x, self.object.pos.y, WINDOW_WIDTH, WINDOW_HEIGHT})
+	drawTextureRecDest(
+		self.genTex,
+		{self.object.pos.x, self.object.pos.y, WINDOW_WIDTH, WINDOW_HEIGHT},
+	)
 	rl.EndShaderMode()
 }
 destroyStarBg :: proc(self: ^StarBg) {
-    rl.UnloadTexture(self.genTex)
+	rl.UnloadTexture(self.genTex)
 }
