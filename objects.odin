@@ -234,7 +234,7 @@ updateElevator :: proc(self: ^Elevator) {
                 setElevatorState(self, .Leaving)
                 break
             } else {
-                if pointInRec(getObjCenterPosition(player.object^), getObjAbsColRec(self.object, {0.0, 0.0})) {
+                if pointInRec(getObjCenterAbs(player.object^), getObjAbsColRec(self.object, {0.0, 0.0})) {
                     self.drawInteractionArrow = true;
                     if rl.IsKeyPressed(.UP) {
              			player.frozen = 1
@@ -274,17 +274,14 @@ drawElevator :: proc(self: ^Elevator) {
 drawElevatorEnd :: proc(self: ^Elevator) {
     if self.drawInteractionArrow {
         if player := getFirstGameObjectOfType(Player); player != nil {
-            abovePlayerCenter :=
-                getGameObjectScreenPos(player.object) +
-                getObjCenter(player.object^) -
-                {0.0, player.object.colRec.height}
+            abovePlayerCenter := getObjCenterAbs(player.object^) - {0.0, player.object.colRec.height}
       		drawSpriteEx(self.interactionArrowSpr, abovePlayerCenter, {1.0, 1.0})
       		updateSprite(&self.interactionArrowSpr)
         }
     }
     #partial switch self.state {
     case .PanelFadeIn, .Panel, .PanelFadeOut:
-        // TODO: Draw panel
+
     }
 }
 setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {

@@ -200,7 +200,7 @@ getObjCenter :: proc(object: GameObject) -> rl.Vector2 {
 		object.colRec.y + object.colRec.height / 2.0,
 	}
 }
-getObjCenterPosition :: proc(object: GameObject) -> rl.Vector2 {
+getObjCenterAbs :: proc(object: GameObject) -> rl.Vector2 {
 	return {
 		object.colRec.x + object.colRec.width / 2.0 + object.pos.x,
 		object.colRec.y + object.colRec.height / 2.0 + object.pos.y,
@@ -310,7 +310,7 @@ ChunkWorld :: struct {
 	pos:       iVector2,
 }
 chunkWorldCalcPos :: proc(target: GameObject) -> iVector2 {
-	targetCenter := getObjCenterPosition(target)
+	targetCenter := getObjCenterAbs(target)
 	return iVector2 {
 		i32(math.floor((targetCenter.x - CHUNK_WIDTH_PX) / CHUNK_WIDTH_PX)),
 		i32(math.floor((targetCenter.y - CHUNK_WIDTH_PX) / CHUNK_WIDTH_PX)),

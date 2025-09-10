@@ -46,9 +46,6 @@ getTextureRec :: proc(tex: rl.Texture) -> rl.Rectangle {
 getTextureRecYflip :: proc(tex: rl.Texture) -> rl.Rectangle {
     return {0.0, f32(tex.height), f32(tex.width), -f32(tex.height)}
 }
-drawTextureRecDest :: proc(tex: rl.Texture, dest: rl.Rectangle) {
-	rl.DrawTexturePro(tex, getTextureRec(tex), dest, rl.Vector2{0.0, 0.0}, 0.0, rl.WHITE)
-}
 
 pointInRec :: proc(point: rl.Vector2, rectangle: rl.Rectangle) -> bool {
 	return(
@@ -74,7 +71,7 @@ pointInIrec :: proc(point: iVector2, rectangle: iRectangle) -> bool {
 		point.y < rectangle.y + rectangle.height \
 	)
 }
-offsetRec :: proc(rec: rl.Rectangle, off: rl.Vector2) -> rl.Rectangle {
+recShift :: proc(rec: rl.Rectangle, off: rl.Vector2) -> rl.Rectangle {
     return {rec.x + off.x, rec.y + off.y, rec.width, rec.height}
 }
 
@@ -102,7 +99,7 @@ iRectangleGetInd :: proc(irec: iRectangle, maxWidth: i32) -> i32 {
 	return irec.x + irec.height * maxWidth
 }
 
-drawGameRenderTexture :: proc(rtex: rl.RenderTexture) {
+drawRenderTexToScreenBuffer :: proc(rtex: rl.RenderTexture) {
     rtex_size := getTextureSize(rtex.texture)
     screen_size := rl.Vector2{cast(f32)rl.GetScreenWidth(), cast(f32)rl.GetScreenHeight()}
     dest: rl.Rectangle
@@ -115,4 +112,17 @@ drawGameRenderTexture :: proc(rtex: rl.RenderTexture) {
 	}
 	src := getTextureRecYflip(rtex.texture)
 	rl.DrawTexturePro(rtex.texture, src, dest, {0.0, 0.0}, 0.0, rl.WHITE)
+}
+drawTextureRecDest :: proc(tex: rl.Texture, dest: rl.Rectangle) {
+	rl.DrawTexturePro(tex, getTextureRec(tex), dest, rl.Vector2{0.0, 0.0}, 0.0, rl.WHITE)
+}
+vector3ToStringTemp :: proc(v: rl.Vector3) -> cstring {
+    return rl.TextFormat("{{%f, %f, %f}}", v.x, v.y, v.z)
+}
+debugDrawTextOutline :: proc(text: cstring, x: i32, y: i32, fontSize: i32, color: rl.Color, outlineColor: rl.Color) {
+    rl.DrawText(text, x - 1, y - 1, fontSize, outlineColor)
+    rl.DrawText(text, x + 1, y - 1, fontSize, outlineColor)
+    rl.DrawText(text, x + 1, y + 1, fontSize, outlineColor)
+    rl.DrawText(text, x - 1, y + 1, fontSize, outlineColor)
+    rl.DrawText(text, x, y, fontSize, color)
 }

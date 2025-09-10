@@ -1,0 +1,9 @@
+[
+  {
+    "label": "Debug",
+    "adapter": "CodeLLDB",
+    "program": "tgs3",
+    "request": "launch",
+    "build": "Build debug"
+  }
+]
