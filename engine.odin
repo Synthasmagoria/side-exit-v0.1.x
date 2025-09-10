@@ -8,6 +8,32 @@ import "core:strings"
 import rl "lib/raylib"
 
 
+ModelName :: enum {
+	Elevator,
+	ElevatorSlidingDoorLeft,
+	ElevatorSlidingDoorRight,
+	_Count,
+}
+globalModels: [ModelName._Count]rl.Model
+getModel :: proc(ind: ModelName) -> rl.Model {
+	return globalModels[ind]
+}
+loadModels :: proc() {
+	context.allocator = context.temp_allocator
+	texNames := reflect.enum_field_names(ModelName)
+	for name, i in texNames[0:len(texNames) - 1] {
+		n := transmute([]u8)strings.clone(name, context.temp_allocator)
+		n[0] = charLower(n[0])
+		path := strings.join({"mod/", cast(string)n, ".glb"}, "", context.temp_allocator)
+		globalModels[i] = rl.LoadModel(strings.clone_to_cstring(path, context.temp_allocator))
+	}
+}
+unloadModels :: proc() {
+	for model in globalModels {
+		rl.UnloadModel(model)
+	}
+}
+
 MusicName :: enum {
 	KowloonSmokeBreak,
 	_Count,
@@ -529,17 +555,23 @@ TweenVector2Range :: struct {
 	from: rl.Vector2,
 	to:   rl.Vector2,
 }
+TweenVector3Range :: struct {
+	from: rl.Vector3,
+	to:   rl.Vector3,
+}
 TweenRange :: union #no_nil {
 	TweenF32Range,
 	TweenI32Range,
 	TweenU8Range,
 	TweenVector2Range,
+	TweenVector3Range,
 }
 TweenValue :: union #no_nil {
 	f32,
 	i32,
 	u8,
 	rl.Vector2,
+	rl.Vector3,
 }
 TweenCurve :: enum {
 	Linear,
@@ -581,6 +613,8 @@ updateAndStepTween :: proc(tween: ^Tween) -> TweenValue {
 		return i32(math.lerp(f32(range.from), f32(range.to), progress))
 	case TweenVector2Range:
 		return math.lerp(range.from, range.to, progress)
+	case TweenVector3Range:
+		return math.lerp(range.from, range.to, progress)
 	case TweenU8Range:
 		return u8(math.lerp(f32(range.from), f32(range.to), progress))
 	}
@@ -591,4 +625,10 @@ tweenIsFinished :: proc(tween: Tween) -> bool {
 }
 tweenIsWaiting :: proc(tween: Tween) -> bool {
 	return tween.t <= tween.delay
+}
+finishTween :: proc(tween: ^Tween) {
+	tween.t = tween.dur + tween.delay
+}
+createFinishedTween :: proc(range: TweenRange) -> Tween {
+	return {range = range, curve = .Linear, dur = 1.0, t = 1.0, delay = 0.0}
 }
