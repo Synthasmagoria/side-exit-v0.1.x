@@ -10,6 +10,13 @@ Elevator3DEnteringStateData :: struct {
 Elevator3DInsideStateData :: struct {
 	viewAngleTween: Tween,
 	viewAngle:      f32,
+	vertViewAngleTween: Tween,
+	vertViewAngle: f32,
+}
+ElevatorModelMeshes :: enum {
+    Walls,
+    Floor,
+    Ceiling,
 }
 Elevator3DState :: enum {
 	Invisible,
@@ -24,6 +31,7 @@ Elevator3D :: struct {
 	state:             Elevator3DState,
 	wallMaterial:      rl.Material,
 	lightMaterial:     rl.Material,
+	floorMaterial:     rl.Material,
 	enteringStateData: Elevator3DEnteringStateData,
 	insideStateData:   Elevator3DInsideStateData,
 }
@@ -33,6 +41,9 @@ createElevator3D :: proc() -> Elevator3D {
     rl.SetMaterialTexture(&wallMaterial, .ALBEDO, getTexture(.ElevatorWall3D))
     lightMaterial := rl.LoadMaterialDefault()
     lightMaterial.shader = getShader(.Lighting3D)
+    rl.SetMaterialTexture(&lightMaterial, .ALBEDO, getTexture(.ElevatorLights3D))
+    floorMaterial := rl.LoadMaterialDefault()
+    floorMaterial.shader = getShader(.Lighting3D)
 
 	return Elevator3D{
 		mainModel = getModel(.Elevator),
@@ -41,16 +52,18 @@ createElevator3D :: proc() -> Elevator3D {
 		state = .Invisible,
 		wallMaterial = wallMaterial,
 		lightMaterial = lightMaterial,
+		floorMaterial = floorMaterial,
 	}
 }
 
 drawElevator3D :: proc(e: ^Elevator3D) {
     transform := rl.MatrixIdentity()
     applyLightToShader(e.wallMaterial.shader)
-    rl.DrawMesh(e.mainModel.meshes[0], e.wallMaterial, transform)
+    rl.DrawMesh(e.mainModel.meshes[ElevatorModelMeshes.Walls], e.wallMaterial, transform)
+    applyLightToShader(e.floorMaterial.shader)
+    rl.DrawMesh(e.mainModel.meshes[ElevatorModelMeshes.Floor], e.floorMaterial, transform)
     applyLightToShader(e.lightMaterial.shader)
-    rl.DrawMesh(e.mainModel.meshes[1], e.lightMaterial, transform)
-    rl.DrawMesh(e.mainModel.meshes[2], e.lightMaterial, transform)
+    rl.DrawMesh(e.mainModel.meshes[ElevatorModelMeshes.Ceiling], e.lightMaterial, transform)
 	rl.DrawModel(e.leftDoorModel, {0.0, 0.0, 0.0}, 1.0, rl.WHITE)
 	rl.DrawModel(e.rightDoorModel, {0.0, 0.0, 0.0}, 1.0, rl.WHITE)
 }
@@ -96,9 +109,26 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 		}
 		e.insideStateData.viewAngle = updateAndStepTween(&e.insideStateData.viewAngleTween).(f32)
 		viewDirection := rl.Vector2Rotate(rl.Vector2{1.0, 0.0}, e.insideStateData.viewAngle)
+		if rl.IsKeyPressed(.UP) {
+		    e.insideStateData.vertViewAngleTween = createTween(
+				TweenF32Range {e.insideStateData.vertViewAngle, 0.5},
+				.InvExp,
+				0.8,
+				0.0
+			)
+		} else if rl.IsKeyPressed(.DOWN) {
+		    e.insideStateData.vertViewAngleTween = createTween(
+				TweenF32Range{e.insideStateData.vertViewAngle, 0.0},
+				.InvExp,
+				0.8,
+				0.0
+			)
+		}
+		e.insideStateData.vertViewAngle = updateAndStepTween(&e.insideStateData.vertViewAngleTween).(f32)
+
 		global.camera3D.target = {
 			global.camera3D.position.x + viewDirection.x,
-			global.camera3D.position.y,
+			global.camera3D.position.y + e.insideStateData.vertViewAngle,
 			global.camera3D.position.z + viewDirection.y,
 		}
 	case .Look:
@@ -121,6 +151,7 @@ setElevator3DState :: proc(e: ^Elevator3D, state: Elevator3DState) {
 		)
 	case .Inside:
 		e.insideStateData.viewAngleTween = createFinishedTween(TweenF32Range{0.0, 0.0})
+		e.insideStateData.vertViewAngleTween = createFinishedTween(TweenF32Range{0.0, 0.0})
 	case .Look:
 	}
 }

@@ -4,6 +4,8 @@ import "core:fmt"
 import "core:math"
 import "core:math/noise"
 import "core:mem"
+import "core:os"
+import "core:path/filepath"
 import "core:reflect"
 import "core:strings"
 import rl "lib/raylib"
@@ -77,6 +79,7 @@ TextureName :: enum {
 	ElevatorPanelLever,
 	ElevatorPanelLeverInputHint,
 	ElevatorWall3D,
+	ElevatorLights3D,
 	InteractionIndicationArrow,
 	_Count,
 }
@@ -130,7 +133,6 @@ globalShaders: [ShaderNames._Count]rl.Shader
 getShader :: proc(ind: ShaderNames) -> rl.Shader {
 	return globalShaders[ind]
 }
-
 loadShaders :: proc() {
 	context.allocator = context.temp_allocator
 	names := reflect.enum_field_names(ShaderNames)
@@ -148,6 +150,101 @@ loadShaders :: proc() {
 unloadShaders :: proc() {
 	for shd in globalShaders {
 		rl.UnloadShader(shd)
+	}
+}
+loadAndResolveShader :: proc(name: string) -> Maybe(rl.Shader) {
+	context.allocator = context.temp_allocator
+	shaderNameLower := transmute([]u8)strings.clone(name)
+	shaderNameLower[0] = charLower(shaderNameLower[0])
+	vertPathParts := [?]string{"shd/", cast(string)shaderNameLower, ".vert"}
+	fragPathParts := [?]string{"shd/", cast(string)shaderNameLower, ".frag"}
+	vertPath := strings.join(vertPathParts[:], "")
+	fragPath := strings.join(fragPathParts[:], "")
+
+	vertCodeBytes, vertFileReadSuccess := os.read_entire_file(vertPath)
+	if !vertFileReadSuccess {
+		msgParts := [?]string{"Couldn't read vertex shader at '", vertPath, "'"}
+		rl.TraceLog(.WARNING, strings.clone_to_cstring(strings.join(msgParts[:], "")))
+		return nil
+	}
+
+	fragCodeBytes, fragCodeReadSuccess := os.read_entire_file(fragPath)
+	if !fragCodeReadSuccess {
+		msgParts := [?]string{"Coultn't read fragment shader at '", fragPath, "'"}
+		rl.TraceLog(.WARNING, strings.clone_to_cstring(strings.join(msgParts[:], "")))
+		return nil
+	}
+
+	vertCodeResolved, vertResolveError := resolveShaderIncludes(
+		strings.clone_from(vertCodeBytes),
+		"shd/",
+	)
+	if vertResolveError != .None {
+		traceLogShaderIncludeError(vertResolveError)
+		return nil
+	}
+	fragCodeResolved, fragResolveError := resolveShaderIncludes(
+		strings.clone_from(fragCodeBytes),
+		"shd/",
+	)
+	if fragResolveError != .None {
+		traceLogShaderIncludeError(fragResolveError)
+		return nil
+	}
+	return rl.LoadShaderFromMemory(
+		strings.clone_to_cstring(vertCodeResolved),
+		strings.clone_to_cstring(fragCodeResolved),
+	)
+}
+ResolveShaderIncludesError :: enum {
+	None,
+	MissingOpeningQuote,
+	MissingClosingQuote,
+	FileEndsAfterClosingIncludeQuote,
+}
+resolveShaderIncludes :: proc(
+	shdStr: string,
+	dir: string,
+) -> (
+	string,
+	ResolveShaderIncludesError,
+) {
+	includelessCodeSlices := make([dynamic]string, 0, 10)
+	if strings.contains(shdStr, "#include") {
+		vertCodeLoopSlice := shdStr[:]
+		for i := strings.index(vertCodeLoopSlice, "#include");
+		    i != -1;
+		    i = strings.index(vertCodeLoopSlice, "#include") {
+			append(&includelessCodeSlices, vertCodeLoopSlice[:i])
+			vertCodeLoopSlice = vertCodeLoopSlice[i:]
+			nextQuote := strings.index_byte(vertCodeLoopSlice, '\"')
+			if nextQuote == -1 {
+				return shdStr, .MissingOpeningQuote
+			}
+			nextQuote = strings.index_byte(vertCodeLoopSlice[nextQuote:], '\"')
+			if nextQuote == -1 {
+				return shdStr, .MissingClosingQuote
+			}
+			if nextQuote + 1 >= len(vertCodeLoopSlice) {
+				return shdStr, .FileEndsAfterClosingIncludeQuote
+			}
+			vertCodeLoopSlice = vertCodeLoopSlice[nextQuote + 1:]
+		}
+		rl.TraceLog(.WARNING, "Parsed shaderincludes")
+		return shdStr, .None
+	} else {
+		return shdStr, .None
+	}
+}
+traceLogShaderIncludeError :: proc(err: ResolveShaderIncludesError) {
+	switch err {
+	case .None:
+	case .MissingOpeningQuote:
+		rl.TraceLog(.ERROR, "Missing opening '\"' after #include")
+	case .MissingClosingQuote:
+		rl.TraceLog(.ERROR, "Missing closing '\"' after #include")
+	case .FileEndsAfterClosingIncludeQuote:
+		rl.TraceLog(.ERROR, "File ends right after #include (add a linebreak or something)")
 	}
 }
 

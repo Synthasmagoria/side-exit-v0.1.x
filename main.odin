@@ -16,8 +16,8 @@ Alloc :: mem.Allocator
 init :: proc() {
 	loadModels()
 	loadTextures()
-	initSpriteDefs()
 	loadShaders()
+	initSpriteDefs()
 	initLights()
 }
 
@@ -31,7 +31,7 @@ initLights :: proc() {
 	global.lights3D[0] = Light3D {
 		enabled  = 1,
 		type     = .Point,
-		position = {0.0, 6.9, 0.0},
+		position = {0.0, 3.0, 0.0},
 		target   = {0.0, 0.0, 0.0},
 		color    = {1.0, 1.0, 1.0, 1.0},
 	}
