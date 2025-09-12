@@ -7,6 +7,13 @@ import "core:reflect"
 import "core:strings"
 import rl "lib/raylib"
 
+Resources :: struct {
+	models:     [ModelName._Count]rl.Model,
+	music:      [MusicName._Count]rl.Music,
+	textures:   [TextureName._Count]rl.Texture,
+	spriteDefs: [TextureName._Count]SpriteDef,
+}
+resources: Resources
 
 ModelName :: enum {
 	Elevator,
@@ -14,9 +21,8 @@ ModelName :: enum {
 	ElevatorSlidingDoorRight,
 	_Count,
 }
-globalModels: [ModelName._Count]rl.Model
 getModel :: proc(ind: ModelName) -> rl.Model {
-	return globalModels[ind]
+	return resources.models[ind]
 }
 loadModels :: proc() {
 	context.allocator = context.temp_allocator
@@ -25,11 +31,11 @@ loadModels :: proc() {
 		n := transmute([]u8)strings.clone(name, context.temp_allocator)
 		n[0] = charLower(n[0])
 		path := strings.join({"mod/", cast(string)n, ".glb"}, "", context.temp_allocator)
-		globalModels[i] = rl.LoadModel(strings.clone_to_cstring(path, context.temp_allocator))
+		resources.models[i] = rl.LoadModel(strings.clone_to_cstring(path, context.temp_allocator))
 	}
 }
 unloadModels :: proc() {
-	for model in globalModels {
+	for model in resources.models {
 		rl.UnloadModel(model)
 	}
 }
@@ -68,9 +74,8 @@ TextureName :: enum {
 	InteractionIndicationArrow,
 	_Count,
 }
-globalTextures: [TextureName._Count]rl.Texture
 getTexture :: proc(ind: TextureName) -> rl.Texture {
-	return globalTextures[ind]
+	return resources.textures[ind]
 }
 loadTextures :: proc() {
 	context.allocator = context.temp_allocator
@@ -79,18 +84,19 @@ loadTextures :: proc() {
 		n := transmute([]u8)strings.clone(name, context.temp_allocator)
 		n[0] = charLower(n[0])
 		path := strings.join({"tex/", cast(string)n, ".png"}, "", context.temp_allocator)
-		globalTextures[i] = rl.LoadTexture(strings.clone_to_cstring(path, context.temp_allocator))
+		resources.textures[i] = rl.LoadTexture(
+			strings.clone_to_cstring(path, context.temp_allocator),
+		)
 	}
 }
 unloadTextures :: proc() {
-	for t in globalTextures {
+	for t in resources.textures {
 		rl.UnloadTexture(t)
 	}
 }
 
-globalSpriteDefs: [TextureName._Count]SpriteDef
 getSpriteDef :: proc(ind: TextureName) -> SpriteDef {
-	return globalSpriteDefs[ind]
+	return resources.spriteDefs[ind]
 }
 _setSpriteDef :: proc(
 	ind: TextureName,
@@ -98,7 +104,7 @@ _setSpriteDef :: proc(
 	frame_spd: f32,
 	origin: rl.Vector2 = {0.0, 0.0},
 ) {
-	globalSpriteDefs[ind] = createSpriteDef(getTexture(ind), frame_width, frame_spd, origin)
+	resources.spriteDefs[ind] = createSpriteDef(getTexture(ind), frame_width, frame_spd, origin)
 }
 initSpriteDefs :: proc() {
 	_setSpriteDef(.Star, 4, 8.0)
