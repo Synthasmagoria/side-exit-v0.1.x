@@ -1,4 +1,5 @@
 package game
+import "core:c"
 import "core:fmt"
 import "core:math"
 import "core:math/noise"
@@ -41,19 +42,6 @@ unloadModels :: proc() {
 			unloadMaterialNoMap(model.materials[i])
 		}
 		rl.UnloadModel(model)
-	}
-}
-unloadMaterialNoMap :: proc(material: rl.Material) {
-	if material.shader.id != rlgl.GetShaderIdDefault() {
-		rl.UnloadShader(material.shader)
-	}
-
-	if material.maps != nil {
-		for i in 0 ..< len(reflect.enum_field_names(rl.MaterialMapIndex)) {
-			if material.maps[i].texture.id != rlgl.GetTextureIdDefault() {
-				rl.UnloadTexture(material.maps[i].texture)
-			}
-		}
 	}
 }
 
@@ -161,6 +149,154 @@ unloadShaders :: proc() {
 	for shd in globalShaders {
 		rl.UnloadShader(shd)
 	}
+}
+
+Light3D :: struct {
+	enabled:  c.int,
+	type:     LightType,
+	position: rl.Vector3,
+	target:   rl.Vector3,
+	color:    rl.Vector4,
+}
+
+LightType :: enum c.int {
+	Directional,
+	Point,
+}
+MAX_LIGHTS :: 4
+// TODO: Possibly optimizable with constant locations by using a shader include system
+applyLightToShader :: proc(shd: rl.Shader) {
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "ambient"),
+		&global.ambientLightingColor,
+		.VEC4,
+	)
+	rl.SetShaderValue(shd, rl.GetShaderLocation(shd, "viewPos"), &global.camera3D.position, .VEC3)
+
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[0].enabled"),
+		&global.lights3D[0].enabled,
+		.INT,
+	)
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[0].type"),
+		&global.lights3D[0].type,
+		.INT,
+	)
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[0].position"),
+		&global.lights3D[0].position,
+		.VEC3,
+	)
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[0].target"),
+		&global.lights3D[0].target,
+		.VEC3,
+	)
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[0].color"),
+		&global.lights3D[0].color,
+		.VEC4,
+	)
+
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[1].enabled"),
+		&global.lights3D[1].enabled,
+		.INT,
+	)
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[1].type"),
+		&global.lights3D[1].type,
+		.INT,
+	)
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[1].position"),
+		&global.lights3D[1].position,
+		.VEC3,
+	)
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[1].target"),
+		&global.lights3D[1].target,
+		.VEC3,
+	)
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[1].color"),
+		&global.lights3D[1].color,
+		.VEC4,
+	)
+
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[2].enabled"),
+		&global.lights3D[2].enabled,
+		.INT,
+	)
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[2].type"),
+		&global.lights3D[2].type,
+		.INT,
+	)
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[2].position"),
+		&global.lights3D[2].position,
+		.VEC3,
+	)
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[2].target"),
+		&global.lights3D[2].target,
+		.VEC3,
+	)
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[2].color"),
+		&global.lights3D[2].color,
+		.VEC4,
+	)
+
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[3].enabled"),
+		&global.lights3D[3].enabled,
+		.INT,
+	)
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[3].type"),
+		&global.lights3D[3].type,
+		.INT,
+	)
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[3].position"),
+		&global.lights3D[3].position,
+		.VEC3,
+	)
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[3].target"),
+		&global.lights3D[3].target,
+		.VEC3,
+	)
+	rl.SetShaderValue(
+		shd,
+		rl.GetShaderLocation(shd, "lights[3].color"),
+		&global.lights3D[3].color,
+		.VEC4,
+	)
 }
 
 GameObject :: struct {

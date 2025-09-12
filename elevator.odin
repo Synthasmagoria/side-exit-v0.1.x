@@ -1,6 +1,7 @@
 package game
 import rl "lib/raylib"
 import "core:math"
+import c "core:c/libc"
 
 Elevator3DEnteringStateData :: struct {
 	camMovementTween:  Tween,
@@ -21,22 +22,41 @@ Elevator3D :: struct {
 	leftDoorModel:     rl.Model,
 	rightDoorModel:    rl.Model,
 	state:             Elevator3DState,
+	wallMaterial:      rl.Material,
+	lightMaterial:     rl.Material,
 	enteringStateData: Elevator3DEnteringStateData,
 	insideStateData:   Elevator3DInsideStateData,
 }
 createElevator3D :: proc() -> Elevator3D {
+    wallMaterial := rl.LoadMaterialDefault()
+    wallMaterial.shader = getShader(.Lighting3D)
+    rl.SetMaterialTexture(&wallMaterial, .ALBEDO, getTexture(.ElevatorWall3D))
+    lightMaterial := rl.LoadMaterialDefault()
+    lightMaterial.shader = getShader(.Lighting3D)
+
 	return Elevator3D{
 		mainModel = getModel(.Elevator),
 		leftDoorModel = getModel(.ElevatorSlidingDoorLeft),
 		rightDoorModel = getModel(.ElevatorSlidingDoorRight),
 		state = .Invisible,
+		wallMaterial = wallMaterial,
+		lightMaterial = lightMaterial,
 	}
 }
 
 drawElevator3D :: proc(e: ^Elevator3D) {
-	rl.DrawModel(e.mainModel, {0.0, 0.0, 0.0}, 1.0, rl.WHITE)
+    transform := rl.MatrixIdentity()
+    applyLightToShader(e.wallMaterial.shader)
+    rl.DrawMesh(e.mainModel.meshes[0], e.wallMaterial, transform)
+    applyLightToShader(e.lightMaterial.shader)
+    rl.DrawMesh(e.mainModel.meshes[1], e.lightMaterial, transform)
+    rl.DrawMesh(e.mainModel.meshes[2], e.lightMaterial, transform)
 	rl.DrawModel(e.leftDoorModel, {0.0, 0.0, 0.0}, 1.0, rl.WHITE)
 	rl.DrawModel(e.rightDoorModel, {0.0, 0.0, 0.0}, 1.0, rl.WHITE)
+}
+destroyElevator3D :: proc(e: ^Elevator3D) {
+    unloadMaterialMapOnly(e.wallMaterial)
+    unloadMaterialMapOnly(e.lightMaterial)
 }
 updateElevator3D :: proc(e: ^Elevator3D) {
 	switch (e.state) {

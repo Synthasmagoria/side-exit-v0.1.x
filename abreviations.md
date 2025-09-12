@@ -1,5 +1,6 @@
 definition: def
 time: t
+location: loc
 duration: dur
 signature: sig
 exponential: exp

@@ -1,16 +1,24 @@
 package game
 
+import libc "core:c/libc"
 import "core:fmt"
 import "core:math"
 import mem "core:mem"
 import rl "lib/raylib"
+
+raylibFree :: libc.free
+raylibMalloc :: libc.malloc
+raylibCalloc :: libc.calloc
+raylibRealloc :: libc.realloc
+
+Alloc :: mem.Allocator
 
 init :: proc() {
 	loadModels()
 	loadTextures()
 	initSpriteDefs()
 	loadShaders()
-
+	initLights()
 }
 
 deinit :: proc() {
@@ -19,7 +27,37 @@ deinit :: proc() {
 	unloadShaders()
 }
 
-Alloc :: mem.Allocator
+initLights :: proc() {
+	global.lights3D[0] = Light3D {
+		enabled  = 1,
+		type     = .Point,
+		position = {0.0, 6.9, 0.0},
+		target   = {0.0, 0.0, 0.0},
+		color    = {1.0, 1.0, 1.0, 1.0},
+	}
+	global.lights3D[1] = Light3D {
+		enabled  = 0,
+		type     = .Point,
+		position = {0.0, 0.0, 0.0},
+		target   = {0.0, 0.0, 0.0},
+		color    = {1.0, 1.0, 1.0, 1.0},
+	}
+	global.lights3D[2] = Light3D {
+		enabled  = 0,
+		type     = .Point,
+		position = {0.0, 0.0, 0.0},
+		target   = {0.0, 0.0, 0.0},
+		color    = {1.0, 1.0, 1.0, 1.0},
+	}
+	global.lights3D[3] = Light3D {
+		enabled  = 0,
+		type     = .Point,
+		position = {0.0, 0.0, 0.0},
+		target   = {0.0, 0.0, 0.0},
+		color    = {1.0, 1.0, 1.0, 1.0},
+	}
+}
+
 debugDrawGlobalCamera3DInfo :: proc(x: i32, y: i32) {
 	dy := y
 	fontSize: i32 = 16
@@ -42,12 +80,15 @@ debugDrawGlobalCamera3DInfo :: proc(x: i32, y: i32) {
 	)
 }
 Global :: struct {
-	chunkWorld: ChunkWorld,
-	elevator3D: Elevator3D,
-	camera:     rl.Camera2D,
-	camera3D:   rl.Camera3D,
+	ambientLightingColor: rl.Vector4,
+	chunkWorld:           ChunkWorld,
+	elevator3D:           Elevator3D,
+	camera:               rl.Camera2D,
+	camera3D:             rl.Camera3D,
+	lights3D:             [MAX_LIGHTS]Light3D,
 }
 global := Global {
+	ambientLightingColor = {0.1, 0.0, 0.05, 0.02},
 	chunkWorld = {pos = {-1, -1}, genCutoff = 0.5},
 	camera = {
 		offset = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},
@@ -148,8 +189,6 @@ main :: proc() {
 		rl.EndMode2D()
 		rl.EndTextureMode()
 		drawRenderTexToScreenBuffer(gameRenderTex)
-
-		// rl.UpdateCamera(&global.camera3D, .FIRST_PERSON)
 
 		if rl.IsKeyPressed(.BACKSPACE) {
 			enterElevator3D(&global.elevator3D)

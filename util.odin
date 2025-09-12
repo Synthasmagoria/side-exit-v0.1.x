@@ -1,7 +1,25 @@
 package game
 import "core:fmt"
 import "core:math"
+import "core:reflect"
 import rl "lib/raylib"
+import rlgl "lib/raylib/rlgl"
+
+unloadMaterialMapOnly :: proc(material: rl.Material) {
+	raylibFree(material.maps)
+}
+unloadMaterialNoMap :: proc(material: rl.Material) {
+	if material.shader.id != rlgl.GetShaderIdDefault() {
+		rl.UnloadShader(material.shader)
+	}
+	if material.maps != nil {
+		for i in 0 ..< len(reflect.enum_field_names(rl.MaterialMapIndex)) {
+			if material.maps[i].texture.id != rlgl.GetTextureIdDefault() {
+				rl.UnloadTexture(material.maps[i].texture)
+			}
+		}
+	}
+}
 
 charLower :: proc(c: u8) -> u8 {
 	if c >= 'A' && c <= 'Z' {
