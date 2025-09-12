@@ -10,6 +10,7 @@ init :: proc() {
 	loadTextures()
 	initSpriteDefs()
 	loadShaders()
+
 }
 
 deinit :: proc() {
@@ -19,25 +20,11 @@ deinit :: proc() {
 }
 
 Alloc :: mem.Allocator
-globalCamera := rl.Camera2D {
-	offset   = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},
-	target   = {0.0, 0.0},
-	rotation = 0.0,
-	zoom     = 1.0,
-}
-
-globalCamera3D := rl.Camera3D {
-	position   = {0.0, 2.0, 0.0},
-	target     = {1.0, 2.0, 0.0},
-	up         = {0.0, 1.0, 0.0},
-	fovy       = 90.0,
-	projection = .PERSPECTIVE,
-}
 debugDrawGlobalCamera3DInfo :: proc(x: i32, y: i32) {
 	dy := y
 	fontSize: i32 = 16
 	debugDrawTextOutline(
-		rl.TextFormat("pos: %s", vector3ToStringTemp(globalCamera3D.position)),
+		rl.TextFormat("pos: %s", vector3ToStringTemp(global.camera3D.position)),
 		x,
 		dy,
 		fontSize,
@@ -46,7 +33,7 @@ debugDrawGlobalCamera3DInfo :: proc(x: i32, y: i32) {
 	)
 	dy += fontSize
 	debugDrawTextOutline(
-		rl.TextFormat("target: %s", vector3ToStringTemp(globalCamera3D.target)),
+		rl.TextFormat("target: %s", vector3ToStringTemp(global.camera3D.target)),
 		x,
 		dy,
 		fontSize,
@@ -54,128 +41,27 @@ debugDrawGlobalCamera3DInfo :: proc(x: i32, y: i32) {
 		rl.BLACK,
 	)
 }
-globalChunkWorld := ChunkWorld {
-	pos       = {-1, -1},
-	genCutoff = 0.5,
+Global :: struct {
+	chunkWorld: ChunkWorld,
+	elevator3D: Elevator3D,
+	camera:     rl.Camera2D,
+	camera3D:   rl.Camera3D,
 }
-globalGuiCamera := rl.Camera2D {
-	offset   = {0.0, 0.0},
-	target   = {0.0, 0.0},
-	rotation = 0.0,
-	zoom     = 1.0,
-}
-
-Elevator3DEnteringStateData :: struct {
-	camMovementTween:  Tween,
-	doorMovementTween: Tween,
-}
-Elevator3DInsideStateData :: struct {
-	viewAngleTween: Tween,
-	viewAngle:      f32,
-}
-Elevator3DState :: enum {
-	Invisible,
-	Entering,
-	Inside,
-	Look,
-}
-Elevator3D :: struct {
-	mainModel:         rl.Model,
-	leftDoorModel:     rl.Model,
-	rightDoorModel:    rl.Model,
-	state:             Elevator3DState,
-	enteringStateData: Elevator3DEnteringStateData,
-	insideStateData:   Elevator3DInsideStateData,
-}
-globalElevator3D: Elevator3D
-createElevator3D :: proc(
-	mainModel: rl.Model,
-	leftDoorModel: rl.Model,
-	rightDoorModel: rl.Model,
-) -> Elevator3D {
-	return {
-		mainModel = mainModel,
-		leftDoorModel = leftDoorModel,
-		rightDoorModel = rightDoorModel,
-		state = .Invisible,
-	}
-}
-drawElevator3D :: proc(e: ^Elevator3D) {
-	rl.DrawModel(e.mainModel, {0.0, 0.0, 0.0}, 1.0, rl.WHITE)
-	rl.DrawModel(e.leftDoorModel, {0.0, 0.0, 0.0}, 1.0, rl.WHITE)
-	rl.DrawModel(e.rightDoorModel, {0.0, 0.0, 0.0}, 1.0, rl.WHITE)
-}
-updateElevator3D :: proc(e: ^Elevator3D) {
-	switch (e.state) {
-	case .Invisible:
-	case .Entering:
-		camX := updateAndStepTween(&e.enteringStateData.camMovementTween).(f32)
-		globalCamera3D.position.x = camX
-		globalCamera3D.target.x = camX + 1.0
-		doorZ := updateAndStepTween(&e.enteringStateData.doorMovementTween).(f32)
-		e.leftDoorModel.transform = rl.MatrixTranslate(0.0, 0.0, doorZ)
-		e.rightDoorModel.transform = rl.MatrixTranslate(0.0, 0.0, -doorZ)
-		if tweenIsFinished(e.enteringStateData.camMovementTween) &&
-		   tweenIsFinished(e.enteringStateData.doorMovementTween) {
-			setElevator3DState(e, .Inside)
-		}
-	case .Inside:
-		if rl.IsKeyPressed(.LEFT) {
-			e.insideStateData.viewAngleTween = createTween(
-				TweenF32Range {
-					e.insideStateData.viewAngle,
-					e.insideStateData.viewAngleTween.range.(TweenF32Range).to - math.TAU / 4,
-				},
-				.InvExp,
-				0.8,
-				0.0,
-			)
-		} else if rl.IsKeyPressed(.RIGHT) {
-			e.insideStateData.viewAngleTween = createTween(
-				TweenF32Range {
-					e.insideStateData.viewAngle,
-					e.insideStateData.viewAngleTween.range.(TweenF32Range).to + math.TAU / 4,
-				},
-				.InvExp,
-				0.8,
-				0.0,
-			)
-		}
-		e.insideStateData.viewAngle = updateAndStepTween(&e.insideStateData.viewAngleTween).(f32)
-		viewDirection := rl.Vector2Rotate(rl.Vector2{1.0, 0.0}, e.insideStateData.viewAngle)
-		globalCamera3D.target = {
-			globalCamera3D.position.x + viewDirection.x,
-			globalCamera3D.position.y,
-			globalCamera3D.position.z + viewDirection.y,
-		}
-	case .Look:
-	}
-}
-setElevator3DState :: proc(e: ^Elevator3D, state: Elevator3DState) {
-	if e.state == state {
-		return
-	}
-	e.state = state
-	fmt.println(e.state)
-	switch e.state {
-	case .Invisible:
-	case .Entering:
-		e.enteringStateData.camMovementTween = createTween(TweenF32Range{4.0, 0.0}, .InvExp, 2.0)
-		e.enteringStateData.doorMovementTween = createTween(
-			TweenF32Range{2.0, 0.0},
-			.Linear,
-			1.0,
-			0.5,
-		)
-	case .Inside:
-		e.insideStateData.viewAngleTween = createFinishedTween(TweenF32Range{0.0, 0.0})
-	case .Look:
-	}
-}
-enterElevator3D :: proc(e: ^Elevator3D) {
-	if e.state == .Invisible {
-		setElevator3DState(e, .Entering)
-	}
+global := Global {
+	chunkWorld = {pos = {-1, -1}, genCutoff = 0.5},
+	camera = {
+		offset = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},
+		target = {0.0, 0.0},
+		rotation = 0.0,
+		zoom = 1.0,
+	},
+	camera3D = {
+		position = {0.0, 2.0, 0.0},
+		target = {1.0, 2.0, 0.0},
+		up = {0.0, 1.0, 0.0},
+		fovy = 90.0,
+		projection = .PERSPECTIVE,
+	},
 }
 
 MAX_TEXTURE_SIZE :: 4096
@@ -217,7 +103,7 @@ main :: proc() {
 	renderTex3D := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
 	defer rl.UnloadRenderTexture(renderTex3D)
 
-	regenerateChunkWorld(&globalChunkWorld)
+	regenerateChunkWorld(&global.chunkWorld)
 
 	gameMusic := loadMusicStream(.KowloonSmokeBreak)
 	rl.PlayMusicStream(gameMusic)
@@ -225,7 +111,7 @@ main :: proc() {
 	globalGameObjects = &gameObjects
 
 	// Game init
-	globalElevator3D = createElevator3D(
+	global.elevator3D = createElevator3D(
 		getModel(.Elevator),
 		getModel(.ElevatorSlidingDoorLeft),
 		getModel(.ElevatorSlidingDoorRight),
@@ -245,15 +131,15 @@ main :: proc() {
 		if rl.IsMouseButtonPressed(.LEFT) {
 			player.object.pos = rl.GetMousePosition()
 		}
-		globalCamera.offset =
+		global.camera.offset =
 			getObjCenterAbs(player.object^) * -1.0 + {WINDOW_WIDTH, WINDOW_HEIGHT} / 2.0
-		updateChunkWorld(&globalChunkWorld, player.object^)
+		updateChunkWorld(&global.chunkWorld, player.object^)
 		rl.ClearBackground(rl.BLACK)
 		rl.BeginDrawing()
 		rl.BeginTextureMode(gameRenderTex)
 		rl.ClearBackground(rl.BLACK)
-		rl.BeginMode2D(globalCamera)
-		drawChunkWorld(&globalChunkWorld)
+		rl.BeginMode2D(global.camera)
+		drawChunkWorld(&global.chunkWorld)
 		for object in globalGameObjects {
 			object.updateProc(object.data)
 		}
@@ -267,19 +153,19 @@ main :: proc() {
 		rl.EndTextureMode()
 		drawRenderTexToScreenBuffer(gameRenderTex)
 
-		// rl.UpdateCamera(&globalCamera3D, .FIRST_PERSON)
+		// rl.UpdateCamera(&global.camera3D, .FIRST_PERSON)
 
 		if rl.IsKeyPressed(.BACKSPACE) {
-			enterElevator3D(&globalElevator3D)
+			enterElevator3D(&global.elevator3D)
 		}
-		updateElevator3D(&globalElevator3D)
+		updateElevator3D(&global.elevator3D)
 
 		rl.BeginTextureMode(renderTex3D)
 		rl.ClearBackground(rl.BLACK)
-		rl.BeginMode3D(globalCamera3D)
+		rl.BeginMode3D(global.camera3D)
 		rl.ClearBackground({0.0, 0.0, 0.0, 0.0})
 		rl.DrawGrid(10, 1.0)
-		drawElevator3D(&globalElevator3D)
+		drawElevator3D(&global.elevator3D)
 		rl.EndMode3D()
 		rl.EndTextureMode()
 		drawRenderTexToScreenBuffer(renderTex3D)

@@ -190,7 +190,7 @@ getGameObjectsOfType :: proc(type: typeid) -> [dynamic]^GameObject {
 	return objs
 }
 getGameObjectScreenPos :: proc(obj: ^GameObject) -> rl.Vector2 {
-	return obj.pos - globalCamera.target + globalCamera.offset
+	return obj.pos - global.camera.target + global.camera.offset
 }
 getFirstGameObjectOfType :: proc($T: typeid) -> ^T {
 	for i in 0 ..< len(globalGameObjects) {
@@ -499,7 +499,8 @@ chunkCollision :: proc(rec: rl.Rectangle) -> ChunkCollisionResult {
 	bitmask: ChunkBitmask
 	for i in 0 ..< len(bitmask) {
 		pos :=
-			iVector2{i32(i) % LOADED_CHUNK_SIZE, i32(i) / LOADED_CHUNK_SIZE} + globalChunkWorld.pos
+			iVector2{i32(i) % LOADED_CHUNK_SIZE, i32(i) / LOADED_CHUNK_SIZE} +
+			global.chunkWorld.pos
 		matrixWorldRec := rl.Rectangle {
 			f32(pos.x * CHUNK_WIDTH_PX),
 			f32(pos.y * CHUNK_WIDTH_PX),
@@ -507,7 +508,7 @@ chunkCollision :: proc(rec: rl.Rectangle) -> ChunkCollisionResult {
 			CHUNK_WIDTH_PX,
 		}
 		if recInRec(rec, matrixWorldRec) {
-			for solidRec in globalChunkWorld.rects[i] {
+			for solidRec in global.chunkWorld.rects[i] {
 				if recInRec(rec, solidRec) {
 					return solidRec
 				}
