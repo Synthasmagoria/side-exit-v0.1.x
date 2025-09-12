@@ -5,12 +5,6 @@ import "core:math"
 import mem "core:mem"
 import rl "lib/raylib"
 
-MAX_TEXTURE_SIZE :: 4096
-TARGET_FPS :: 60
-TARGET_TIME_STEP :: 1.0 / cast(f32)TARGET_FPS
-WINDOW_WIDTH :: 480
-WINDOW_HEIGHT :: 360
-
 init :: proc() {
 	loadModels()
 	loadTextures()
@@ -33,10 +27,10 @@ globalCamera := rl.Camera2D {
 }
 
 globalCamera3D := rl.Camera3D {
-	position   = {0.0, 3.0, 0.0},
-	target     = {1.0, 3.0, 0.0},
+	position   = {0.0, 2.0, 0.0},
+	target     = {1.0, 2.0, 0.0},
 	up         = {0.0, 1.0, 0.0},
-	fovy       = 75.0,
+	fovy       = 90.0,
 	projection = .PERSPECTIVE,
 }
 debugDrawGlobalCamera3DInfo :: proc(x: i32, y: i32) {
@@ -117,10 +111,10 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 	case .Entering:
 		camX := updateAndStepTween(&e.enteringStateData.camMovementTween).(f32)
 		globalCamera3D.position.x = camX
-		globalCamera3D.target.x = camX - 1.0
+		globalCamera3D.target.x = camX + 1.0
 		doorZ := updateAndStepTween(&e.enteringStateData.doorMovementTween).(f32)
-		e.leftDoorModel.transform = rl.MatrixTranslate(0.0, 0.0, -doorZ)
-		e.rightDoorModel.transform = rl.MatrixTranslate(0.0, 0.0, doorZ)
+		e.leftDoorModel.transform = rl.MatrixTranslate(0.0, 0.0, doorZ)
+		e.rightDoorModel.transform = rl.MatrixTranslate(0.0, 0.0, -doorZ)
 		if tweenIsFinished(e.enteringStateData.camMovementTween) &&
 		   tweenIsFinished(e.enteringStateData.doorMovementTween) {
 			setElevator3DState(e, .Inside)
@@ -148,7 +142,7 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 			)
 		}
 		e.insideStateData.viewAngle = updateAndStepTween(&e.insideStateData.viewAngleTween).(f32)
-		viewDirection := rl.Vector2Rotate(rl.Vector2{-1.0, 0.0}, e.insideStateData.viewAngle)
+		viewDirection := rl.Vector2Rotate(rl.Vector2{1.0, 0.0}, e.insideStateData.viewAngle)
 		globalCamera3D.target = {
 			globalCamera3D.position.x + viewDirection.x,
 			globalCamera3D.position.y,
@@ -166,7 +160,7 @@ setElevator3DState :: proc(e: ^Elevator3D, state: Elevator3DState) {
 	switch e.state {
 	case .Invisible:
 	case .Entering:
-		e.enteringStateData.camMovementTween = createTween(TweenF32Range{-4.0, 0.0}, .InvExp, 2.0)
+		e.enteringStateData.camMovementTween = createTween(TweenF32Range{4.0, 0.0}, .InvExp, 2.0)
 		e.enteringStateData.doorMovementTween = createTween(
 			TweenF32Range{2.0, 0.0},
 			.Linear,
@@ -183,6 +177,12 @@ enterElevator3D :: proc(e: ^Elevator3D) {
 		setElevator3DState(e, .Entering)
 	}
 }
+
+MAX_TEXTURE_SIZE :: 4096
+TARGET_FPS :: 60
+TARGET_TIME_STEP :: 1.0 / cast(f32)TARGET_FPS
+WINDOW_WIDTH :: 480
+WINDOW_HEIGHT :: 360
 
 main :: proc() {
 	// Raylib init

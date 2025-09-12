@@ -111,6 +111,7 @@ initSpriteDefs :: proc() {
 
 ShaderNames :: enum {
 	AnimatedTextureRepeatPosition,
+	Lighting3D,
 	_Count,
 }
 globalShaders: [ShaderNames._Count]rl.Shader
