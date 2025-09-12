@@ -24,18 +24,15 @@ Elevator3D :: struct {
 	enteringStateData: Elevator3DEnteringStateData,
 	insideStateData:   Elevator3DInsideStateData,
 }
-createElevator3D :: proc(
-	mainModel: rl.Model,
-	leftDoorModel: rl.Model,
-	rightDoorModel: rl.Model,
-) -> Elevator3D {
-	return {
-		mainModel = mainModel,
-		leftDoorModel = leftDoorModel,
-		rightDoorModel = rightDoorModel,
+createElevator3D :: proc() -> Elevator3D {
+	return Elevator3D{
+		mainModel = getModel(.Elevator),
+		leftDoorModel = getModel(.ElevatorSlidingDoorLeft),
+		rightDoorModel = getModel(.ElevatorSlidingDoorRight),
 		state = .Invisible,
 	}
 }
+
 drawElevator3D :: proc(e: ^Elevator3D) {
 	rl.DrawModel(e.mainModel, {0.0, 0.0, 0.0}, 1.0, rl.WHITE)
 	rl.DrawModel(e.leftDoorModel, {0.0, 0.0, 0.0}, 1.0, rl.WHITE)

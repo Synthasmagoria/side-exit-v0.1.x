@@ -6,6 +6,7 @@ import "core:mem"
 import "core:reflect"
 import "core:strings"
 import rl "lib/raylib"
+import rlgl "lib/raylib/rlgl"
 
 Resources :: struct {
 	models:     [ModelName._Count]rl.Model,
@@ -36,7 +37,23 @@ loadModels :: proc() {
 }
 unloadModels :: proc() {
 	for model in resources.models {
+		for i in 0 ..< model.materialCount {
+			unloadMaterialNoMap(model.materials[i])
+		}
 		rl.UnloadModel(model)
+	}
+}
+unloadMaterialNoMap :: proc(material: rl.Material) {
+	if material.shader.id != rlgl.GetShaderIdDefault() {
+		rl.UnloadShader(material.shader)
+	}
+
+	if material.maps != nil {
+		for i in 0 ..< len(reflect.enum_field_names(rl.MaterialMapIndex)) {
+			if material.maps[i].texture.id != rlgl.GetTextureIdDefault() {
+				rl.UnloadTexture(material.maps[i].texture)
+			}
+		}
 	}
 }
 
@@ -71,6 +88,7 @@ TextureName :: enum {
 	ElevatorPanelKnobInputHint,
 	ElevatorPanelLever,
 	ElevatorPanelLeverInputHint,
+	ElevatorWall3D,
 	InteractionIndicationArrow,
 	_Count,
 }

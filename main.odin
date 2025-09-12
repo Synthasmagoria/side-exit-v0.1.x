@@ -111,11 +111,7 @@ main :: proc() {
 	globalGameObjects = &gameObjects
 
 	// Game init
-	global.elevator3D = createElevator3D(
-		getModel(.Elevator),
-		getModel(.ElevatorSlidingDoorLeft),
-		getModel(.ElevatorSlidingDoorRight),
-	)
+	global.elevator3D = createElevator3D()
 
 	elevator := createElevator(context.allocator, {160.0, 202.0})
 	player := createPlayer(context.allocator, {64.0, 64.0})
