@@ -60,11 +60,11 @@ initLights :: proc() {
 	}
 }
 
-debugDrawGlobalCamera3DInfo :: proc(x: i32, y: i32) {
+debugDrawGlobalCamera3DInfo :: proc(cam: rl.Camera3D, x: i32, y: i32) {
 	dy := y
 	fontSize: i32 = 16
 	debugDrawTextOutline(
-		rl.TextFormat("pos: %s", vector3ToStringTemp(global.camera3D.position)),
+		rl.TextFormat("pos: %s", vector3ToStringTemp(cam.position)),
 		x,
 		dy,
 		fontSize,
@@ -73,7 +73,16 @@ debugDrawGlobalCamera3DInfo :: proc(x: i32, y: i32) {
 	)
 	dy += fontSize
 	debugDrawTextOutline(
-		rl.TextFormat("target: %s", vector3ToStringTemp(global.camera3D.target)),
+		rl.TextFormat("target: %s", vector3ToStringTemp(cam.target)),
+		x,
+		dy,
+		fontSize,
+		rl.WHITE,
+		rl.BLACK,
+	)
+	dy += fontSize
+	debugDrawTextOutline(
+		rl.TextFormat("look: %s", vector3ToStringTemp(cam.target - cam.position)),
 		x,
 		dy,
 		fontSize,
@@ -102,8 +111,8 @@ global := Global {
 		zoom = 1.0,
 	},
 	camera3D = {
-		position = {0.0, 2.0, 0.0},
-		target = {1.0, 2.0, 0.0},
+		position = {0.0, 0.0, 0.0},
+		target = {1.0, 0.0, 0.0},
 		up = {0.0, 1.0, 0.0},
 		fovy = 90.0,
 		projection = .PERSPECTIVE,
@@ -164,6 +173,7 @@ main :: proc() {
 
 	// Game init
 	global.elevator3D = createElevator3D()
+	player3D := createPlayer3D()
 
 	elevator := createElevator(context.allocator, {160.0, 202.0})
 	player := createPlayer(context.allocator, {64.0, 64.0})
@@ -182,6 +192,11 @@ main :: proc() {
 		currentCamera3D := &global.camera3D
 		if global.debugMode {
 			rl.UpdateCamera(&global.debugCamera3D, .FIRST_PERSON)
+			if rl.IsKeyDown(.SPACE) {
+				rl.CameraMoveUp(&global.debugCamera3D, 5.4 * TARGET_TIME_STEP)
+			} else if rl.IsKeyDown(.LEFT_SHIFT) {
+				rl.CameraMoveUp(&global.debugCamera3D, -5.4 * TARGET_TIME_STEP)
+			}
 			rl.DisableCursor()
 			currentCamera3D = &global.debugCamera3D
 		}
@@ -210,10 +225,11 @@ main :: proc() {
 		rl.EndTextureMode()
 		drawRenderTexToScreenBuffer(gameRenderTex)
 
-		if rl.IsKeyPressed(.BACKSPACE) {
-			enterElevator3D(&global.elevator3D)
+		if player3D.state == .Inactive && rl.IsKeyPressed(.ONE) {
+		    movePlayer3D(&player3D, global.camera3D.position, PLAYER_3D_INSIDE_POSITION, .Looking)
 		}
 		updateElevator3D(&global.elevator3D)
+		updatePlayer3D(&player3D)
 
 		rl.BeginTextureMode(renderTex3D)
 		rl.ClearBackground(rl.BLACK)
@@ -224,7 +240,7 @@ main :: proc() {
 		rl.EndMode3D()
 		rl.EndTextureMode()
 		drawRenderTexToScreenBuffer(renderTex3D)
-		debugDrawGlobalCamera3DInfo(4, 4)
+		debugDrawGlobalCamera3DInfo(currentCamera3D^, 4, 4)
 		rl.EndDrawing()
 		mem.dynamic_arena_reset(&frameArena)
 	}

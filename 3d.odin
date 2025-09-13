@@ -1,7 +1,95 @@
 package game
 import c "core:c/libc"
+import "core:fmt"
 import "core:math"
 import rl "lib/raylib"
+
+FORWARD_3D :: rl.Vector3{1.0, 0.0, 0.0} // out of elevator
+BACKWARD_3D :: rl.Vector3{-1.0, 0.0, 0.0} // into elevator
+LEFT_3D :: rl.Vector3{0.0, 0.0, -1.0}
+RIGHT_3D :: rl.Vector3{0.0, 0.0, 1.0}
+UP_3D :: rl.Vector3{0.0, 1.0, 0.0}
+DOWN_3D :: rl.Vector3{0.0, -1.0, 0.0}
+
+MatrixRotateRoll :: rl.MatrixRotateX
+MatrixRotateYaw :: rl.MatrixRotateY
+MatrixRotatePitch :: rl.MatrixRotateZ
+
+PLAYER_HEIGHT_3D :: rl.Vector3{0.0, 2.0, 0.0}
+PLAYER_3D_OUTSIDE_POSITION :: rl.Vector3{5.0, 2.0, 0.0}
+PLAYER_3D_INSIDE_POSITION :: PLAYER_HEIGHT_3D
+
+Player3DState :: enum {
+    Uninitialized,
+    Inactive,
+    Looking,
+    Moving,
+}
+Player3D :: struct {
+    state: Player3DState,
+    movingStateData: Player3DMovingStateData,
+    yaw: f32,
+    pitch: f32,
+}
+Player3DMovingStateData :: struct {
+    movementTween: Tween,
+    nextState: Player3DState,
+    look: rl.Vector3,
+}
+Player3DLookingStateData :: struct {
+
+}
+createPlayer3D :: proc() -> Player3D {
+    player := Player3D{}
+    setPlayer3DState(&player, .Inactive)
+    return player
+}
+setPlayer3DState :: proc(player: ^Player3D, nextState: Player3DState) {
+    if player.state == nextState {
+        return
+    }
+    player.state = nextState
+    fmt.println(player.state)
+    switch player.state {
+    case .Uninitialized:
+    case .Inactive:
+        global.camera3D.position = PLAYER_3D_OUTSIDE_POSITION
+        global.camera3D.target = global.camera3D.position + FORWARD_3D
+    case .Looking:
+    case .Moving:
+    }
+}
+player3DApplyCameraRotation :: proc(player: ^Player3D) {
+    global.camera3D.target =
+        global.camera3D.position +
+        rl.Vector3Transform(FORWARD_3D, MatrixRotatePitch(player.pitch) * MatrixRotateYaw(player.yaw))
+}
+updatePlayer3D :: proc(player: ^Player3D) {
+    switch player.state {
+    case .Uninitialized:
+    case .Inactive:
+    case .Looking:
+        player3DApplyCameraRotation(player)
+    case .Moving:
+        global.camera3D.position = updateAndStepTween(&player.movingStateData.movementTween).(rl.Vector3)
+        global.camera3D.target = global.camera3D.position + player.movingStateData.look
+        if tweenIsFinished(player.movingStateData.movementTween) {
+            setPlayer3DState(player, player.movingStateData.nextState)
+        }
+    }
+}
+movePlayer3D :: proc(player: ^Player3D, from: rl.Vector3, to: rl.Vector3, nextState: Player3DState) {
+    assert(nextState != .Moving && nextState != .Uninitialized)
+    if nextState == player.state {
+        return
+    }
+    player.movingStateData = {
+        movementTween = createTween(TweenVector3Range{from, to}, .InvExp, 1.0),
+        look = global.camera3D.target - global.camera3D.position,
+        nextState = nextState
+    }
+    setPlayer3DState(player, .Moving)
+}
 
 Elevator3DEnteringStateData :: struct {
 	camMovementTween:  Tween,
@@ -12,6 +100,10 @@ Elevator3DInsideStateData :: struct {
 	viewAngle:          f32,
 	vertViewAngleTween: Tween,
 	vertViewAngle:      f32,
+}
+Elevator3DMoveState :: struct {
+	nextState:     Elevator3DState,
+	movementTween: Tween,
 }
 Elevator3DPanelStateData :: struct {
 	camMovementTween: Tween,
@@ -39,6 +131,7 @@ Elevator3D :: struct {
 	wallMaterial:      rl.Material,
 	lightMaterial:     rl.Material,
 	floorMaterial:     rl.Material,
+	insideElevatorPos: rl.Vector3,
 	lightFrameIndex:   f32,
 	enteringStateData: Elevator3DEnteringStateData,
 	insideStateData:   Elevator3DInsideStateData,
@@ -105,9 +198,6 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 	switch (e.state) {
 	case .Invisible:
 	case .Entering:
-		camX := updateAndStepTween(&e.enteringStateData.camMovementTween).(f32)
-		global.camera3D.position.x = camX
-		global.camera3D.target.x = camX + 1.0
 		doorZ := updateAndStepTween(&e.enteringStateData.doorMovementTween).(f32)
 		e.leftDoorModel.transform = rl.MatrixTranslate(0.0, 0.0, doorZ)
 		e.rightDoorModel.transform = rl.MatrixTranslate(0.0, 0.0, -doorZ)
@@ -144,14 +234,12 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 				TweenF32Range{e.insideStateData.vertViewAngle, 0.5},
 				.InvExp,
 				0.8,
-				0.0,
 			)
 		} else if rl.IsKeyPressed(.DOWN) {
 			e.insideStateData.vertViewAngleTween = createTween(
 				TweenF32Range{e.insideStateData.vertViewAngle, 0.0},
 				.InvExp,
 				0.8,
-				0.0,
 			)
 		}
 		e.insideStateData.vertViewAngle =
@@ -163,6 +251,12 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 			global.camera3D.position.z + viewDirection.y,
 		}
 	case .ToPanel:
+		global.camera3D.position =
+		updateAndStepTween(&e.panelStateData.camMovementTween).(rl.Vector3)
+		global.camera3D.target = global.camera3D.position + {1.0, 0.0, 0.0}
+		if tweenIsFinished(e.panelStateData.camMovementTween) {
+			setElevator3DState(e, .Panel)
+		}
 	case .Panel:
 	case .FromPanel:
 	}
@@ -186,9 +280,11 @@ setElevator3DState :: proc(e: ^Elevator3D, state: Elevator3DState) {
 		e.insideStateData.viewAngleTween = createFinishedTween(TweenF32Range{0.0, 0.0})
 		e.insideStateData.vertViewAngleTween = createFinishedTween(TweenF32Range{0.0, 0.0})
 	case .ToPanel:
-	// e.panelStateData.camMovementTween = createTween(
-	// TweenVector3Range{global.camera3D.position, }
-	// )
+		e.panelStateData.camMovementTween = createTween(
+			TweenVector3Range{global.camera3D.position, {2.1, 2.3, 2.3}},
+			.InvExp,
+			0.5,
+		)
 	case .Panel:
 	case .FromPanel:
 	}
