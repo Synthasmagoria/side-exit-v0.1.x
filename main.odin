@@ -17,6 +17,7 @@ init :: proc() {
 	loadModels()
 	loadTextures()
 	loadShaders()
+	loadSounds()
 	initSpriteDefs()
 	initLights()
 	global.defaultMaterial3D = loadPassthroughMaterial3D()
@@ -26,6 +27,7 @@ deinit :: proc() {
 	unloadModels()
 	unloadTextures()
 	unloadShaders()
+	unloadSounds()
 	unloadMaterialMapOnly(global.defaultMaterial3D)
 }
 

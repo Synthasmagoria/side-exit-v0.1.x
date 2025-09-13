@@ -68,9 +68,11 @@ updatePlayer :: proc(self: ^Player) {
 		if onFloor {
 			self.velocity.y = -self.jumpStr
 			onFloor = false
+			rl.PlaySound(getSound(.PlayerJump))
 		} else if self.airjumpIndex < self.airjumpCount {
 			self.velocity.y = -self.airjumpStr
 			self.airjumpIndex += 1
+			rl.PlaySound(getSound(.PlayerAirJump))
 		}
 	}
 	if !onFloor && self.velocity.y < 0.0 && rl.IsKeyReleased(.SPACE) {
@@ -162,9 +164,6 @@ ElevatorState :: enum {
 	Gone,
 	Arriving,
 	Interactable,
-	PanelFadeIn,
-	Panel,
-	PanelFadeOut,
 	Leaving,
 }
 ElevatorArrivingStateData :: struct {
@@ -175,9 +174,6 @@ ElevatorLeavingStateData :: struct {
 	movementTween: Tween,
 	alphaTween:    Tween,
 }
-ElevatorPanelFadeStateData :: struct {
-	alphaTween: Tween,
-}
 Elevator :: struct {
 	interactionArrowSpr:  Sprite,
 	drawOffset:           rl.Vector2,
@@ -186,7 +182,6 @@ Elevator :: struct {
 	state:                ElevatorState,
 	arrivingStateData:    ElevatorArrivingStateData,
 	leavingStateData:     ElevatorLeavingStateData,
-	panelFadeStateData:   ElevatorPanelFadeStateData,
 	drawInteractionArrow: bool,
 	blend:                rl.Color,
 	panelBlend:           rl.Color,
@@ -240,7 +235,7 @@ updateElevator :: proc(self: ^Elevator) {
 					self.drawInteractionArrow = true
 					if rl.IsKeyPressed(.UP) {
 						player.frozen = 1
-						setElevatorState(self, .PanelFadeIn)
+						//setElevatorState(self, .PanelFadeIn)
 						break
 					}
 				} else {
@@ -254,20 +249,6 @@ updateElevator :: proc(self: ^Elevator) {
 		if tweenIsFinished(self.leavingStateData.alphaTween) &&
 		   tweenIsFinished(self.leavingStateData.alphaTween) {
 			setElevatorState(self, .Gone)
-		}
-	case .PanelFadeIn:
-		self.panelBlend.a = updateAndStepTween(&self.panelFadeStateData.alphaTween).(u8)
-		if tweenIsFinished(self.panelFadeStateData.alphaTween) {
-			setElevatorState(self, .Panel)
-		}
-	case .Panel:
-		if rl.IsKeyPressed(.BACKSPACE) {
-			setElevatorState(self, .PanelFadeOut)
-		}
-	case .PanelFadeOut:
-		self.panelBlend.a = updateAndStepTween(&self.panelFadeStateData.alphaTween).(u8)
-		if tweenIsFinished(self.panelFadeStateData.alphaTween) {
-			setElevatorState(self, .Interactable)
 		}
 	}
 }
@@ -283,10 +264,6 @@ drawElevatorEnd :: proc(self: ^Elevator) {
 			updateSprite(&self.interactionArrowSpr)
 		}
 	}
-	#partial switch self.state {
-	case .PanelFadeIn, .Panel, .PanelFadeOut:
-
-	}
 }
 setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
 	if (self.state == newState) {
@@ -295,9 +272,8 @@ setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
 	#partial switch (self.state) {
 	case .Interactable:
 		self.drawInteractionArrow = false
-	case .PanelFadeOut:
-		player := getFirstGameObjectOfType(Player)
-		player.frozen = 0
+	case .Arriving:
+		rl.PlaySound(getSound(.ElevatorArrive))
 	}
 	self.state = newState
 	switch (self.state) {
@@ -312,13 +288,6 @@ setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
 		)
 		self.arrivingStateData.alphaTween = createTween(TweenU8Range{0, 255}, .Linear, 0.7)
 	case .Interactable:
-	case .PanelFadeIn:
-		self.panelBlend = {255, 255, 255, 0}
-		self.panelFadeStateData.alphaTween = createTween(TweenU8Range{0, 255}, .Linear, 0.5)
-	case .Panel:
-	case .PanelFadeOut:
-		self.panelBlend = {255, 255, 255, 255}
-		self.panelFadeStateData.alphaTween = createTween(TweenU8Range{255, 0}, .Linear, 0.5)
 	case .Leaving:
 		self.blend = rl.WHITE
 		self.leavingStateData.movementTween = createTween(

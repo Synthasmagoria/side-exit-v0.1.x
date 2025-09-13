@@ -16,8 +16,35 @@ Resources :: struct {
 	music:      [MusicName._Count]rl.Music,
 	textures:   [TextureName._Count]rl.Texture,
 	spriteDefs: [TextureName._Count]SpriteDef,
+	sounds:     [SoundName._Count]rl.Sound,
 }
 resources: Resources
+
+SoundName :: enum {
+	ElevatorArrive,
+	ElevatorArrive2,
+	PlayerJump,
+	PlayerAirJump,
+	_Count,
+}
+getSound :: proc(ind: SoundName) -> rl.Sound {
+	return resources.sounds[ind]
+}
+loadSounds :: proc() {
+	context.allocator = context.temp_allocator
+	soundNames := reflect.enum_field_names(SoundName)
+	for name, i in soundNames[0:int(SoundName._Count) - 1] {
+		n := transmute([]u8)strings.clone(name)
+		n[0] = charLower(n[0])
+		path := strings.join({"sfx/", cast(string)n, ".wav"}, "", context.temp_allocator)
+		resources.sounds[i] = rl.LoadSound(strings.clone_to_cstring(path))
+	}
+}
+unloadSounds :: proc() {
+	for sound in resources.sounds {
+		rl.UnloadSound(sound)
+	}
+}
 
 ModelName :: enum {
 	Elevator,
