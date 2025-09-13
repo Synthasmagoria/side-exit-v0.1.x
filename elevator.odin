@@ -13,7 +13,11 @@ Elevator3DInsideStateData :: struct {
 	vertViewAngleTween: Tween,
 	vertViewAngle:      f32,
 }
-ElevatorModelMeshes :: enum {
+Elevator3DPanelStateData :: struct {
+	camMovementTween: Tween,
+	nextState:        Elevator3DState,
+}
+Elevator3DModelMeshes :: enum {
 	Walls,
 	Floor,
 	Ceiling,
@@ -23,7 +27,9 @@ Elevator3DState :: enum {
 	Invisible,
 	Entering,
 	Inside,
-	Look,
+	ToPanel,
+	Panel,
+	FromPanel,
 }
 Elevator3D :: struct {
 	mainModel:         rl.Model,
@@ -36,6 +42,7 @@ Elevator3D :: struct {
 	lightFrameIndex:   f32,
 	enteringStateData: Elevator3DEnteringStateData,
 	insideStateData:   Elevator3DInsideStateData,
+	panelStateData:    Elevator3DPanelStateData,
 }
 createElevator3D :: proc() -> Elevator3D {
 	lightMaterial := rl.LoadMaterialDefault()
@@ -60,22 +67,29 @@ toggleElevatorLights :: proc(e: ^Elevator3D) {
 	}
 	setLightStatus(i32(e.lightFrameIndex))
 }
+movePlayerInsideElevator :: proc(e: ^Elevator3D, to: Elevator3DState) {
+
+}
 drawElevator3D :: proc(e: ^Elevator3D) {
 	transform := rl.MatrixIdentity()
 	applyLightToShader(e.wallMaterial.shader)
-	rl.DrawMesh(e.mainModel.meshes[ElevatorModelMeshes.Walls], e.wallMaterial, transform)
+	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.Walls], e.wallMaterial, transform)
 
 	applyLightToShader(e.floorMaterial.shader)
 	setShaderValue(e.lightMaterial.shader, "frameIndex", &e.lightFrameIndex)
 	lightFrameCount: int = 2
 	setShaderValue(e.lightMaterial.shader, "frameCount", &lightFrameCount)
-	rl.DrawMesh(e.mainModel.meshes[ElevatorModelMeshes.Floor], e.floorMaterial, transform)
+	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.Floor], e.floorMaterial, transform)
 
 	applyLightToShader(e.lightMaterial.shader)
-	rl.DrawMesh(e.mainModel.meshes[ElevatorModelMeshes.Ceiling], e.lightMaterial, transform)
+	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.Ceiling], e.lightMaterial, transform)
 
 	applyLightToShader(global.defaultMaterial3D.shader)
-	rl.DrawMesh(e.mainModel.meshes[ElevatorModelMeshes.Panel], global.defaultMaterial3D, transform)
+	rl.DrawMesh(
+		e.mainModel.meshes[Elevator3DModelMeshes.Panel],
+		global.defaultMaterial3D,
+		transform,
+	)
 	rl.DrawMesh(e.leftDoorModel.meshes[0], global.defaultMaterial3D, e.leftDoorModel.transform)
 	rl.DrawMesh(e.rightDoorModel.meshes[0], global.defaultMaterial3D, e.rightDoorModel.transform)
 }
@@ -148,7 +162,9 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 			global.camera3D.position.y + e.insideStateData.vertViewAngle,
 			global.camera3D.position.z + viewDirection.y,
 		}
-	case .Look:
+	case .ToPanel:
+	case .Panel:
+	case .FromPanel:
 	}
 }
 setElevator3DState :: proc(e: ^Elevator3D, state: Elevator3DState) {
@@ -169,7 +185,12 @@ setElevator3DState :: proc(e: ^Elevator3D, state: Elevator3DState) {
 	case .Inside:
 		e.insideStateData.viewAngleTween = createFinishedTween(TweenF32Range{0.0, 0.0})
 		e.insideStateData.vertViewAngleTween = createFinishedTween(TweenF32Range{0.0, 0.0})
-	case .Look:
+	case .ToPanel:
+	// e.panelStateData.camMovementTween = createTween(
+	// TweenVector3Range{global.camera3D.position, }
+	// )
+	case .Panel:
+	case .FromPanel:
 	}
 }
 enterElevator3D :: proc(e: ^Elevator3D) {

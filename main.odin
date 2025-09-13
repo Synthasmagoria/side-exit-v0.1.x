@@ -89,6 +89,8 @@ Global :: struct {
 	camera3D:             rl.Camera3D,
 	lights3D:             [MAX_LIGHTS]Light3D,
 	defaultMaterial3D:    rl.Material,
+	debugCamera3D:        rl.Camera3D,
+	debugMode:            bool,
 }
 global := Global {
 	ambientLightingColor = {0.1, 0.1, 0.12, 1.0},
@@ -100,6 +102,13 @@ global := Global {
 		zoom = 1.0,
 	},
 	camera3D = {
+		position = {0.0, 2.0, 0.0},
+		target = {1.0, 2.0, 0.0},
+		up = {0.0, 1.0, 0.0},
+		fovy = 90.0,
+		projection = .PERSPECTIVE,
+	},
+	debugCamera3D = {
 		position = {0.0, 2.0, 0.0},
 		target = {1.0, 2.0, 0.0},
 		up = {0.0, 1.0, 0.0},
@@ -123,7 +132,6 @@ main :: proc() {
 	defer rl.CloseAudioDevice()
 	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Elevator Game")
 	defer rl.CloseWindow()
-	rl.DisableCursor()
 
 	// Engine init
 	gameArena: mem.Dynamic_Arena
@@ -168,6 +176,15 @@ main :: proc() {
 	}
 	for !rl.WindowShouldClose() {
 		rl.UpdateMusicStream(gameMusic)
+		if rl.IsKeyPressed(.BACKSPACE) {
+			global.debugMode = global.debugMode ? false : true
+		}
+		currentCamera3D := &global.camera3D
+		if global.debugMode {
+			rl.UpdateCamera(&global.debugCamera3D, .FIRST_PERSON)
+			rl.DisableCursor()
+			currentCamera3D = &global.debugCamera3D
+		}
 		if rl.IsMouseButtonPressed(.LEFT) {
 			player.object.pos = rl.GetMousePosition()
 		}
@@ -200,7 +217,7 @@ main :: proc() {
 
 		rl.BeginTextureMode(renderTex3D)
 		rl.ClearBackground(rl.BLACK)
-		rl.BeginMode3D(global.camera3D)
+		rl.BeginMode3D(currentCamera3D^)
 		rl.ClearBackground({0.0, 0.0, 0.0, 0.0})
 		rl.DrawGrid(10, 1.0)
 		drawElevator3D(&global.elevator3D)
