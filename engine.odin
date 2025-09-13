@@ -137,14 +137,19 @@ loadShaders :: proc() {
 	context.allocator = context.temp_allocator
 	names := reflect.enum_field_names(ShaderNames)
 	for name, i in names[0:len(names) - 1] {
-		n := transmute([]u8)strings.clone(name)
-		n[0] = charLower(n[0])
-		vertPath := [?]string{"shd/", cast(string)n, ".vert"}
-		fragPath := [?]string{"shd/", cast(string)n, ".frag"}
-		globalShaders[i] = rl.LoadShader(
-			strings.clone_to_cstring(strings.join(vertPath[:], "")),
-			strings.clone_to_cstring(strings.join(fragPath[:], "")),
-		)
+		if shader := loadAndResolveShader(name); shader != nil {
+			globalShaders[i] = shader.?
+		} else {
+			panic("Couldn't load shader")
+		}
+		// n := transmute([]u8)strings.clone(name)
+		// n[0] = charLower(n[0])
+		// vertPath := [?]string{"shd/", cast(string)n, ".vert"}
+		// fragPath := [?]string{"shd/", cast(string)n, ".frag"}
+		// globalShaders[i] = rl.LoadShader(
+		// 	strings.clone_to_cstring(strings.join(vertPath[:], "")),
+		// 	strings.clone_to_cstring(strings.join(fragPath[:], "")),
+		// )
 	}
 }
 unloadShaders :: proc() {
@@ -153,11 +158,12 @@ unloadShaders :: proc() {
 	}
 }
 loadAndResolveShader :: proc(name: string) -> Maybe(rl.Shader) {
+	dir := "shd/"
 	context.allocator = context.temp_allocator
 	shaderNameLower := transmute([]u8)strings.clone(name)
 	shaderNameLower[0] = charLower(shaderNameLower[0])
-	vertPathParts := [?]string{"shd/", cast(string)shaderNameLower, ".vert"}
-	fragPathParts := [?]string{"shd/", cast(string)shaderNameLower, ".frag"}
+	vertPathParts := [?]string{dir, cast(string)shaderNameLower, ".vert"}
+	fragPathParts := [?]string{dir, cast(string)shaderNameLower, ".frag"}
 	vertPath := strings.join(vertPathParts[:], "")
 	fragPath := strings.join(fragPathParts[:], "")
 
@@ -177,7 +183,7 @@ loadAndResolveShader :: proc(name: string) -> Maybe(rl.Shader) {
 
 	vertCodeResolved, vertResolveError := resolveShaderIncludes(
 		strings.clone_from(vertCodeBytes),
-		"shd/",
+		dir,
 	)
 	if vertResolveError != .None {
 		traceLogShaderIncludeError(vertResolveError)
@@ -185,7 +191,7 @@ loadAndResolveShader :: proc(name: string) -> Maybe(rl.Shader) {
 	}
 	fragCodeResolved, fragResolveError := resolveShaderIncludes(
 		strings.clone_from(fragCodeBytes),
-		"shd/",
+		dir,
 	)
 	if fragResolveError != .None {
 		traceLogShaderIncludeError(fragResolveError)
@@ -201,6 +207,8 @@ ResolveShaderIncludesError :: enum {
 	MissingOpeningQuote,
 	MissingClosingQuote,
 	FileEndsAfterClosingIncludeQuote,
+	CouldntReadIncludeFile,
+	DoesntSupportNestedInclude,
 }
 resolveShaderIncludes :: proc(
 	shdStr: string,
@@ -217,25 +225,44 @@ resolveShaderIncludes :: proc(
 		    i = strings.index(vertCodeLoopSlice, "#include") {
 			append(&includelessCodeSlices, vertCodeLoopSlice[:i])
 			vertCodeLoopSlice = vertCodeLoopSlice[i:]
-			nextQuote := strings.index_byte(vertCodeLoopSlice, '\"')
-			if nextQuote == -1 {
+			openingQuote := strings.index_byte(vertCodeLoopSlice, '\"')
+			if openingQuote == -1 {
 				return shdStr, .MissingOpeningQuote
 			}
-			nextQuote = strings.index_byte(vertCodeLoopSlice[nextQuote:], '\"')
-			if nextQuote == -1 {
+			closingQuote := strings.index_byte(vertCodeLoopSlice[openingQuote + 1:], '\"')
+			if closingQuote == -1 {
 				return shdStr, .MissingClosingQuote
 			}
-			if nextQuote + 1 >= len(vertCodeLoopSlice) {
+			closingQuote += openingQuote
+			if closingQuote + 1 >= len(vertCodeLoopSlice) {
 				return shdStr, .FileEndsAfterClosingIncludeQuote
 			}
-			vertCodeLoopSlice = vertCodeLoopSlice[nextQuote + 1:]
+			includePathParts := [?]string {
+				dir,
+				vertCodeLoopSlice[openingQuote + 1:closingQuote + 1],
+			}
+
+			includeCodeBytes, includeCodeReadSuccess := os.read_entire_file(
+				strings.join(includePathParts[:], ""),
+			)
+			if !includeCodeReadSuccess {
+				return shdStr, .CouldntReadIncludeFile
+			}
+			append(&includelessCodeSlices, cast(string)includeCodeBytes)
+			vertCodeLoopSlice = vertCodeLoopSlice[closingQuote + 2:]
 		}
-		rl.TraceLog(.WARNING, "Parsed shaderincludes")
-		return shdStr, .None
+		append(&includelessCodeSlices, vertCodeLoopSlice)
+		resolvedShaderCode := strings.join(includelessCodeSlices[:], "")
+		if strings.contains(resolvedShaderCode, "#include") {
+			return resolvedShaderCode, .DoesntSupportNestedInclude
+		}
+		return resolvedShaderCode, .None
 	} else {
 		return shdStr, .None
 	}
 }
+
+
 traceLogShaderIncludeError :: proc(err: ResolveShaderIncludesError) {
 	switch err {
 	case .None:
@@ -245,6 +272,10 @@ traceLogShaderIncludeError :: proc(err: ResolveShaderIncludesError) {
 		rl.TraceLog(.ERROR, "Missing closing '\"' after #include")
 	case .FileEndsAfterClosingIncludeQuote:
 		rl.TraceLog(.ERROR, "File ends right after #include (add a linebreak or something)")
+	case .CouldntReadIncludeFile:
+		rl.TraceLog(.ERROR, "Couldn't read include file")
+	case .DoesntSupportNestedInclude:
+		rl.TraceLog(.ERROR, "Doesn't support nested include")
 	}
 }
 
