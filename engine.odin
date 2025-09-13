@@ -831,6 +831,28 @@ tweenIsWaiting :: proc(tween: Tween) -> bool {
 finishTween :: proc(tween: ^Tween) {
 	tween.t = tween.dur + tween.delay
 }
-createFinishedTween :: proc(range: TweenRange) -> Tween {
+_createFinishedTween :: proc(range: TweenRange) -> Tween {
 	return {range = range, curve = .Linear, dur = 1.0, t = 1.0, delay = 0.0}
+}
+createFinishedTween :: proc {
+	createFinishedTweenF32,
+	createFinishedTweenI32,
+	createFinishedTweenVector2,
+	createFinishedTweenVector3,
+	createFinishedTweenU8,
+}
+createFinishedTweenF32 :: proc(val: f32) -> Tween {
+	return _createFinishedTween(TweenF32Range{val, val})
+}
+createFinishedTweenI32 :: proc(val: i32) -> Tween {
+	return _createFinishedTween(TweenI32Range{val, val})
+}
+createFinishedTweenVector2 :: proc(val: rl.Vector2) -> Tween {
+	return _createFinishedTween(TweenVector2Range{val, val})
+}
+createFinishedTweenVector3 :: proc(val: rl.Vector3) -> Tween {
+	return _createFinishedTween(TweenVector3Range{val, val})
+}
+createFinishedTweenU8 :: proc(val: u8) -> Tween {
+	return _createFinishedTween(TweenU8Range{val, val})
 }

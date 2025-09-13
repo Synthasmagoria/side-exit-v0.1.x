@@ -191,3 +191,21 @@ loadPassthroughMaterial3D :: proc(albedoTexture: Maybe(rl.Texture) = nil) -> rl.
 	}
 	return material
 }
+
+enumNext :: proc(value: $T) -> T {
+	return T((i64(value) + 1) % i64(len(reflect.enum_field_names(T))))
+}
+enumPrev :: proc(value: $T) -> T {
+	nextState := i64(value) - 1
+	if nextState < 0 {
+		return T(len(reflect.enum_field_names(T)) - 1)
+	}
+	return T(nextState)
+}
+isEnumFirst :: proc(value: $T) -> bool {
+	return reflect.enum_field_values(T)[0] == reflect.Type_Info_Enum_Value(value)
+}
+isEnumLast :: proc(value: $T) -> bool {
+	values := reflect.enum_field_values(T)
+	return values[len(values) - 1] == reflect.Type_Info_Enum_Value(value)
+}

@@ -2,6 +2,7 @@ package game
 import c "core:c/libc"
 import "core:fmt"
 import "core:math"
+import "core:reflect"
 import rl "lib/raylib"
 
 FORWARD_3D :: rl.Vector3{1.0, 0.0, 0.0} // out of elevator
@@ -20,75 +21,155 @@ PLAYER_3D_OUTSIDE_POSITION :: rl.Vector3{5.0, 2.0, 0.0}
 PLAYER_3D_INSIDE_POSITION :: PLAYER_HEIGHT_3D
 
 Player3DState :: enum {
-    Uninitialized,
-    Inactive,
-    Looking,
-    Moving,
+	Uninitialized,
+	Inactive,
+	Looking,
+	Moving,
 }
 Player3D :: struct {
-    state: Player3DState,
-    movingStateData: Player3DMovingStateData,
-    yaw: f32,
-    pitch: f32,
+	state:            Player3DState,
+	movingStateData:  Player3DMovingStateData,
+	lookingStateData: Player3DLookingStateData,
+	yaw:              f32,
+	pitch:            f32,
 }
 Player3DMovingStateData :: struct {
-    movementTween: Tween,
-    nextState: Player3DState,
-    look: rl.Vector3,
+	movementTween: Tween,
+	nextState:     Player3DState,
+	look:          rl.Vector3,
+}
+PLAYER_3D_LOOKING_HORIZONTAL_DURATION :: 0.5
+PLAYER_3D_LOOKING_VERTICAL_DURATION :: 0.4
+PlayerLookingStateHorizontal :: enum {
+	Forward,
+	Right,
+	Backward,
+	Left,
+}
+PlayerLookingStateVertical :: enum {
+	Down,
+	Middle,
+	Up,
 }
 Player3DLookingStateData :: struct {
-
+	yawTween:        Tween,
+	horizontalState: PlayerLookingStateHorizontal,
+	pitchTween:      Tween,
+	verticalState:   PlayerLookingStateVertical,
 }
 createPlayer3D :: proc() -> Player3D {
-    player := Player3D{}
-    setPlayer3DState(&player, .Inactive)
-    return player
+	player := Player3D {
+		lookingStateData = {
+			yawTween = createFinishedTween(0.0),
+			pitchTween = createFinishedTween(0.0),
+			horizontalState = .Forward,
+			verticalState = .Middle,
+		},
+	}
+	setPlayer3DState(&player, .Inactive)
+	return player
 }
 setPlayer3DState :: proc(player: ^Player3D, nextState: Player3DState) {
-    if player.state == nextState {
-        return
-    }
-    player.state = nextState
-    fmt.println(player.state)
-    switch player.state {
-    case .Uninitialized:
-    case .Inactive:
-        global.camera3D.position = PLAYER_3D_OUTSIDE_POSITION
-        global.camera3D.target = global.camera3D.position + FORWARD_3D
-    case .Looking:
-    case .Moving:
-    }
+	if player.state == nextState {
+		return
+	}
+	player.state = nextState
+	fmt.println(player.state)
+	switch player.state {
+	case .Uninitialized:
+	case .Inactive:
+		global.camera3D.position = PLAYER_3D_OUTSIDE_POSITION
+		player3DApplyCameraRotation(player)
+	case .Looking:
+		player.lookingStateData.yawTween = createFinishedTween(player.yaw)
+		player.lookingStateData.pitchTween = createFinishedTween(player.pitch)
+	case .Moving:
+	}
 }
 player3DApplyCameraRotation :: proc(player: ^Player3D) {
-    global.camera3D.target =
-        global.camera3D.position +
-        rl.Vector3Transform(FORWARD_3D, MatrixRotatePitch(player.pitch) * MatrixRotateYaw(player.yaw))
+	global.camera3D.target =
+		global.camera3D.position +
+		rl.Vector3Transform(
+			FORWARD_3D,
+			MatrixRotateYaw(player.yaw) * MatrixRotatePitch(player.pitch),
+		)
 }
 updatePlayer3D :: proc(player: ^Player3D) {
-    switch player.state {
-    case .Uninitialized:
-    case .Inactive:
-    case .Looking:
-        player3DApplyCameraRotation(player)
-    case .Moving:
-        global.camera3D.position = updateAndStepTween(&player.movingStateData.movementTween).(rl.Vector3)
-        global.camera3D.target = global.camera3D.position + player.movingStateData.look
-        if tweenIsFinished(player.movingStateData.movementTween) {
-            setPlayer3DState(player, player.movingStateData.nextState)
-        }
-    }
+	switch player.state {
+	case .Uninitialized:
+	case .Inactive:
+	case .Looking:
+		data := &player.lookingStateData
+		if rl.IsKeyPressed(.LEFT) {
+			goalYaw := data.yawTween.range.(TweenF32Range).to
+			data.yawTween = createTween(
+				TweenF32Range{player.yaw, goalYaw + math.PI / 2.0},
+				.InvExp,
+				PLAYER_3D_LOOKING_HORIZONTAL_DURATION,
+			)
+			data.horizontalState = enumNext(data.horizontalState)
+		} else if rl.IsKeyPressed(.RIGHT) {
+			goalYaw := data.yawTween.range.(TweenF32Range).to
+			data.yawTween = createTween(
+				TweenF32Range{player.yaw, goalYaw - math.PI / 2.0},
+				.InvExp,
+				PLAYER_3D_LOOKING_HORIZONTAL_DURATION,
+			)
+			data.horizontalState = enumPrev(data.horizontalState)
+		}
+		player.yaw = updateAndStepTween(&data.yawTween).(f32)
+
+		if rl.IsKeyPressed(.UP) && !isEnumLast(data.verticalState) {
+			data.verticalState = enumNext(data.verticalState)
+			data.pitchTween = createTween(
+				TweenF32Range {
+					player.pitch,
+					(-math.PI / 3.0) + math.PI / 3.0 * f32(data.verticalState),
+				},
+				.InvExp,
+				PLAYER_3D_LOOKING_VERTICAL_DURATION,
+			)
+			fmt.println(data.verticalState)
+		} else if rl.IsKeyPressed(.DOWN) && !isEnumFirst(data.verticalState) {
+			data.verticalState = enumPrev(data.verticalState)
+			data.pitchTween = createTween(
+				TweenF32Range {
+					player.pitch,
+					(-math.PI / 3.0) + math.PI / 3.0 * f32(data.verticalState),
+				},
+				.InvExp,
+				PLAYER_3D_LOOKING_VERTICAL_DURATION,
+			)
+		}
+		player.pitch = updateAndStepTween(&data.pitchTween).(f32)
+
+		player3DApplyCameraRotation(player)
+	case .Moving:
+		global.camera3D.position =
+		updateAndStepTween(&player.movingStateData.movementTween).(rl.Vector3)
+		global.camera3D.target = global.camera3D.position + player.movingStateData.look
+		if tweenIsFinished(player.movingStateData.movementTween) {
+			setPlayer3DState(player, player.movingStateData.nextState)
+		}
+		player3DApplyCameraRotation(player)
+	}
 }
-movePlayer3D :: proc(player: ^Player3D, from: rl.Vector3, to: rl.Vector3, nextState: Player3DState) {
-    assert(nextState != .Moving && nextState != .Uninitialized)
-    if nextState == player.state {
-        return
-    }
-    player.movingStateData = {
-        movementTween = createTween(TweenVector3Range{from, to}, .InvExp, 1.0),
-        look = global.camera3D.target - global.camera3D.position,
-        nextState = nextState
-    }
-    setPlayer3DState(player, .Moving)
+movePlayer3D :: proc(
+	player: ^Player3D,
+	from: rl.Vector3,
+	to: rl.Vector3,
+	nextState: Player3DState,
+) {
+	assert(nextState != .Moving && nextState != .Uninitialized)
+	if nextState == player.state {
+		return
+	}
+	player.movingStateData = {
+		movementTween = createTween(TweenVector3Range{from, to}, .InvExp, 1.0),
+		look          = global.camera3D.target - global.camera3D.position,
+		nextState     = nextState,
+	}
+	setPlayer3DState(player, .Moving)
 }
 
 Elevator3DEnteringStateData :: struct {
@@ -244,19 +325,7 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 		}
 		e.insideStateData.vertViewAngle =
 		updateAndStepTween(&e.insideStateData.vertViewAngleTween).(f32)
-
-		global.camera3D.target = {
-			global.camera3D.position.x + viewDirection.x,
-			global.camera3D.position.y + e.insideStateData.vertViewAngle,
-			global.camera3D.position.z + viewDirection.y,
-		}
 	case .ToPanel:
-		global.camera3D.position =
-		updateAndStepTween(&e.panelStateData.camMovementTween).(rl.Vector3)
-		global.camera3D.target = global.camera3D.position + {1.0, 0.0, 0.0}
-		if tweenIsFinished(e.panelStateData.camMovementTween) {
-			setElevator3DState(e, .Panel)
-		}
 	case .Panel:
 	case .FromPanel:
 	}
@@ -277,8 +346,8 @@ setElevator3DState :: proc(e: ^Elevator3D, state: Elevator3DState) {
 			0.5,
 		)
 	case .Inside:
-		e.insideStateData.viewAngleTween = createFinishedTween(TweenF32Range{0.0, 0.0})
-		e.insideStateData.vertViewAngleTween = createFinishedTween(TweenF32Range{0.0, 0.0})
+		e.insideStateData.viewAngleTween = createFinishedTween(0.0)
+		e.insideStateData.vertViewAngleTween = createFinishedTween(0.0)
 	case .ToPanel:
 		e.panelStateData.camMovementTween = createTween(
 			TweenVector3Range{global.camera3D.position, {2.1, 2.3, 2.3}},
