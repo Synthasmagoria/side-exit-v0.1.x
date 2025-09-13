@@ -70,14 +70,14 @@ TextureName :: enum {
 	SynthWalkBack,
 	White32,
 	Elevator,
-	ElevatorPanel,
-	ElevatorPanelBg,
-	ElevatorPanelButtonHint,
-	ElevatorPanelButtonInputIndicator,
-	ElevatorPanelKnob,
-	ElevatorPanelKnobInputHint,
-	ElevatorPanelLever,
-	ElevatorPanelLeverInputHint,
+	// ElevatorPanel,
+	// ElevatorPanelBg,
+	// ElevatorPanelButtonHint,
+	// ElevatorPanelButtonInputIndicator,
+	// ElevatorPanelKnob,
+	// ElevatorPanelKnobInputHint,
+	// ElevatorPanelLever,
+	// ElevatorPanelLeverInputHint,
 	ElevatorWall3D,
 	ElevatorLights3D,
 	InteractionIndicationArrow,
@@ -126,7 +126,8 @@ initSpriteDefs :: proc() {
 
 ShaderNames :: enum {
 	AnimatedTextureRepeatPosition,
-	Lighting3D,
+	Passthrough3D,
+	AnimatedTexture3D,
 	_Count,
 }
 globalShaders: [ShaderNames._Count]rl.Shader
@@ -291,140 +292,51 @@ LightType :: enum c.int {
 	Directional,
 	Point,
 }
+lightShaderPreviousId: u32 = 0
 MAX_LIGHTS :: 4
 // TODO: Possibly optimizable with constant locations by using a shader include system
 applyLightToShader :: proc(shd: rl.Shader) {
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "ambient"),
-		&global.ambientLightingColor,
-		.VEC4,
-	)
-	rl.SetShaderValue(shd, rl.GetShaderLocation(shd, "viewPos"), &global.camera3D.position, .VEC3)
+	setShaderValue(shd, "ambient", &global.ambientLightingColor)
+	setShaderValue(shd, "viewPos", &global.camera3D.position)
 
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[0].enabled"),
-		&global.lights3D[0].enabled,
-		.INT,
-	)
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[0].type"),
-		&global.lights3D[0].type,
-		.INT,
-	)
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[0].position"),
-		&global.lights3D[0].position,
-		.VEC3,
-	)
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[0].target"),
-		&global.lights3D[0].target,
-		.VEC3,
-	)
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[0].color"),
-		&global.lights3D[0].color,
-		.VEC4,
-	)
+	if shd.id == lightShaderPreviousId {
+		return
+	}
+	lightShaderPreviousId = shd.id
 
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[1].enabled"),
-		&global.lights3D[1].enabled,
-		.INT,
-	)
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[1].type"),
-		&global.lights3D[1].type,
-		.INT,
-	)
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[1].position"),
-		&global.lights3D[1].position,
-		.VEC3,
-	)
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[1].target"),
-		&global.lights3D[1].target,
-		.VEC3,
-	)
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[1].color"),
-		&global.lights3D[1].color,
-		.VEC4,
-	)
+	setShaderValue(shd, "lights[0].enabled", &global.lights3D[0].enabled)
+	type0 := c.int(global.lights3D[0].type)
+	setShaderValue(shd, "lights[0].type", &type0)
+	setShaderValue(shd, "lights[0].position", &global.lights3D[0].position)
+	setShaderValue(shd, "lights[0].target", &global.lights3D[0].target)
+	setShaderValue(shd, "lights[0].color", &global.lights3D[0].color)
 
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[2].enabled"),
-		&global.lights3D[2].enabled,
-		.INT,
-	)
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[2].type"),
-		&global.lights3D[2].type,
-		.INT,
-	)
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[2].position"),
-		&global.lights3D[2].position,
-		.VEC3,
-	)
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[2].target"),
-		&global.lights3D[2].target,
-		.VEC3,
-	)
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[2].color"),
-		&global.lights3D[2].color,
-		.VEC4,
-	)
+	setShaderValue(shd, "lights[1].enabled", &global.lights3D[1].enabled)
+	type1 := c.int(global.lights3D[1].type)
+	setShaderValue(shd, "lights[1].type", &type1)
+	setShaderValue(shd, "lights[1].position", &global.lights3D[1].position)
+	setShaderValue(shd, "lights[1].target", &global.lights3D[1].target)
+	setShaderValue(shd, "lights[1].color", &global.lights3D[1].color)
 
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[3].enabled"),
-		&global.lights3D[3].enabled,
-		.INT,
-	)
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[3].type"),
-		&global.lights3D[3].type,
-		.INT,
-	)
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[3].position"),
-		&global.lights3D[3].position,
-		.VEC3,
-	)
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[3].target"),
-		&global.lights3D[3].target,
-		.VEC3,
-	)
-	rl.SetShaderValue(
-		shd,
-		rl.GetShaderLocation(shd, "lights[3].color"),
-		&global.lights3D[3].color,
-		.VEC4,
-	)
+	setShaderValue(shd, "lights[2].enabled", &global.lights3D[2].enabled)
+	type2 := c.int(global.lights3D[2].type)
+	setShaderValue(shd, "lights[2].type", &type2)
+	setShaderValue(shd, "lights[2].position", &global.lights3D[2].position)
+	setShaderValue(shd, "lights[2].target", &global.lights3D[2].target)
+	setShaderValue(shd, "lights[2].color", &global.lights3D[2].color)
+
+	setShaderValue(shd, "lights[3].enabled", &global.lights3D[3].enabled)
+	type3 := c.int(global.lights3D[3].type)
+	setShaderValue(shd, "lights[3].type", &type3)
+	setShaderValue(shd, "lights[3].position", &global.lights3D[3].position)
+	setShaderValue(shd, "lights[3].target", &global.lights3D[3].target)
+	setShaderValue(shd, "lights[3].color", &global.lights3D[3].color)
+}
+ACTIVE_LIGHTS :: 1
+setLightStatus :: proc(val: i32) {
+	for i in 0 ..< ACTIVE_LIGHTS {
+		global.lights3D[i].enabled = val
+	}
 }
 
 GameObject :: struct {

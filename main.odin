@@ -19,12 +19,14 @@ init :: proc() {
 	loadShaders()
 	initSpriteDefs()
 	initLights()
+	global.defaultMaterial3D = loadPassthroughMaterial3D()
 }
 
 deinit :: proc() {
 	unloadModels()
 	unloadTextures()
 	unloadShaders()
+	unloadMaterialMapOnly(global.defaultMaterial3D)
 }
 
 initLights :: proc() {
@@ -86,9 +88,10 @@ Global :: struct {
 	camera:               rl.Camera2D,
 	camera3D:             rl.Camera3D,
 	lights3D:             [MAX_LIGHTS]Light3D,
+	defaultMaterial3D:    rl.Material,
 }
 global := Global {
-	ambientLightingColor = {0.1, 0.0, 0.05, 0.02},
+	ambientLightingColor = {0.1, 0.1, 0.12, 1.0},
 	chunkWorld = {pos = {-1, -1}, genCutoff = 0.5},
 	camera = {
 		offset = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},

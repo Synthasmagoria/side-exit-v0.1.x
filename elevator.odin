@@ -1,22 +1,23 @@
 package game
-import rl "lib/raylib"
-import "core:math"
 import c "core:c/libc"
+import "core:math"
+import rl "lib/raylib"
 
 Elevator3DEnteringStateData :: struct {
 	camMovementTween:  Tween,
 	doorMovementTween: Tween,
 }
 Elevator3DInsideStateData :: struct {
-	viewAngleTween: Tween,
-	viewAngle:      f32,
+	viewAngleTween:     Tween,
+	viewAngle:          f32,
 	vertViewAngleTween: Tween,
-	vertViewAngle: f32,
+	vertViewAngle:      f32,
 }
 ElevatorModelMeshes :: enum {
-    Walls,
-    Floor,
-    Ceiling,
+	Walls,
+	Floor,
+	Ceiling,
+	Panel,
 }
 Elevator3DState :: enum {
 	Invisible,
@@ -32,46 +33,61 @@ Elevator3D :: struct {
 	wallMaterial:      rl.Material,
 	lightMaterial:     rl.Material,
 	floorMaterial:     rl.Material,
+	lightFrameIndex:   f32,
 	enteringStateData: Elevator3DEnteringStateData,
 	insideStateData:   Elevator3DInsideStateData,
 }
 createElevator3D :: proc() -> Elevator3D {
-    wallMaterial := rl.LoadMaterialDefault()
-    wallMaterial.shader = getShader(.Lighting3D)
-    rl.SetMaterialTexture(&wallMaterial, .ALBEDO, getTexture(.ElevatorWall3D))
-    lightMaterial := rl.LoadMaterialDefault()
-    lightMaterial.shader = getShader(.Lighting3D)
-    rl.SetMaterialTexture(&lightMaterial, .ALBEDO, getTexture(.ElevatorLights3D))
-    floorMaterial := rl.LoadMaterialDefault()
-    floorMaterial.shader = getShader(.Lighting3D)
+	lightMaterial := rl.LoadMaterialDefault()
+	lightMaterial.shader = getShader(.AnimatedTexture3D)
+	rl.SetMaterialTexture(&lightMaterial, .ALBEDO, getTexture(.ElevatorLights3D))
 
-	return Elevator3D{
+	return Elevator3D {
 		mainModel = getModel(.Elevator),
 		leftDoorModel = getModel(.ElevatorSlidingDoorLeft),
 		rightDoorModel = getModel(.ElevatorSlidingDoorRight),
 		state = .Invisible,
-		wallMaterial = wallMaterial,
+		wallMaterial = loadPassthroughMaterial3D(getTexture(.ElevatorWall3D)),
 		lightMaterial = lightMaterial,
-		floorMaterial = floorMaterial,
+		floorMaterial = loadPassthroughMaterial3D(),
 	}
 }
-
+toggleElevatorLights :: proc(e: ^Elevator3D) {
+	if e.lightFrameIndex == 0.0 {
+		e.lightFrameIndex = 1.0
+	} else {
+		e.lightFrameIndex = 0.0
+	}
+	setLightStatus(i32(e.lightFrameIndex))
+}
 drawElevator3D :: proc(e: ^Elevator3D) {
-    transform := rl.MatrixIdentity()
-    applyLightToShader(e.wallMaterial.shader)
-    rl.DrawMesh(e.mainModel.meshes[ElevatorModelMeshes.Walls], e.wallMaterial, transform)
-    applyLightToShader(e.floorMaterial.shader)
-    rl.DrawMesh(e.mainModel.meshes[ElevatorModelMeshes.Floor], e.floorMaterial, transform)
-    applyLightToShader(e.lightMaterial.shader)
-    rl.DrawMesh(e.mainModel.meshes[ElevatorModelMeshes.Ceiling], e.lightMaterial, transform)
-	rl.DrawModel(e.leftDoorModel, {0.0, 0.0, 0.0}, 1.0, rl.WHITE)
-	rl.DrawModel(e.rightDoorModel, {0.0, 0.0, 0.0}, 1.0, rl.WHITE)
+	transform := rl.MatrixIdentity()
+	applyLightToShader(e.wallMaterial.shader)
+	rl.DrawMesh(e.mainModel.meshes[ElevatorModelMeshes.Walls], e.wallMaterial, transform)
+
+	applyLightToShader(e.floorMaterial.shader)
+	setShaderValue(e.lightMaterial.shader, "frameIndex", &e.lightFrameIndex)
+	lightFrameCount: int = 2
+	setShaderValue(e.lightMaterial.shader, "frameCount", &lightFrameCount)
+	rl.DrawMesh(e.mainModel.meshes[ElevatorModelMeshes.Floor], e.floorMaterial, transform)
+
+	applyLightToShader(e.lightMaterial.shader)
+	rl.DrawMesh(e.mainModel.meshes[ElevatorModelMeshes.Ceiling], e.lightMaterial, transform)
+
+	applyLightToShader(global.defaultMaterial3D.shader)
+	rl.DrawMesh(e.mainModel.meshes[ElevatorModelMeshes.Panel], global.defaultMaterial3D, transform)
+	rl.DrawMesh(e.leftDoorModel.meshes[0], global.defaultMaterial3D, e.leftDoorModel.transform)
+	rl.DrawMesh(e.rightDoorModel.meshes[0], global.defaultMaterial3D, e.rightDoorModel.transform)
 }
 destroyElevator3D :: proc(e: ^Elevator3D) {
-    unloadMaterialMapOnly(e.wallMaterial)
-    unloadMaterialMapOnly(e.lightMaterial)
+	unloadMaterialMapOnly(e.wallMaterial)
+	unloadMaterialMapOnly(e.lightMaterial)
+	unloadMaterialMapOnly(e.floorMaterial)
 }
 updateElevator3D :: proc(e: ^Elevator3D) {
+	if rl.IsKeyPressed(.L) {
+		toggleElevatorLights(e)
+	}
 	switch (e.state) {
 	case .Invisible:
 	case .Entering:
@@ -110,21 +126,22 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 		e.insideStateData.viewAngle = updateAndStepTween(&e.insideStateData.viewAngleTween).(f32)
 		viewDirection := rl.Vector2Rotate(rl.Vector2{1.0, 0.0}, e.insideStateData.viewAngle)
 		if rl.IsKeyPressed(.UP) {
-		    e.insideStateData.vertViewAngleTween = createTween(
-				TweenF32Range {e.insideStateData.vertViewAngle, 0.5},
+			e.insideStateData.vertViewAngleTween = createTween(
+				TweenF32Range{e.insideStateData.vertViewAngle, 0.5},
 				.InvExp,
 				0.8,
-				0.0
+				0.0,
 			)
 		} else if rl.IsKeyPressed(.DOWN) {
-		    e.insideStateData.vertViewAngleTween = createTween(
+			e.insideStateData.vertViewAngleTween = createTween(
 				TweenF32Range{e.insideStateData.vertViewAngle, 0.0},
 				.InvExp,
 				0.8,
-				0.0
+				0.0,
 			)
 		}
-		e.insideStateData.vertViewAngle = updateAndStepTween(&e.insideStateData.vertViewAngleTween).(f32)
+		e.insideStateData.vertViewAngle =
+		updateAndStepTween(&e.insideStateData.vertViewAngleTween).(f32)
 
 		global.camera3D.target = {
 			global.camera3D.position.x + viewDirection.x,
