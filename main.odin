@@ -226,9 +226,8 @@ main :: proc() {
 		drawRenderTexToScreenBuffer(gameRenderTex)
 
 		if player3D.state == .Inactive && rl.IsKeyPressed(.ONE) {
-		    movePlayer3D(&player3D, global.camera3D.position, PLAYER_3D_INSIDE_POSITION, .Looking)
+			movePlayer3D(&player3D, global.camera3D.position, PLAYER_3D_INSIDE_POSITION, .Looking)
 		}
-		updateElevator3D(&global.elevator3D)
 		updatePlayer3D(&player3D)
 
 		rl.BeginTextureMode(renderTex3D)
