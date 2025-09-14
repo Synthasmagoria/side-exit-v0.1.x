@@ -280,14 +280,18 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 			knobIndex := int(relativeKnobPositionFloored.y)
 			panel.knobState[knobIndex] += 45.0
 			knobSounds := [?]rl.Sound {
-				getSound(.ElevatorKnob1),
-				getSound(.ElevatorKnob2),
-				getSound(.ElevatorKnob3),
+				getSound(.ElevatorPanelKnob1),
+				getSound(.ElevatorPanelKnob2),
+				getSound(.ElevatorPanelKnob3),
 			}
 			rl.PlaySound(rand.choice(knobSounds[:]))
 		}
 	} else if pointInRec(position, panel.sliderArea) {
-
+		sliderAreaStart := rl.Vector2{panel.sliderArea.x, panel.sliderArea.y}
+		relativePosition := position - sliderAreaStart
+		sliderIndex := i32(math.floor(relativePosition.x / panel.sliderSeparation.x))
+		panel.sliderState[sliderIndex] = rand.float32() * panel.sliderArea.height
+		rl.PlaySound(getSound(.ElevatorPanelSlider))
 	}
 }
 ELEVATOR_PANEL_BUTTON_COUNT: iVector2 : {3, 8}
@@ -318,10 +322,6 @@ createElevator3D :: proc() -> Elevator3D {
 		ELEVATOR_3D_PANEL_RENDER_TEXTURE_WIDTH,
 		panelRenderTextureHeight,
 	)
-	// panelMaterial := rl.LoadMaterialDefault()
-	// panelMaterial.shader = getShader(.AnimatedTexture3D)
-	// rl.SetMaterialTexture(&panelMaterial, .ALBEDO, panelRenderTexture.texture)
-
 	return Elevator3D {
 		mainModel = getModel(.Elevator),
 		leftDoorModel = getModel(.ElevatorSlidingDoorLeft),
@@ -341,6 +341,8 @@ createElevator3D :: proc() -> Elevator3D {
 			buttonSeparation = {24.0, 24.0},
 			knobArea = {110.0, 90.0, 44.0, 44.0 * 2},
 			knobSeparation = {0.0, 44.0},
+			sliderArea = {101.0, 197.0, 24.0 * 3.0, 80.0},
+			sliderSeparation = {24.0, 0.0},
 		},
 		lightFrameIndex = 1.0,
 	}
@@ -393,6 +395,8 @@ drawElevator3D :: proc(e: ^Elevator3D) {
 renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^ElevatorPanelData) {
 	rl.EndMode3D()
 	beginNestedTextureMode(renderTexture)
+	rl.ClearBackground({0, 0, 0, 0})
+
 	buttonSprite := createSprite(getSpriteDef(.ElevatorPanelButton))
 	for x in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.x {
 		for y in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.y {
@@ -428,6 +432,32 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 		data.knobState[1],
 		rl.WHITE,
 	)
+
+	sliderTexture := getTexture(.ElevatorPanelSlider)
+	sliderTextureSize := getTextureSize(sliderTexture)
+	sliderTextureOrigin := sliderTextureSize / 2.0
+	sliderAreaPosition := rl.Vector2{data.sliderArea.x, data.sliderArea.y}
+	for i in 0 ..< 3 {
+		sliderRidgeWidth: f32 = 3.0
+		sliderRidgeStart :=
+			sliderAreaPosition + f32(i) * data.sliderSeparation + sliderTextureOrigin
+		sliderRidgeStart.x -= math.floor(sliderRidgeWidth / 2.0)
+		sliderRidgeEnd := sliderRidgeStart + {sliderRidgeWidth, data.sliderArea.height}
+		sliderRidgeSize := sliderRidgeEnd - sliderRidgeStart
+		sliderRidgeRectangle := rl.Rectangle {
+			sliderRidgeStart.x,
+			sliderRidgeStart.y,
+			sliderRidgeSize.x,
+			sliderRidgeSize.y,
+		}
+		rl.DrawRectangleRec(sliderRidgeRectangle, rl.BLACK)
+	}
+	for i in 0 ..< 3 {
+		sliderPosition :=
+			sliderAreaPosition + f32(i) * data.sliderSeparation + {0.0, data.sliderState[i]}
+		rl.DrawTextureV(sliderTexture, sliderPosition, rl.WHITE)
+	}
+
 	endNestedTextureMode()
 	rl.BeginMode3D(global.camera3D)
 }
@@ -435,5 +465,6 @@ destroyElevator3D :: proc(e: ^Elevator3D) {
 	unloadMaterialMapOnly(e.wallMaterial)
 	unloadMaterialMapOnly(e.lightMaterial)
 	unloadMaterialMapOnly(e.floorMaterial)
+	unloadMaterialMapOnly(e.panelMaterial)
 	rl.UnloadRenderTexture(e.panelRenderTexture)
 }

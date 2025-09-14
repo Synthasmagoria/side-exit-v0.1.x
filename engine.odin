@@ -26,9 +26,10 @@ SoundName :: enum {
 	PlayerJump,
 	PlayerAirJump,
 	ElevatorPanelButton,
-	ElevatorKnob1,
-	ElevatorKnob2,
-	ElevatorKnob3,
+	ElevatorPanelKnob1,
+	ElevatorPanelKnob2,
+	ElevatorPanelKnob3,
+	ElevatorPanelSlider,
 	_Count,
 }
 getSound :: proc(ind: SoundName) -> rl.Sound {
@@ -103,6 +104,7 @@ TextureName :: enum {
 	Elevator,
 	ElevatorPanelButton,
 	ElevatorPanelKnob,
+	ElevatorPanelSlider,
 	ElevatorWall3D,
 	ElevatorLights3D,
 	InteractionIndicationArrow,
