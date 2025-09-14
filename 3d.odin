@@ -19,12 +19,16 @@ MatrixRotatePitch :: rl.MatrixRotateZ
 PLAYER_HEIGHT_3D :: rl.Vector3{0.0, 2.0, 0.0}
 PLAYER_3D_OUTSIDE_POSITION :: rl.Vector3{5.0, 2.0, 0.0}
 PLAYER_3D_INSIDE_POSITION :: PLAYER_HEIGHT_3D
+PLAYER_3D_PANEL_POSITION :: rl.Vector3{2.225, 2.35, 2.225}
+PLAYER_3D_LOOKING_VERTICAL_ANGLE_INCREMENT: f32 : math.PI / 3.0
+PLAYER_3D_LOOKING_HORIZONTAL_ANGLE_INCREMENT: f32 : math.PI / 2.0
 
 Player3DState :: enum {
 	Uninitialized,
 	Inactive,
 	Looking,
 	Moving,
+	Panel,
 }
 Player3D :: struct {
 	state:            Player3DState,
@@ -83,6 +87,7 @@ setPlayer3DState :: proc(player: ^Player3D, nextState: Player3DState) {
 		player.lookingStateData.yawTween = createFinishedTween(player.yaw)
 		player.lookingStateData.pitchTween = createFinishedTween(player.pitch)
 	case .Moving:
+	case .Panel:
 	}
 }
 player3DApplyCameraRotation :: proc(player: ^Player3D) {
@@ -102,7 +107,7 @@ updatePlayer3D :: proc(player: ^Player3D) {
 		if rl.IsKeyPressed(.LEFT) {
 			goalYaw := data.yawTween.range.(TweenF32Range).to
 			data.yawTween = createTween(
-				TweenF32Range{player.yaw, goalYaw + math.PI / 2.0},
+				TweenF32Range{player.yaw, goalYaw + PLAYER_3D_LOOKING_HORIZONTAL_ANGLE_INCREMENT},
 				.InvExp,
 				PLAYER_3D_LOOKING_HORIZONTAL_DURATION,
 			)
@@ -110,7 +115,7 @@ updatePlayer3D :: proc(player: ^Player3D) {
 		} else if rl.IsKeyPressed(.RIGHT) {
 			goalYaw := data.yawTween.range.(TweenF32Range).to
 			data.yawTween = createTween(
-				TweenF32Range{player.yaw, goalYaw - math.PI / 2.0},
+				TweenF32Range{player.yaw, goalYaw - PLAYER_3D_LOOKING_HORIZONTAL_ANGLE_INCREMENT},
 				.InvExp,
 				PLAYER_3D_LOOKING_HORIZONTAL_DURATION,
 			)
@@ -120,28 +125,37 @@ updatePlayer3D :: proc(player: ^Player3D) {
 
 		if rl.IsKeyPressed(.UP) && !isEnumLast(data.verticalState) {
 			data.verticalState = enumNext(data.verticalState)
+			angleIncrement := PLAYER_3D_LOOKING_VERTICAL_ANGLE_INCREMENT
 			data.pitchTween = createTween(
 				TweenF32Range {
 					player.pitch,
-					(-math.PI / 3.0) + math.PI / 3.0 * f32(data.verticalState),
+					-angleIncrement + angleIncrement * f32(data.verticalState),
 				},
 				.InvExp,
 				PLAYER_3D_LOOKING_VERTICAL_DURATION,
 			)
 		} else if rl.IsKeyPressed(.DOWN) && !isEnumFirst(data.verticalState) {
 			data.verticalState = enumPrev(data.verticalState)
+			angleIncrement := PLAYER_3D_LOOKING_VERTICAL_ANGLE_INCREMENT
 			data.pitchTween = createTween(
 				TweenF32Range {
 					player.pitch,
-					(-math.PI / 3.0) + math.PI / 3.0 * f32(data.verticalState),
+					-angleIncrement + angleIncrement * f32(data.verticalState),
 				},
 				.InvExp,
 				PLAYER_3D_LOOKING_VERTICAL_DURATION,
 			)
 		}
 		player.pitch = updateAndStepTween(&data.pitchTween).(f32)
-
 		player3DApplyCameraRotation(player)
+
+		if tweenIsFinished(data.yawTween) && tweenIsFinished(data.pitchTween) {
+			if data.horizontalState == .Forward &&
+			   data.verticalState == .Middle &&
+			   rl.IsKeyPressed(.LEFT_SHIFT) {
+				movePlayer3D(player, global.camera3D.position, PLAYER_3D_PANEL_POSITION, .Panel)
+			}
+		}
 	case .Moving:
 		global.camera3D.position =
 		updateAndStepTween(&player.movingStateData.movementTween).(rl.Vector3)
@@ -150,6 +164,20 @@ updatePlayer3D :: proc(player: ^Player3D) {
 			setPlayer3DState(player, player.movingStateData.nextState)
 		}
 		player3DApplyCameraRotation(player)
+	case .Panel:
+		panelMesh := global.elevator3D.mainModel.meshes[Elevator3DModelMeshes.Panel]
+		panelBbox := rl.GetMeshBoundingBox(panelMesh)
+		ray := rl.GetScreenToWorldRay(rl.GetMousePosition(), global.camera3D)
+		rayCollision := rl.GetRayCollisionBox(ray, panelBbox)
+		if rayCollision.hit {
+			screenPosition := rl.GetWorldToScreen(rayCollision.point, global.camera3D)
+			fmt.println(screenPosition)
+		} else {
+			fmt.println("No collision")
+		}
+		if rl.IsKeyPressed(.DOWN) {
+			movePlayer3D(player, global.camera3D.position, PLAYER_3D_INSIDE_POSITION, .Looking)
+		}
 	}
 }
 movePlayer3D :: proc(
@@ -157,13 +185,14 @@ movePlayer3D :: proc(
 	from: rl.Vector3,
 	to: rl.Vector3,
 	nextState: Player3DState,
+	duration: f32 = 1.0,
 ) {
 	assert(nextState != .Moving && nextState != .Uninitialized)
 	if nextState == player.state {
 		return
 	}
 	player.movingStateData = {
-		movementTween = createTween(TweenVector3Range{from, to}, .InvExp, 1.0),
+		movementTween = createTween(TweenVector3Range{from, to}, .InvExp, duration),
 		look          = global.camera3D.target - global.camera3D.position,
 		nextState     = nextState,
 	}
@@ -174,22 +203,36 @@ Elevator3DModelMeshes :: enum {
 	Walls,
 	Floor,
 	Ceiling,
+	PanelBox,
 	Panel,
 }
+ELEVATOR_3D_PANEL_RENDER_TEXTURE_WIDTH :: 180
 Elevator3D :: struct {
-	mainModel:         rl.Model,
-	leftDoorModel:     rl.Model,
-	rightDoorModel:    rl.Model,
-	wallMaterial:      rl.Material,
-	lightMaterial:     rl.Material,
-	floorMaterial:     rl.Material,
-	insideElevatorPos: rl.Vector3,
-	lightFrameIndex:   f32,
+	mainModel:          rl.Model,
+	leftDoorModel:      rl.Model,
+	rightDoorModel:     rl.Model,
+	wallMaterial:       rl.Material,
+	lightMaterial:      rl.Material,
+	floorMaterial:      rl.Material,
+	insideElevatorPos:  rl.Vector3,
+	panelRenderTexture: rl.RenderTexture,
+	panelMaterial:      rl.Material,
+	lightFrameIndex:    f32,
 }
 createElevator3D :: proc() -> Elevator3D {
 	lightMaterial := rl.LoadMaterialDefault()
 	lightMaterial.shader = getShader(.AnimatedTexture3D)
 	rl.SetMaterialTexture(&lightMaterial, .ALBEDO, getTexture(.ElevatorLights3D))
+
+	panelMesh := getModel(.Elevator).meshes[Elevator3DModelMeshes.Panel]
+	panelMeshBbox := rl.GetMeshBoundingBox(panelMesh)
+	panelMeshSize := panelMeshBbox.max.xy - panelMeshBbox.min.xy
+	panelMeshRatio := panelMeshSize.x / panelMeshSize.y
+	panelRenderTextureHeight := i32(f32(ELEVATOR_3D_PANEL_RENDER_TEXTURE_WIDTH) * panelMeshRatio)
+	panelRenderTexture := rl.LoadRenderTexture(
+		ELEVATOR_3D_PANEL_RENDER_TEXTURE_WIDTH,
+		panelRenderTextureHeight,
+	)
 
 	return Elevator3D {
 		mainModel = getModel(.Elevator),
@@ -198,6 +241,8 @@ createElevator3D :: proc() -> Elevator3D {
 		wallMaterial = loadPassthroughMaterial3D(getTexture(.ElevatorWall3D)),
 		lightMaterial = lightMaterial,
 		floorMaterial = loadPassthroughMaterial3D(),
+		panelMaterial = loadPassthroughMaterial3D(panelRenderTexture.texture),
+		panelRenderTexture = panelRenderTexture,
 		lightFrameIndex = 1.0,
 	}
 }
@@ -210,6 +255,7 @@ toggleElevatorLights :: proc(e: ^Elevator3D) {
 	setLightStatus(i32(e.lightFrameIndex))
 }
 drawElevator3D :: proc(e: ^Elevator3D) {
+	//renderElevator3DPanelTexture(e.panelRenderTexture)
 	transform := rl.MatrixIdentity()
 	applyLightToShader(e.wallMaterial.shader)
 	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.Walls], e.wallMaterial, transform)
@@ -225,6 +271,12 @@ drawElevator3D :: proc(e: ^Elevator3D) {
 
 	applyLightToShader(global.defaultMaterial3D.shader)
 	rl.DrawMesh(
+		e.mainModel.meshes[Elevator3DModelMeshes.PanelBox],
+		global.defaultMaterial3D,
+		transform,
+	)
+	applyLightToShader(e.panelMaterial.shader)
+	rl.DrawMesh(
 		e.mainModel.meshes[Elevator3DModelMeshes.Panel],
 		global.defaultMaterial3D,
 		transform,
@@ -232,8 +284,17 @@ drawElevator3D :: proc(e: ^Elevator3D) {
 	rl.DrawMesh(e.leftDoorModel.meshes[0], global.defaultMaterial3D, e.leftDoorModel.transform)
 	rl.DrawMesh(e.rightDoorModel.meshes[0], global.defaultMaterial3D, e.rightDoorModel.transform)
 }
+renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture) {
+	rl.BeginTextureMode(renderTexture)
+	rl.BeginBlendMode(.SUBTRACT_COLORS)
+	rl.DrawRectangle(0, 0, renderTexture.texture.width, renderTexture.texture.height, rl.WHITE)
+	rl.EndBlendMode()
+	rl.DrawCircle(32, 32, 16.0, rl.RED)
+	rl.EndTextureMode()
+}
 destroyElevator3D :: proc(e: ^Elevator3D) {
 	unloadMaterialMapOnly(e.wallMaterial)
 	unloadMaterialMapOnly(e.lightMaterial)
 	unloadMaterialMapOnly(e.floorMaterial)
+	rl.UnloadRenderTexture(e.panelRenderTexture)
 }

@@ -13,7 +13,7 @@ raylibRealloc :: libc.realloc
 
 Alloc :: mem.Allocator
 
-init :: proc() {
+init :: proc(gameAlloc: Alloc) {
 	loadModels()
 	loadTextures()
 	loadShaders()
@@ -21,6 +21,7 @@ init :: proc() {
 	initSpriteDefs()
 	initLights()
 	global.defaultMaterial3D = loadPassthroughMaterial3D()
+	global.renderTextureStack = make([dynamic]rl.RenderTexture, 0, 5, gameAlloc)
 }
 
 deinit :: proc() {
@@ -102,6 +103,8 @@ Global :: struct {
 	defaultMaterial3D:    rl.Material,
 	debugCamera3D:        rl.Camera3D,
 	debugMode:            bool,
+	currentRenderTexture: Maybe(rl.RenderTexture),
+	renderTextureStack:   [dynamic]rl.RenderTexture,
 }
 global := Global {
 	ambientLightingColor = {0.1, 0.1, 0.12, 1.0},
@@ -126,6 +129,31 @@ global := Global {
 		fovy = 90.0,
 		projection = .PERSPECTIVE,
 	},
+}
+
+beginNestedTextureMode :: proc(renderTexture: rl.RenderTexture) {
+	if global.currentRenderTexture == nil {
+		global.currentRenderTexture = renderTexture
+		rl.BeginTextureMode(global.currentRenderTexture.?)
+	} else {
+		rl.EndTextureMode()
+		append(&global.renderTextureStack, global.currentRenderTexture.?)
+		global.currentRenderTexture = renderTexture
+		rl.BeginTextureMode(global.currentRenderTexture.?)
+	}
+}
+endNestedTextureMode :: proc() {
+	if global.currentRenderTexture == nil {
+		panic("No render texture to pop off the stack")
+	} else {
+		rl.EndTextureMode()
+		if len(global.renderTextureStack) == 0 {
+			global.currentRenderTexture = nil
+		} else {
+			global.currentRenderTexture = pop(&global.renderTextureStack)
+			rl.BeginTextureMode(global.currentRenderTexture.?)
+		}
+	}
 }
 
 MAX_TEXTURE_SIZE :: 4096
@@ -159,7 +187,7 @@ main :: proc() {
 	defer mem.dynamic_arena_free_all(&frameArena)
 	context.temp_allocator = mem.dynamic_arena_allocator(&frameArena)
 
-	init()
+	init(gameAlloc)
 	defer deinit()
 	gameRenderTex := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
 	defer rl.UnloadRenderTexture(gameRenderTex)
@@ -210,7 +238,7 @@ main :: proc() {
 		updateChunkWorld(&global.chunkWorld, player.object^)
 		rl.ClearBackground(rl.BLACK)
 		rl.BeginDrawing()
-		rl.BeginTextureMode(gameRenderTex)
+		beginNestedTextureMode(gameRenderTex)
 		rl.ClearBackground(rl.BLACK)
 		rl.BeginMode2D(global.camera)
 		drawChunkWorld(&global.chunkWorld)
@@ -224,23 +252,23 @@ main :: proc() {
 			object.drawEndProc(object.data)
 		}
 		rl.EndMode2D()
-		rl.EndTextureMode()
-		drawRenderTexToScreenBuffer(gameRenderTex)
+		endNestedTextureMode()
+		drawRenderTextureScaledToScreenBuffer(gameRenderTex)
 
 		if player3D.state == .Inactive && rl.IsKeyPressed(.ONE) {
 			movePlayer3D(&player3D, global.camera3D.position, PLAYER_3D_INSIDE_POSITION, .Looking)
 		}
 		updatePlayer3D(&player3D)
 
-		rl.BeginTextureMode(renderTex3D)
+		beginNestedTextureMode(renderTex3D)
 		rl.ClearBackground(rl.BLACK)
 		rl.BeginMode3D(currentCamera3D^)
 		rl.ClearBackground({0.0, 0.0, 0.0, 0.0})
 		rl.DrawGrid(10, 1.0)
 		drawElevator3D(&global.elevator3D)
 		rl.EndMode3D()
-		rl.EndTextureMode()
-		drawRenderTexToScreenBuffer(renderTex3D)
+		endNestedTextureMode()
+		drawRenderTextureScaledToScreenBuffer(renderTex3D)
 		debugDrawGlobalCamera3DInfo(currentCamera3D^, 4, 4)
 		rl.EndDrawing()
 		mem.dynamic_arena_reset(&frameArena)

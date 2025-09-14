@@ -122,7 +122,7 @@ iRectangleGetInd :: proc(irec: iRectangle, maxWidth: i32) -> i32 {
 	return irec.x + irec.height * maxWidth
 }
 
-drawRenderTexToScreenBuffer :: proc(rtex: rl.RenderTexture) {
+drawRenderTextureScaledToScreenBuffer :: proc(rtex: rl.RenderTexture) {
 	rtex_size := getTextureSize(rtex.texture)
 	screen_size := rl.Vector2{cast(f32)rl.GetScreenWidth(), cast(f32)rl.GetScreenHeight()}
 	dest: rl.Rectangle
