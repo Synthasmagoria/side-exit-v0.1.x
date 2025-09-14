@@ -165,18 +165,31 @@ updatePlayer3D :: proc(player: ^Player3D) {
 		}
 		player3DApplyCameraRotation(player)
 	case .Panel:
+		if rl.IsKeyPressed(.DOWN) {
+			movePlayer3D(player, global.camera3D.position, PLAYER_3D_INSIDE_POSITION, .Looking)
+			break
+		}
+		if !rl.IsMouseButtonPressed(.LEFT) {
+			break
+		}
 		panelMesh := global.elevator3D.mainModel.meshes[Elevator3DModelMeshes.Panel]
 		panelBbox := rl.GetMeshBoundingBox(panelMesh)
 		ray := rl.GetScreenToWorldRay(rl.GetMousePosition(), global.camera3D)
 		rayCollision := rl.GetRayCollisionBox(ray, panelBbox)
 		if rayCollision.hit {
+			panelScreenRectStart := rl.GetWorldToScreen(panelBbox.min, global.camera3D)
+			panelScreenRectEnd := rl.GetWorldToScreen(panelBbox.max, global.camera3D)
+			panelScreenRectSize := panelScreenRectEnd - panelScreenRectStart
 			screenPosition := rl.GetWorldToScreen(rayCollision.point, global.camera3D)
-			fmt.println(screenPosition)
+			panelPositionNormalized :=
+				(screenPosition - panelScreenRectStart) / panelScreenRectSize
+			panelPositionNormalized.y = 1.0 - panelPositionNormalized.y
+			panelPosition :=
+				panelPositionNormalized *
+				getTextureSize(global.elevator3D.panelRenderTexture.texture)
+			elevatorPanel3DInput(&global.elevator3D.panelData, panelPosition)
 		} else {
 			fmt.println("No collision")
-		}
-		if rl.IsKeyPressed(.DOWN) {
-			movePlayer3D(player, global.camera3D.position, PLAYER_3D_INSIDE_POSITION, .Looking)
 		}
 	}
 }
@@ -207,6 +220,41 @@ Elevator3DModelMeshes :: enum {
 	Panel,
 }
 ELEVATOR_3D_PANEL_RENDER_TEXTURE_WIDTH :: 180
+ElevatorPanelData :: struct {
+	buttonState:      [ELEVATOR_PANEL_BUTTON_COUNT.x][ELEVATOR_PANEL_BUTTON_COUNT.y]i32,
+	buttonOffset:     rl.Vector2,
+	buttonSeparation: rl.Vector2,
+	buttonArea:       rl.Rectangle,
+}
+elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
+	if pointInRec(position, panel.buttonArea) {
+		relativeButtonPosition :=
+			(position - {panel.buttonArea.x, panel.buttonArea.y}) / panel.buttonSeparation
+		relativeButtonPositionFloored := rl.Vector2 {
+			math.floor(relativeButtonPosition.x),
+			math.floor(relativeButtonPosition.y),
+		}
+		buttonSpriteDef := getSpriteDef(.ElevatorPanelButton)
+		buttonTextureSize := f32(buttonSpriteDef.frame_width)
+		buttonPosition :=
+			relativeButtonPositionFloored * panel.buttonSeparation +
+			buttonTextureSize / 2.0 +
+			{panel.buttonOffset.x, panel.buttonOffset.y}
+		buttonRadius := buttonTextureSize / 2.0
+		if pointInCircle(position, buttonPosition, buttonRadius) {
+			relativeButtonIndex := iVector2 {
+				i32(relativeButtonPositionFloored.x),
+				i32(relativeButtonPositionFloored.y),
+			}
+			if panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] == 1 {
+				panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] = 0
+			} else {
+				panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] = 1
+			}
+		}
+	}
+}
+ELEVATOR_PANEL_BUTTON_COUNT: iVector2 : {3, 8}
 Elevator3D :: struct {
 	mainModel:          rl.Model,
 	leftDoorModel:      rl.Model,
@@ -217,6 +265,7 @@ Elevator3D :: struct {
 	insideElevatorPos:  rl.Vector3,
 	panelRenderTexture: rl.RenderTexture,
 	panelMaterial:      rl.Material,
+	panelData:          ElevatorPanelData,
 	lightFrameIndex:    f32,
 }
 createElevator3D :: proc() -> Elevator3D {
@@ -226,7 +275,7 @@ createElevator3D :: proc() -> Elevator3D {
 
 	panelMesh := getModel(.Elevator).meshes[Elevator3DModelMeshes.Panel]
 	panelMeshBbox := rl.GetMeshBoundingBox(panelMesh)
-	panelMeshSize := panelMeshBbox.max.xy - panelMeshBbox.min.xy
+	panelMeshSize := panelMeshBbox.max.yz - panelMeshBbox.min.yz
 	panelMeshRatio := panelMeshSize.x / panelMeshSize.y
 	panelRenderTextureHeight := i32(f32(ELEVATOR_3D_PANEL_RENDER_TEXTURE_WIDTH) * panelMeshRatio)
 	panelRenderTexture := rl.LoadRenderTexture(
@@ -243,6 +292,16 @@ createElevator3D :: proc() -> Elevator3D {
 		floorMaterial = loadPassthroughMaterial3D(),
 		panelMaterial = loadPassthroughMaterial3D(panelRenderTexture.texture),
 		panelRenderTexture = panelRenderTexture,
+		panelData = {
+			buttonOffset = {21.0, 90.0},
+			buttonSeparation = {24.0, 24.0},
+			buttonArea = {
+				21.0,
+				90.0,
+				24.0 * f32(ELEVATOR_PANEL_BUTTON_COUNT.x),
+				24.0 * f32(ELEVATOR_PANEL_BUTTON_COUNT.y),
+			},
+		},
 		lightFrameIndex = 1.0,
 	}
 }
@@ -255,7 +314,8 @@ toggleElevatorLights :: proc(e: ^Elevator3D) {
 	setLightStatus(i32(e.lightFrameIndex))
 }
 drawElevator3D :: proc(e: ^Elevator3D) {
-	//renderElevator3DPanelTexture(e.panelRenderTexture)
+	g := global
+	renderElevator3DPanelTexture(e.panelRenderTexture, &e.panelData)
 	transform := rl.MatrixIdentity()
 	applyLightToShader(e.wallMaterial.shader)
 	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.Walls], e.wallMaterial, transform)
@@ -276,21 +336,24 @@ drawElevator3D :: proc(e: ^Elevator3D) {
 		transform,
 	)
 	applyLightToShader(e.panelMaterial.shader)
-	rl.DrawMesh(
-		e.mainModel.meshes[Elevator3DModelMeshes.Panel],
-		global.defaultMaterial3D,
-		transform,
-	)
+	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.Panel], e.panelMaterial, transform)
+
 	rl.DrawMesh(e.leftDoorModel.meshes[0], global.defaultMaterial3D, e.leftDoorModel.transform)
 	rl.DrawMesh(e.rightDoorModel.meshes[0], global.defaultMaterial3D, e.rightDoorModel.transform)
 }
-renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture) {
-	rl.BeginTextureMode(renderTexture)
-	rl.BeginBlendMode(.SUBTRACT_COLORS)
-	rl.DrawRectangle(0, 0, renderTexture.texture.width, renderTexture.texture.height, rl.WHITE)
-	rl.EndBlendMode()
-	rl.DrawCircle(32, 32, 16.0, rl.RED)
-	rl.EndTextureMode()
+renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^ElevatorPanelData) {
+	rl.EndMode3D()
+	beginNestedTextureMode(renderTexture)
+	buttonSprite := createSprite(getSpriteDef(.ElevatorPanelButton))
+	for x in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.x {
+		for y in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.y {
+			pos := rl.Vector2{f32(x), f32(y)} * data.buttonSeparation + data.buttonOffset
+			setSpriteFrame(&buttonSprite, data.buttonState[x][y])
+			drawSpriteEx(buttonSprite, pos, {1.0, 1.0})
+		}
+	}
+	endNestedTextureMode()
+	rl.BeginMode3D(global.camera3D)
 }
 destroyElevator3D :: proc(e: ^Elevator3D) {
 	unloadMaterialMapOnly(e.wallMaterial)

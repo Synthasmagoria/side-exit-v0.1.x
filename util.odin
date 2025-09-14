@@ -2,6 +2,7 @@ package game
 import "core:c"
 import "core:fmt"
 import "core:math"
+import "core:math/linalg"
 import "core:reflect"
 import rl "lib/raylib"
 import rlgl "lib/raylib/rlgl"
@@ -78,6 +79,9 @@ pointInRec :: proc(point: rl.Vector2, rectangle: rl.Rectangle) -> bool {
 		point.y < rectangle.y + rectangle.height \
 	)
 }
+pointInCircle :: proc(point: rl.Vector2, circlePosition: rl.Vector2, circleRadius: f32) -> bool {
+	return linalg.distance(point, circlePosition) < circleRadius
+}
 recInRec :: proc(a: rl.Rectangle, b: rl.Rectangle) -> bool {
 	return(
 		a.x + a.width >= b.x &&
@@ -136,6 +140,7 @@ drawRenderTextureScaledToScreenBuffer :: proc(rtex: rl.RenderTexture) {
 	src := getTextureRecYflip(rtex.texture)
 	rl.DrawTexturePro(rtex.texture, src, dest, {0.0, 0.0}, 0.0, rl.WHITE)
 }
+
 drawTextureRecDest :: proc(tex: rl.Texture, dest: rl.Rectangle) {
 	rl.DrawTexturePro(tex, getTextureRec(tex), dest, rl.Vector2{0.0, 0.0}, 0.0, rl.WHITE)
 }

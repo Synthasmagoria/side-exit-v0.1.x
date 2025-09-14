@@ -131,6 +131,11 @@ global := Global {
 	},
 }
 
+/*
+    TODO:
+    Starting/ending texture mode while in mode 2d/3d sets some state that makes stuff disappear
+    For this to work normally 2d/3d mode needs to be begin/end as well
+*/
 beginNestedTextureMode :: proc(renderTexture: rl.RenderTexture) {
 	if global.currentRenderTexture == nil {
 		global.currentRenderTexture = renderTexture
@@ -143,6 +148,7 @@ beginNestedTextureMode :: proc(renderTexture: rl.RenderTexture) {
 	}
 }
 endNestedTextureMode :: proc() {
+	g := global
 	if global.currentRenderTexture == nil {
 		panic("No render texture to pop off the stack")
 	} else {
@@ -189,10 +195,10 @@ main :: proc() {
 
 	init(gameAlloc)
 	defer deinit()
-	gameRenderTex := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
-	defer rl.UnloadRenderTexture(gameRenderTex)
-	renderTex3D := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
-	defer rl.UnloadRenderTexture(renderTex3D)
+	gameRenderTexture := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
+	defer rl.UnloadRenderTexture(gameRenderTexture)
+	renderTexture3D := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
+	defer rl.UnloadRenderTexture(renderTexture3D)
 
 	regenerateChunkWorld(&global.chunkWorld)
 
@@ -238,8 +244,8 @@ main :: proc() {
 		updateChunkWorld(&global.chunkWorld, player.object^)
 		rl.ClearBackground(rl.BLACK)
 		rl.BeginDrawing()
-		beginNestedTextureMode(gameRenderTex)
-		rl.ClearBackground(rl.BLACK)
+		beginNestedTextureMode(gameRenderTexture)
+		rl.ClearBackground({0, 0, 0, 0})
 		rl.BeginMode2D(global.camera)
 		drawChunkWorld(&global.chunkWorld)
 		for object in globalGameObjects {
@@ -253,22 +259,24 @@ main :: proc() {
 		}
 		rl.EndMode2D()
 		endNestedTextureMode()
-		drawRenderTextureScaledToScreenBuffer(gameRenderTex)
+		drawRenderTextureScaledToScreenBuffer(gameRenderTexture)
 
 		if player3D.state == .Inactive && rl.IsKeyPressed(.ONE) {
 			movePlayer3D(&player3D, global.camera3D.position, PLAYER_3D_INSIDE_POSITION, .Looking)
 		}
 		updatePlayer3D(&player3D)
 
-		beginNestedTextureMode(renderTex3D)
-		rl.ClearBackground(rl.BLACK)
+		beginNestedTextureMode(renderTexture3D)
 		rl.BeginMode3D(currentCamera3D^)
+
 		rl.ClearBackground({0.0, 0.0, 0.0, 0.0})
-		rl.DrawGrid(10, 1.0)
 		drawElevator3D(&global.elevator3D)
+		rl.DrawGrid(10, 1.0)
+
 		rl.EndMode3D()
 		endNestedTextureMode()
-		drawRenderTextureScaledToScreenBuffer(renderTex3D)
+
+		drawRenderTextureScaledToScreenBuffer(renderTexture3D)
 		debugDrawGlobalCamera3DInfo(currentCamera3D^, 4, 4)
 		rl.EndDrawing()
 		mem.dynamic_arena_reset(&frameArena)

@@ -98,6 +98,7 @@ TextureName :: enum {
 	White32,
 	Elevator,
 	// ElevatorPanel,
+	ElevatorPanelButton,
 	// ElevatorPanelBg,
 	// ElevatorPanelButtonHint,
 	// ElevatorPanelButtonInputIndicator,
@@ -149,6 +150,7 @@ initSpriteDefs :: proc() {
 	_setSpriteDef(.SynthWalk, 24, 8.0)
 	_setSpriteDef(.SynthWalkBack, 24, 8.0)
 	_setSpriteDef(.InteractionIndicationArrow, 14, 8.0, {7.0, 7.0})
+	_setSpriteDef(.ElevatorPanelButton, 21, 1.0)
 }
 
 ShaderNames :: enum {
