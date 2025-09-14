@@ -2,6 +2,7 @@ package game
 import c "core:c/libc"
 import "core:fmt"
 import "core:math"
+import "core:math/rand"
 import "core:reflect"
 import rl "lib/raylib"
 
@@ -222,9 +223,14 @@ Elevator3DModelMeshes :: enum {
 ELEVATOR_3D_PANEL_RENDER_TEXTURE_WIDTH :: 180
 ElevatorPanelData :: struct {
 	buttonState:      [ELEVATOR_PANEL_BUTTON_COUNT.x][ELEVATOR_PANEL_BUTTON_COUNT.y]i32,
-	buttonOffset:     rl.Vector2,
 	buttonSeparation: rl.Vector2,
 	buttonArea:       rl.Rectangle,
+	knobState:        [2]f32,
+	knobSeparation:   rl.Vector2,
+	knobArea:         rl.Rectangle,
+	sliderState:      [3]f32,
+	sliderSeparation: rl.Vector2,
+	sliderArea:       rl.Rectangle,
 }
 elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 	if pointInRec(position, panel.buttonArea) {
@@ -239,19 +245,49 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 		buttonPosition :=
 			relativeButtonPositionFloored * panel.buttonSeparation +
 			buttonTextureSize / 2.0 +
-			{panel.buttonOffset.x, panel.buttonOffset.y}
+			{panel.buttonArea.x, panel.buttonArea.y}
 		buttonRadius := buttonTextureSize / 2.0
 		if pointInCircle(position, buttonPosition, buttonRadius) {
 			relativeButtonIndex := iVector2 {
 				i32(relativeButtonPositionFloored.x),
 				i32(relativeButtonPositionFloored.y),
 			}
+			rl.PlaySound(getSound(.ElevatorPanelButton))
 			if panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] == 1 {
 				panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] = 0
 			} else {
 				panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] = 1
 			}
 		}
+	} else if pointInRec(position, panel.knobArea) {
+		knobAreaPosition := rl.Vector2{panel.knobArea.x, panel.knobArea.y}
+		relativeKnobPosition := rl.Vector2 {
+			0.0,
+			(position.y - knobAreaPosition.y) / panel.knobSeparation.y,
+		}
+		relativeKnobPositionFloored := rl.Vector2 {
+			math.floor(relativeKnobPosition.x),
+			math.floor(relativeKnobPosition.y),
+		}
+		knobTexture := getTexture(.ElevatorPanelKnob)
+		knobTextureSize := getTextureSize(knobTexture)
+		knobPosition :=
+			knobAreaPosition +
+			relativeKnobPositionFloored * panel.knobSeparation +
+			knobTextureSize / 2.0
+		knobRadius := knobTextureSize.x / 2.0
+		if pointInCircle(position, knobPosition, knobRadius) {
+			knobIndex := int(relativeKnobPositionFloored.y)
+			panel.knobState[knobIndex] += 45.0
+			knobSounds := [?]rl.Sound {
+				getSound(.ElevatorKnob1),
+				getSound(.ElevatorKnob2),
+				getSound(.ElevatorKnob3),
+			}
+			rl.PlaySound(rand.choice(knobSounds[:]))
+		}
+	} else if pointInRec(position, panel.sliderArea) {
+
 	}
 }
 ELEVATOR_PANEL_BUTTON_COUNT: iVector2 : {3, 8}
@@ -282,6 +318,9 @@ createElevator3D :: proc() -> Elevator3D {
 		ELEVATOR_3D_PANEL_RENDER_TEXTURE_WIDTH,
 		panelRenderTextureHeight,
 	)
+	// panelMaterial := rl.LoadMaterialDefault()
+	// panelMaterial.shader = getShader(.AnimatedTexture3D)
+	// rl.SetMaterialTexture(&panelMaterial, .ALBEDO, panelRenderTexture.texture)
 
 	return Elevator3D {
 		mainModel = getModel(.Elevator),
@@ -293,14 +332,15 @@ createElevator3D :: proc() -> Elevator3D {
 		panelMaterial = loadPassthroughMaterial3D(panelRenderTexture.texture),
 		panelRenderTexture = panelRenderTexture,
 		panelData = {
-			buttonOffset = {21.0, 90.0},
-			buttonSeparation = {24.0, 24.0},
 			buttonArea = {
 				21.0,
 				90.0,
 				24.0 * f32(ELEVATOR_PANEL_BUTTON_COUNT.x),
 				24.0 * f32(ELEVATOR_PANEL_BUTTON_COUNT.y),
 			},
+			buttonSeparation = {24.0, 24.0},
+			knobArea = {110.0, 90.0, 44.0, 44.0 * 2},
+			knobSeparation = {0.0, 44.0},
 		},
 		lightFrameIndex = 1.0,
 	}
@@ -324,6 +364,8 @@ drawElevator3D :: proc(e: ^Elevator3D) {
 	setShaderValue(e.lightMaterial.shader, "frameIndex", &e.lightFrameIndex)
 	lightFrameCount: int = 2
 	setShaderValue(e.lightMaterial.shader, "frameCount", &lightFrameCount)
+	lightFlipY: int = 0
+	setShaderValue(e.lightMaterial.shader, "flipY", &lightFlipY)
 	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.Floor], e.floorMaterial, transform)
 
 	applyLightToShader(e.lightMaterial.shader)
@@ -335,7 +377,14 @@ drawElevator3D :: proc(e: ^Elevator3D) {
 		global.defaultMaterial3D,
 		transform,
 	)
+
 	applyLightToShader(e.panelMaterial.shader)
+	panelFrameIndex: f32 = 0.0
+	setShaderValue(e.panelMaterial.shader, "frameIndex", &e.lightFrameIndex)
+	panelFrameCount: int = 1
+	setShaderValue(e.panelMaterial.shader, "frameCount", &panelFrameCount)
+	panelFlipY: int = 1
+	setShaderValue(e.panelMaterial.shader, "flipY", &panelFlipY)
 	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.Panel], e.panelMaterial, transform)
 
 	rl.DrawMesh(e.leftDoorModel.meshes[0], global.defaultMaterial3D, e.leftDoorModel.transform)
@@ -347,11 +396,38 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 	buttonSprite := createSprite(getSpriteDef(.ElevatorPanelButton))
 	for x in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.x {
 		for y in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.y {
-			pos := rl.Vector2{f32(x), f32(y)} * data.buttonSeparation + data.buttonOffset
+			pos :=
+				rl.Vector2{f32(x), f32(y)} * data.buttonSeparation +
+				{data.buttonArea.x, data.buttonArea.y}
 			setSpriteFrame(&buttonSprite, data.buttonState[x][y])
 			drawSpriteEx(buttonSprite, pos, {1.0, 1.0})
 		}
 	}
+
+	knobTexture := getTexture(.ElevatorPanelKnob)
+	knobTextureSize := getTextureSize(knobTexture)
+	knobTextureOrigin := knobTextureSize / 2.0
+	knobTextureSource := getTextureRec(knobTexture)
+	knobFirstPosition := rl.Vector2{data.knobArea.x, data.knobArea.y}
+	rl.DrawTexturePro(
+		knobTexture,
+		knobTextureSource,
+		getTextureDestinationRectangle(knobTexture, knobFirstPosition + knobTextureOrigin),
+		knobTextureOrigin,
+		data.knobState[0],
+		rl.WHITE,
+	)
+	rl.DrawTexturePro(
+		knobTexture,
+		knobTextureSource,
+		getTextureDestinationRectangle(
+			knobTexture,
+			knobFirstPosition + data.knobSeparation + knobTextureOrigin,
+		),
+		knobTextureOrigin,
+		data.knobState[1],
+		rl.WHITE,
+	)
 	endNestedTextureMode()
 	rl.BeginMode3D(global.camera3D)
 }

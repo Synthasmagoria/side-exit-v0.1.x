@@ -15,6 +15,7 @@ uniform int frameCount;
 uniform float frameIndex;
 uniform mat4 mvp;
 uniform mat4 matModel;
+uniform int flipY;
 
 #include "include/matrixUtil.glsl"
 
@@ -24,7 +25,12 @@ void main() {
 
     float frameWidth = 1.0 / float(frameCount);
     float frameOffset = frameWidth * mod(frameIndex, float(frameCount));
-    fragTexCoord = vertexTexCoord * vec2(frameWidth, 1.0) + vec2(frameOffset, 0.0);
+    if (flipY == 1) {
+        vec2 texCoord = vec2(vertexTexCoord.x, 1.0 - vertexTexCoord.y);
+        fragTexCoord = texCoord * vec2(frameWidth, 1.0) + vec2(frameOffset, 0.0);
+    } else {
+        fragTexCoord = vertexTexCoord * vec2(frameWidth, 1.0) + vec2(frameOffset, 0.0);
+    }
 
     mat3 matNormal = transpose(inverse(mat3(matModel)));
     fragNormal = normalize(matNormal * vertexNormal);
