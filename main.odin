@@ -99,6 +99,7 @@ Global :: struct {
 	elevator3D:           Elevator3D,
 	camera:               rl.Camera2D,
 	camera3D:             rl.Camera3D,
+	player3D:             Player3D,
 	lights3D:             [MAX_LIGHTS]Light3D,
 	defaultMaterial3D:    rl.Material,
 	debugCamera3D:        rl.Camera3D,
@@ -209,7 +210,7 @@ main :: proc() {
 
 	// Game init
 	global.elevator3D = createElevator3D()
-	player3D := createPlayer3D()
+	global.player3D = createPlayer3D()
 
 	elevator := createElevator(context.allocator, {160.0, 202.0})
 	player := createPlayer(context.allocator, {64.0, 64.0})
@@ -236,9 +237,6 @@ main :: proc() {
 			rl.DisableCursor()
 			currentCamera3D = &global.debugCamera3D
 		}
-		if rl.IsMouseButtonPressed(.LEFT) {
-			player.object.pos = rl.GetMousePosition()
-		}
 		global.camera.offset =
 			getObjCenterAbs(player.object^) * -1.0 + {WINDOW_WIDTH, WINDOW_HEIGHT} / 2.0
 		updateChunkWorld(&global.chunkWorld, player.object^)
@@ -260,11 +258,8 @@ main :: proc() {
 		rl.EndMode2D()
 		endNestedTextureMode()
 		drawRenderTextureScaledToScreenBuffer(gameRenderTexture)
-
-		if player3D.state == .Inactive && rl.IsKeyPressed(.ONE) {
-			movePlayer3D(&player3D, global.camera3D.position, PLAYER_3D_INSIDE_POSITION, .Looking)
-		}
-		updatePlayer3D(&player3D)
+		updatePlayer3D(&global.player3D)
+		updateElevator3D(&global.elevator3D)
 
 		beginNestedTextureMode(renderTexture3D)
 		rl.BeginMode3D(currentCamera3D^)

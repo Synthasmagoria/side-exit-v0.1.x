@@ -164,6 +164,7 @@ ElevatorState :: enum {
 	Gone,
 	Arriving,
 	Interactable,
+	PlayerInside,
 	Leaving,
 }
 ElevatorArrivingStateData :: struct {
@@ -178,7 +179,6 @@ Elevator :: struct {
 	interactionArrowSpr:  Sprite,
 	drawOffset:           rl.Vector2,
 	object:               ^GameObject,
-	player:               ^Player,
 	state:                ElevatorState,
 	arrivingStateData:    ElevatorArrivingStateData,
 	leavingStateData:     ElevatorLeavingStateData,
@@ -235,7 +235,7 @@ updateElevator :: proc(self: ^Elevator) {
 					self.drawInteractionArrow = true
 					if rl.IsKeyPressed(.UP) {
 						player.frozen = 1
-						//setElevatorState(self, .PanelFadeIn)
+						setElevatorState(self, .PlayerInside)
 						break
 					}
 				} else {
@@ -243,6 +243,8 @@ updateElevator :: proc(self: ^Elevator) {
 				}
 			}
 		}
+	case .PlayerInside:
+
 	case .Leaving:
 		self.drawOffset = updateAndStepTween(&self.leavingStateData.movementTween).(rl.Vector2)
 		self.blend.a = updateAndStepTween(&self.leavingStateData.alphaTween).(u8)
@@ -273,7 +275,7 @@ setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
 	case .Interactable:
 		self.drawInteractionArrow = false
 	case .Arriving:
-		rl.PlaySound(getSound(.ElevatorArrive))
+	//rl.PlaySound(getSound(.ElevatorArrive))
 	}
 	self.state = newState
 	switch (self.state) {
@@ -288,6 +290,16 @@ setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
 		)
 		self.arrivingStateData.alphaTween = createTween(TweenU8Range{0, 255}, .Linear, 0.7)
 	case .Interactable:
+	case .PlayerInside:
+		if player := getFirstGameObjectOfType(Player); player != nil {
+			player.frozen = 1
+			movePlayer3D(
+				&global.player3D,
+				PLAYER_3D_OUTSIDE_POSITION,
+				PLAYER_3D_INSIDE_POSITION,
+				.Looking,
+			)
+		}
 	case .Leaving:
 		self.blend = rl.WHITE
 		self.leavingStateData.movementTween = createTween(

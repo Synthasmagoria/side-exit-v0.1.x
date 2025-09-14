@@ -25,6 +25,9 @@ SoundName :: enum {
 	ElevatorArrive2,
 	PlayerJump,
 	PlayerAirJump,
+	ElevatorDoor1,
+	ElevatorDoor2,
+	ElevatorDoor3,
 	ElevatorPanelButton,
 	ElevatorPanelKnob1,
 	ElevatorPanelKnob2,
@@ -105,6 +108,7 @@ TextureName :: enum {
 	ElevatorPanelButton,
 	ElevatorPanelKnob,
 	ElevatorPanelSlider,
+	ElevatorPanelBigButtons,
 	ElevatorWall3D,
 	ElevatorLights3D,
 	InteractionIndicationArrow,
@@ -859,8 +863,24 @@ tweenIsWaiting :: proc(tween: Tween) -> bool {
 finishTween :: proc(tween: ^Tween) {
 	tween.t = tween.dur + tween.delay
 }
+getTweenProgressDurationOnly :: proc(tween: Tween) -> f32 {
+	return math.max(0.0, (tween.t - tween.delay) / tween.dur)
+}
+getTweenProgress :: proc(tween: Tween) -> f32 {
+	return tween.t / (tween.dur + tween.delay)
+}
 _createFinishedTween :: proc(range: TweenRange) -> Tween {
 	return {range = range, curve = .Linear, dur = 1.0, t = 1.0, delay = 0.0}
+}
+tweenInvert :: proc(tween: Tween, tweenRangeType: $T) -> Tween {
+	invertedTween := createTween(
+		T{from = tween.range.(T).to, to = tween.range.(T).from},
+		tween.curve,
+		tween.dur,
+		tween.delay,
+	)
+	tween.t = (1.0 - getTweenProgress(tween)) * (tween.dur + tween.delay)
+	return tween
 }
 createFinishedTween :: proc {
 	createFinishedTweenF32,
@@ -883,4 +903,19 @@ createFinishedTweenVector3 :: proc(val: rl.Vector3) -> Tween {
 }
 createFinishedTweenU8 :: proc(val: u8) -> Tween {
 	return _createFinishedTween(TweenU8Range{val, val})
+}
+
+Timer :: struct {
+	time:     f32,
+	duration: f32,
+}
+createTimer :: proc(duration: f32) -> Timer {
+	assert(duration > 0.0)
+	return {time = 0.0, duration = duration}
+}
+updateTimer :: proc(timer: ^Timer) {
+	timer.time = math.min(timer.time + TARGET_TIME_STEP, timer.duration)
+}
+isTimerFinished :: proc(timer: Timer) -> bool {
+	return timer.time == timer.duration
 }

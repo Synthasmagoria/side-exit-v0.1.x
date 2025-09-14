@@ -78,16 +78,33 @@ setPlayer3DState :: proc(player: ^Player3D, nextState: Player3DState) {
 	if player.state == nextState {
 		return
 	}
+	previousState := player.state
 	player.state = nextState
 	switch player.state {
 	case .Uninitialized:
 	case .Inactive:
 		global.camera3D.position = PLAYER_3D_OUTSIDE_POSITION
 		player3DApplyCameraRotation(player)
+		if previousState != .Uninitialized {
+			if player := getFirstGameObjectOfType(Player); player != nil {
+				player.frozen = 0
+			} else {
+				panic("Couldn't make player frozen because there was no player")
+			}
+			if elevator := getFirstGameObjectOfType(Elevator); elevator != nil {
+				setElevatorState(elevator, .Interactable)
+			} else {
+				panic("Couldn't make elevator interactable because there was no elevator")
+			}
+		}
 	case .Looking:
 		player.lookingStateData.yawTween = createFinishedTween(player.yaw)
 		player.lookingStateData.pitchTween = createFinishedTween(player.pitch)
 	case .Moving:
+		if previousState == .Inactive {
+			setElevator3DDoorState(&global.elevator3D, true, true, 0.0)
+			setElevator3DDoorState(&global.elevator3D, false, false, 5.0)
+		}
 	case .Panel:
 	}
 }
@@ -151,10 +168,22 @@ updatePlayer3D :: proc(player: ^Player3D) {
 		player3DApplyCameraRotation(player)
 
 		if tweenIsFinished(data.yawTween) && tweenIsFinished(data.pitchTween) {
-			if data.horizontalState == .Forward &&
-			   data.verticalState == .Middle &&
-			   rl.IsKeyPressed(.LEFT_SHIFT) {
-				movePlayer3D(player, global.camera3D.position, PLAYER_3D_PANEL_POSITION, .Panel)
+			if data.horizontalState == .Forward && data.verticalState == .Middle {
+				if rl.IsKeyPressed(.LEFT_SHIFT) {
+					movePlayer3D(
+						player,
+						global.camera3D.position,
+						PLAYER_3D_PANEL_POSITION,
+						.Panel,
+					)
+				} else if rl.IsKeyPressed(.Z) && isElevator3DDoorOpen(&global.elevator3D) {
+					movePlayer3D(
+						player,
+						global.camera3D.position,
+						PLAYER_3D_OUTSIDE_POSITION,
+						.Inactive,
+					)
+				}
 			}
 		}
 	case .Moving:
@@ -222,15 +251,19 @@ Elevator3DModelMeshes :: enum {
 }
 ELEVATOR_3D_PANEL_RENDER_TEXTURE_WIDTH :: 180
 ElevatorPanelData :: struct {
-	buttonState:      [ELEVATOR_PANEL_BUTTON_COUNT.x][ELEVATOR_PANEL_BUTTON_COUNT.y]i32,
-	buttonSeparation: rl.Vector2,
-	buttonArea:       rl.Rectangle,
-	knobState:        [2]f32,
-	knobSeparation:   rl.Vector2,
-	knobArea:         rl.Rectangle,
-	sliderState:      [3]f32,
-	sliderSeparation: rl.Vector2,
-	sliderArea:       rl.Rectangle,
+	buttonState:         [ELEVATOR_PANEL_BUTTON_COUNT.x][ELEVATOR_PANEL_BUTTON_COUNT.y]i32,
+	buttonSeparation:    rl.Vector2,
+	buttonArea:          rl.Rectangle,
+	knobState:           [2]f32,
+	knobSeparation:      rl.Vector2,
+	knobArea:            rl.Rectangle,
+	sliderState:         [3]f32,
+	sliderSeparation:    rl.Vector2,
+	sliderArea:          rl.Rectangle,
+	bigButtonSeparation: rl.Vector2,
+	bigButtonArea:       rl.Rectangle,
+	bigButtonSize:       rl.Vector2,
+	screenArea:          rl.Rectangle,
 }
 elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 	if pointInRec(position, panel.buttonArea) {
@@ -292,6 +325,34 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 		sliderIndex := i32(math.floor(relativePosition.x / panel.sliderSeparation.x))
 		panel.sliderState[sliderIndex] = rand.float32() * panel.sliderArea.height
 		rl.PlaySound(getSound(.ElevatorPanelSlider))
+	} else if pointInRec(position, panel.bigButtonArea) {
+		bigButtonAreaStart := rl.Vector2{panel.bigButtonArea.x, panel.bigButtonArea.y}
+		relativePosition := (position - bigButtonAreaStart) / panel.bigButtonSeparation
+		relativePositionFloored := rl.Vector2 {
+			math.floor(relativePosition.x),
+			math.floor(relativePosition.y),
+		}
+		bigButtonPosition :=
+			bigButtonAreaStart + panel.bigButtonSeparation * relativePositionFloored
+		bigButtonRectangle := rl.Rectangle {
+			bigButtonAreaStart.x,
+			bigButtonAreaStart.y,
+			panel.bigButtonSize.x,
+			panel.bigButtonSize.y,
+		}
+		if pointInRec(position, bigButtonRectangle) {
+			switch (int(relativePositionFloored.x)) {
+			case 0:
+				rl.PlaySound(getSound(.ElevatorPanelButton))
+				setElevator3DDoorState(&global.elevator3D, true, false, 0.4)
+			case 1:
+				rl.PlaySound(getSound(.ElevatorPanelButton))
+				setElevator3DDoorState(&global.elevator3D, false, false, 0.4)
+			case 2:
+				rl.PlaySound(getSound(.ElevatorPanelButton))
+			// TODO: Play ringing sound
+			}
+		}
 	}
 }
 ELEVATOR_PANEL_BUTTON_COUNT: iVector2 : {3, 8}
@@ -307,6 +368,30 @@ Elevator3D :: struct {
 	panelMaterial:      rl.Material,
 	panelData:          ElevatorPanelData,
 	lightFrameIndex:    f32,
+	doorsTween:         Tween,
+}
+setElevator3DDoorState :: proc(e: ^Elevator3D, open: bool, instant: bool, delay: f32) {
+	if instant {
+		if open {
+			e.doorsTween = createFinishedTween(1.0)
+		} else {
+			e.doorsTween = createFinishedTween(0.0)
+		}
+	} else {
+		if open {
+			e.doorsTween = createTween(TweenF32Range{0.0, 1.0}, .Hermite, 2.5, delay)
+		} else {
+			e.doorsTween = createTween(TweenF32Range{1.0, 0.0}, .Hermite, 2.5, delay)
+		}
+	}
+}
+isElevator3DDoorOpen :: proc(e: ^Elevator3D) -> bool {
+	return(
+		(e.doorsTween.range.(TweenF32Range).to == 1.0 &&
+			getTweenProgressDurationOnly(e.doorsTween) > 0.5) ||
+		(e.doorsTween.range.(TweenF32Range).to == 0.0 &&
+				getTweenProgressDurationOnly(e.doorsTween) < 0.5) \
+	)
 }
 createElevator3D :: proc() -> Elevator3D {
 	lightMaterial := rl.LoadMaterialDefault()
@@ -334,17 +419,22 @@ createElevator3D :: proc() -> Elevator3D {
 		panelData = {
 			buttonArea = {
 				21.0,
-				90.0,
+				60.0,
 				24.0 * f32(ELEVATOR_PANEL_BUTTON_COUNT.x),
 				24.0 * f32(ELEVATOR_PANEL_BUTTON_COUNT.y),
 			},
 			buttonSeparation = {24.0, 24.0},
-			knobArea = {110.0, 90.0, 44.0, 44.0 * 2},
+			knobArea = {110.0, 60.0, 44.0, 44.0 * 2},
 			knobSeparation = {0.0, 44.0},
-			sliderArea = {101.0, 197.0, 24.0 * 3.0, 80.0},
+			sliderArea = {101.0, 167.0, 24.0 * 3.0, 80.0},
 			sliderSeparation = {24.0, 0.0},
+			bigButtonArea = {14.0, 263.0, 39.0 * 3.0, 30.0},
+			bigButtonSeparation = {39.0, 0.0},
+			bigButtonSize = {30.0, 30.0},
+			screenArea = {16.0, 12.0, 148.0, 38.0},
 		},
 		lightFrameIndex = 1.0,
+		doorsTween = createFinishedTween(f32(1.0)),
 	}
 }
 toggleElevatorLights :: proc(e: ^Elevator3D) {
@@ -354,6 +444,20 @@ toggleElevatorLights :: proc(e: ^Elevator3D) {
 		e.lightFrameIndex = 0.0
 	}
 	setLightStatus(i32(e.lightFrameIndex))
+}
+updateElevator3D :: proc(e: ^Elevator3D) {
+	tweenWasWaiting := tweenIsWaiting(e.doorsTween)
+	doorOpenProgress := updateAndStepTween(&e.doorsTween).(f32)
+	e.leftDoorModel.transform = rl.MatrixTranslate(0.0, 0.0, doorOpenProgress * 2.0)
+	e.rightDoorModel.transform = rl.MatrixTranslate(0.0, 0.0, -doorOpenProgress * 2.0)
+	if tweenWasWaiting && !tweenIsWaiting(e.doorsTween) {
+		sounds := [?]rl.Sound {
+			getSound(.ElevatorDoor1),
+			getSound(.ElevatorDoor2),
+			getSound(.ElevatorDoor3),
+		}
+		rl.PlaySound(rand.choice(sounds[:]))
+	}
 }
 drawElevator3D :: proc(e: ^Elevator3D) {
 	g := global
@@ -457,6 +561,11 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 			sliderAreaPosition + f32(i) * data.sliderSeparation + {0.0, data.sliderState[i]}
 		rl.DrawTextureV(sliderTexture, sliderPosition, rl.WHITE)
 	}
+
+	bigButtonTexture := getTexture(.ElevatorPanelBigButtons)
+	rl.DrawTextureV(bigButtonTexture, {data.bigButtonArea.x, data.bigButtonArea.y}, rl.WHITE)
+
+	rl.DrawRectangleRec(data.screenArea, rl.BLACK)
 
 	endNestedTextureMode()
 	rl.BeginMode3D(global.camera3D)
