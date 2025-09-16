@@ -75,20 +75,12 @@ getTextureRecYflip :: proc(tex: rl.Texture) -> rl.Rectangle {
 	return {0.0, f32(tex.height), f32(tex.width), -f32(tex.height)}
 }
 
-pointInRec :: proc(point: rl.Vector2, rectangle: rl.Rectangle) -> bool {
-	return(
-		point.x >= rectangle.x &&
-		point.x < rectangle.x + rectangle.width &&
-		point.y >= rectangle.y &&
-		point.y < rectangle.y + rectangle.height \
-	)
-}
 pointInCircle :: proc(point: rl.Vector2, circlePosition: rl.Vector2, circleRadius: f32) -> bool {
 	return linalg.distance(point, circlePosition) < circleRadius
 }
 rectangleInRectangle :: proc {
 	rectangleInRectangleF32,
-	rectangleInRectangleI32
+	rectangleInRectangleI32,
 }
 rectangleInRectangleF32 :: proc(a: rl.Rectangle, b: rl.Rectangle) -> bool {
 	return(
@@ -106,13 +98,15 @@ rectangleInRectangleI32 :: proc(a: iRectangle, b: iRectangle) -> bool {
 		a.y < b.y + b.height \
 	)
 }
-pointInIrec :: proc(point: iVector2, rectangle: iRectangle) -> bool {
-	return(
-		point.x >= rectangle.x &&
-		point.x < rectangle.x + rectangle.width &&
-		point.y >= rectangle.y &&
-		point.y < rectangle.y + rectangle.height \
-	)
+pointInRectangle :: proc {
+    pointInRectangleF32,
+    pointInRectangleI32,
+}
+pointInRectangleF32 :: proc(point: rl.Vector2, rectangle: rl.Rectangle) -> bool {
+	return( point.x >= rectangle.x && point.x < rectangle.x + rectangle.width && point.y >= rectangle.y && point.y < rectangle.y + rectangle.height)
+}
+pointInRectangleI32 :: proc(point: iVector2, rectangle: iRectangle) -> bool {
+	return(point.x >= rectangle.x && point.x < rectangle.x + rectangle.width && point.y >= rectangle.y && point.y < rectangle.y + rectangle.height)
 }
 shiftRectangle :: proc(rec: rl.Rectangle, off: rl.Vector2) -> rl.Rectangle {
 	return {rec.x + off.x, rec.y + off.y, rec.width, rec.height}

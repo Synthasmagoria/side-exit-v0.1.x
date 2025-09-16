@@ -266,7 +266,7 @@ ElevatorPanelData :: struct {
 	screenArea:          rl.Rectangle,
 }
 elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
-	if pointInRec(position, panel.buttonArea) {
+	if pointInRectangle(position, panel.buttonArea) {
 		relativeButtonPosition :=
 			(position - {panel.buttonArea.x, panel.buttonArea.y}) / panel.buttonSeparation
 		relativeButtonPositionFloored := rl.Vector2 {
@@ -292,7 +292,7 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 				panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] = 1
 			}
 		}
-	} else if pointInRec(position, panel.knobArea) {
+	} else if pointInRectangle(position, panel.knobArea) {
 		knobAreaPosition := rl.Vector2{panel.knobArea.x, panel.knobArea.y}
 		relativeKnobPosition := rl.Vector2 {
 			0.0,
@@ -319,13 +319,13 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 			}
 			rl.PlaySound(rand.choice(knobSounds[:]))
 		}
-	} else if pointInRec(position, panel.sliderArea) {
+	} else if pointInRectangle(position, panel.sliderArea) {
 		sliderAreaStart := rl.Vector2{panel.sliderArea.x, panel.sliderArea.y}
 		relativePosition := position - sliderAreaStart
 		sliderIndex := i32(math.floor(relativePosition.x / panel.sliderSeparation.x))
 		panel.sliderState[sliderIndex] = rand.float32() * panel.sliderArea.height
 		rl.PlaySound(getSound(.ElevatorPanelSlider))
-	} else if pointInRec(position, panel.bigButtonArea) {
+	} else if pointInRectangle(position, panel.bigButtonArea) {
 		bigButtonAreaStart := rl.Vector2{panel.bigButtonArea.x, panel.bigButtonArea.y}
 		relativePosition := (position - bigButtonAreaStart) / panel.bigButtonSeparation
 		relativePositionFloored := rl.Vector2 {
@@ -340,7 +340,7 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 			panel.bigButtonSize.x,
 			panel.bigButtonSize.y,
 		}
-		if pointInRec(position, bigButtonRectangle) {
+		if pointInRectangle(position, bigButtonRectangle) {
 			switch (int(relativePositionFloored.x)) {
 			case 0:
 				rl.PlaySound(getSound(.ElevatorPanelButton))

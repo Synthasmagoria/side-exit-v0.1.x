@@ -137,12 +137,32 @@ generateWorld :: proc(area: iRectangle, threshold: f32, seed: i64, frequency: f6
 			blocks[x + y * area.width] = cast(byte)noiseValue
 		}
 	}
-	for x in 0 ..< area.width {
-		for y in 0 ..< area.height {
-			if blocks[x + y * area.height] == 1 {
-				collisionRectangle := iRectangle {x * GENERATION_BLOCK_SIZE, y * GENERATION_BLOCK_SIZE, GENERATION_BLOCK_SIZE, GENERATION_BLOCK_SIZE}
+	blockStartPosition: iVector2
+	wasPreviousBlockSolid: bool
+	for y in 0 ..< area.height {
+	    for x in 0 ..< area.width {
+		    isBlockSolid := blocks[x + y * area.height] == 1
+			if !wasPreviousBlockSolid && isBlockSolid {
+			    blockStartPosition = {x, y}
+			} else if wasPreviousBlockSolid && !isBlockSolid {
+			    collisionRectangle := iRectangle{
+					(blockStartPosition.x + area.x) * GENERATION_BLOCK_SIZE,
+					(blockStartPosition.y + area.y) * GENERATION_BLOCK_SIZE,
+					(x - blockStartPosition.x + 1) * GENERATION_BLOCK_SIZE,
+					GENERATION_BLOCK_SIZE,
+				}
 				append(&global.collisionRectangles, collisionRectangle)
 			}
+            if isBlockSolid && x + 1 == area.width {
+                collisionRectangle := iRectangle{
+                   	(blockStartPosition.x + area.x) * GENERATION_BLOCK_SIZE,
+                   	(blockStartPosition.y + area.y) * GENERATION_BLOCK_SIZE,
+                   	(x - blockStartPosition.x + 1) * GENERATION_BLOCK_SIZE,
+                   	GENERATION_BLOCK_SIZE,
+                }
+                append(&global.collisionRectangles, collisionRectangle)
+			}
+			wasPreviousBlockSolid = isBlockSolid
 		}
 	}
 }

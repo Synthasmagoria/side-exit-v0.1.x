@@ -232,7 +232,7 @@ updateElevator :: proc(self: ^Elevator) {
 				setElevatorState(self, .Leaving)
 				break
 			} else {
-				if pointInRec(
+				if pointInRectangle(
 					getObjectCenterAbsolute(player.object^),
 					getObjectAbsoluteCollisionRectangle(self.object, {0.0, 0.0}),
 				) {
