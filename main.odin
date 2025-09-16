@@ -3,6 +3,7 @@ package game
 import libc "core:c/libc"
 import "core:fmt"
 import "core:math"
+import "core:math/noise"
 import mem "core:mem"
 import rl "lib/raylib"
 
@@ -20,8 +21,13 @@ init :: proc(gameAlloc: Alloc) {
 	loadSounds()
 	initSpriteDefs()
 	initLights()
+	initLoadLevelProcs()
 	global.defaultMaterial3D = loadPassthroughMaterial3D()
 	global.renderTextureStack = make([dynamic]rl.RenderTexture, 0, 5, gameAlloc)
+	global.gameObjects = make([dynamic]GameObject, 0, 100, gameAlloc)
+	global.gameObjectIdCounter = min(i32)
+	global.levelIndex = .UnrulyLand
+	global.changeLevel = true
 }
 
 deinit :: proc() {
@@ -93,7 +99,77 @@ debugDrawGlobalCamera3DInfo :: proc(cam: rl.Camera3D, x: i32, y: i32) {
 		rl.BLACK,
 	)
 }
+
+Level :: enum {
+	Hub,
+	UnrulyLand,
+	_Count,
+}
+loadLevelProcs: [Level._Count]proc(_: Alloc)
+initLoadLevelProcs :: proc() {
+	loadLevelProcs[Level.Hub] = loadLevel_Hub
+	loadLevelProcs[Level.UnrulyLand] = loadLevel_UnrulyLand
+}
+loadLevelGeneral :: proc(levelAlloc: Alloc) {
+	global.elevator = createElevator(levelAlloc)
+	global.elevator.object.pos = {160.0, 202.0}
+	global.player = createPlayer(levelAlloc)
+}
+loadLevel_Hub :: proc(levelAlloc: Alloc) {
+	loadLevelGeneral(levelAlloc)
+}
+loadLevel_UnrulyLand :: proc(levelAlloc: Alloc) {
+	loadLevelGeneral(levelAlloc)
+	generateWorld({-64, -64, 128, 128}, 0.5, 0, 8.0)
+	_ = createStarBackground(levelAlloc)
+}
+
+GENERATION_BLOCK_SIZE :: 16
+generateWorld :: proc(area: iRectangle, threshold: f32, seed: i64, frequency: f64) {
+	clear(&global.collisionRectangles)
+	blocks := make([dynamic]byte, area.width * area.height, area.width * area.height)
+	areaWidth := f64(area.width)
+	areaHeight := f64(area.height)
+	for x in 0 ..< area.width {
+		for y in 0 ..< area.height {
+			samplePosition := [2]f64{f64(x) / areaWidth * frequency, f64(y) / areaHeight * frequency}
+			noiseValue := math.step(threshold, noise.noise_2d(seed, samplePosition))
+			blocks[x + y * area.width] = cast(byte)noiseValue
+		}
+	}
+	for x in 0 ..< area.width {
+		for y in 0 ..< area.height {
+			if blocks[x + y * area.height] == 1 {
+				collisionRectangle := iRectangle {x * GENERATION_BLOCK_SIZE, y * GENERATION_BLOCK_SIZE, GENERATION_BLOCK_SIZE, GENERATION_BLOCK_SIZE}
+				append(&global.collisionRectangles, collisionRectangle)
+			}
+		}
+	}
+}
+doSolidCollision :: proc(hitbox: rl.Rectangle) -> Maybe(iRectangle) {
+	hitboxI32 := iRectangle{i32(hitbox.x), i32(hitbox.y), i32(hitbox.width), i32(hitbox.height)}
+	for rectangle in global.collisionRectangles {
+		if rectangleInRectangle(hitboxI32, rectangle) {
+			return rectangle
+		}
+	}
+	return nil
+}
+drawSolids :: proc() {
+    for rectangle in global.collisionRectangles {
+        rectangleF32 := rl.Rectangle {
+            f32(rectangle.x),
+            f32(rectangle.y),
+            f32(rectangle.width),
+            f32(rectangle.height),
+        }
+        rl.DrawRectangleRec(rectangleF32, rl.WHITE)
+    }
+}
+
 Global :: struct {
+	levelIndex:           Level,
+	changeLevel:          bool,
 	ambientLightingColor: rl.Vector4,
 	elevator:             ^Elevator,
 	elevator3D:           Elevator3D,
@@ -102,19 +178,26 @@ Global :: struct {
 	player:               ^Player,
 	player3D:             Player3D,
 	lights3D:             [MAX_LIGHTS]Light3D,
-	collisionRectangles:  ChunkDataRectangles,
-	collisionPosition:    iVector2,
+	collisionRectangles:  [dynamic]iRectangle,
 	defaultMaterial3D:    rl.Material,
+	debugCamera:          rl.Camera2D,
 	debugCamera3D:        rl.Camera3D,
 	debugMode:            bool,
 	currentRenderTexture: Maybe(rl.RenderTexture),
 	renderTextureStack:   [dynamic]rl.RenderTexture,
+	gameObjects:          [dynamic]GameObject,
+	gameObjectIdCounter:  i32,
 }
 global := Global {
 	ambientLightingColor = {0.1, 0.1, 0.12, 1.0},
-	collisionPosition = {-1, -1},
 	collisionRectangles = nil,
 	camera = {
+		offset = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},
+		target = {0.0, 0.0},
+		rotation = 0.0,
+		zoom = 1.0,
+	},
+	debugCamera = {
 		offset = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},
 		target = {0.0, 0.0},
 		rotation = 0.0,
@@ -205,68 +288,90 @@ main :: proc() {
 
 	init(gameAlloc)
 	defer deinit()
-	gameRenderTexture := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
-	defer rl.UnloadRenderTexture(gameRenderTexture)
-	renderTexture3D := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
-	defer rl.UnloadRenderTexture(renderTexture3D)
+	gameRenderTexture2D := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
+	defer rl.UnloadRenderTexture(gameRenderTexture2D)
+	gameRenderTexture3D := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
+	defer rl.UnloadRenderTexture(gameRenderTexture3D)
 
 	gameMusic := loadMusicStream(.KowloonSmokeBreak)
 	rl.PlayMusicStream(gameMusic)
-	gameObjects := make([dynamic]GameObject, context.allocator)
-	globalGameObjects = &gameObjects
 
-	global.elevator = createElevator(context.allocator, {160.0, 202.0})
-	global.player = createPlayer(context.allocator, {64.0, 64.0})
 	global.elevator3D = createElevator3D()
 	global.player3D = createPlayer3D()
-	_ = createChunkWorld(context.allocator)
 
 	mem.dynamic_arena_reset(&frameArena)
 
-	for object in globalGameObjects {
-		object.startProc(object.data)
-	}
 	for !rl.WindowShouldClose() {
+		if global.changeLevel {
+			mem.dynamic_arena_reset(&levelArena)
+			for object in global.gameObjects {
+				object.destroyProc(object.data)
+			}
+			clear(&global.gameObjects)
+			loadLevelProcs[global.levelIndex](levelAlloc)
+			for object in global.gameObjects {
+				object.startProc(object.data)
+			}
+			global.changeLevel = false
+		}
 		rl.UpdateMusicStream(gameMusic)
+
+		debugModePrevious := global.debugMode
 		if rl.IsKeyPressed(.BACKSPACE) {
 			global.debugMode = global.debugMode ? false : true
 		}
+		currentCamera := &global.camera
 		currentCamera3D := &global.camera3D
 		if global.debugMode {
-			rl.UpdateCamera(&global.debugCamera3D, .FIRST_PERSON)
-			if rl.IsKeyDown(.SPACE) {
-				rl.CameraMoveUp(&global.debugCamera3D, 5.4 * TARGET_TIME_STEP)
-			} else if rl.IsKeyDown(.LEFT_SHIFT) {
-				rl.CameraMoveUp(&global.debugCamera3D, -5.4 * TARGET_TIME_STEP)
+			if global.player3D.state != .Inactive && global.player3D.state != .Uninitialized {
+				rl.UpdateCamera(&global.debugCamera3D, .FIRST_PERSON)
+				if rl.IsKeyDown(.SPACE) {
+					rl.CameraMoveUp(&global.debugCamera3D, 5.4 * TARGET_TIME_STEP)
+				} else if rl.IsKeyDown(.LEFT_SHIFT) {
+					rl.CameraMoveUp(&global.debugCamera3D, -5.4 * TARGET_TIME_STEP)
+				}
+				rl.DisableCursor()
+				currentCamera3D = &global.debugCamera3D
+			} else {
+				if !debugModePrevious {
+					global.debugCamera.offset = global.camera.offset
+					global.debugCamera.target = global.camera.target
+				}
+				mouseWheelMovement := rl.GetMouseWheelMoveV()
+				if rl.IsMouseButtonDown(.MIDDLE) {
+					global.debugCamera.target -= rl.GetMouseDelta()
+				}
+				global.debugCamera.zoom += mouseWheelMovement.y * 0.02
+				currentCamera = &global.debugCamera
 			}
-			rl.DisableCursor()
-			currentCamera3D = &global.debugCamera3D
 		}
 		global.camera.offset =
-			getObjCenterAbs(global.player.object^) * -1.0 + {WINDOW_WIDTH, WINDOW_HEIGHT} / 2.0
+			getObjectCenterAbsolute(global.player.object^) * -1.0 +
+			{WINDOW_WIDTH, WINDOW_HEIGHT} / 2.0
 
 		rl.ClearBackground(rl.BLACK)
 		rl.BeginDrawing()
-		beginNestedTextureMode(gameRenderTexture)
+		beginNestedTextureMode(gameRenderTexture2D)
 		rl.ClearBackground({0, 0, 0, 0})
-		rl.BeginMode2D(global.camera)
-		for object in globalGameObjects {
+		rl.BeginMode2D(currentCamera^)
+		drawSolids()
+		for object in global.gameObjects {
 			object.updateProc(object.data)
 		}
-		for object in globalGameObjects {
+		for object in global.gameObjects {
 			object.drawProc(object.data)
 		}
-		for object in globalGameObjects {
+		for object in global.gameObjects {
 			object.drawEndProc(object.data)
 		}
 		rl.EndMode2D()
 		endNestedTextureMode()
-		drawRenderTextureScaledToScreenBuffer(gameRenderTexture)
+		drawRenderTextureScaledToScreenBuffer(gameRenderTexture2D)
 
 		updatePlayer3D(&global.player3D)
 		updateElevator3D(&global.elevator3D)
 
-		beginNestedTextureMode(renderTexture3D)
+		beginNestedTextureMode(gameRenderTexture3D)
 		rl.BeginMode3D(currentCamera3D^)
 
 		rl.ClearBackground({0.0, 0.0, 0.0, 0.0})
@@ -276,12 +381,12 @@ main :: proc() {
 		rl.EndMode3D()
 		endNestedTextureMode()
 
-		drawRenderTextureScaledToScreenBuffer(renderTexture3D)
+		drawRenderTextureScaledToScreenBuffer(gameRenderTexture3D)
 		debugDrawGlobalCamera3DInfo(currentCamera3D^, 4, 4)
 		rl.EndDrawing()
 		mem.dynamic_arena_reset(&frameArena)
 	}
-	for object in globalGameObjects {
+	for object in global.gameObjects {
 		object.destroyProc(object.data)
 	}
 }

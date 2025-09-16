@@ -86,7 +86,19 @@ pointInRec :: proc(point: rl.Vector2, rectangle: rl.Rectangle) -> bool {
 pointInCircle :: proc(point: rl.Vector2, circlePosition: rl.Vector2, circleRadius: f32) -> bool {
 	return linalg.distance(point, circlePosition) < circleRadius
 }
-recInRec :: proc(a: rl.Rectangle, b: rl.Rectangle) -> bool {
+rectangleInRectangle :: proc {
+	rectangleInRectangleF32,
+	rectangleInRectangleI32
+}
+rectangleInRectangleF32 :: proc(a: rl.Rectangle, b: rl.Rectangle) -> bool {
+	return(
+		a.x + a.width >= b.x &&
+		a.x < b.x + b.width &&
+		a.y + a.height >= b.y &&
+		a.y < b.y + b.height \
+	)
+}
+rectangleInRectangleI32 :: proc(a: iRectangle, b: iRectangle) -> bool {
 	return(
 		a.x + a.width >= b.x &&
 		a.x < b.x + b.width &&
@@ -102,7 +114,7 @@ pointInIrec :: proc(point: iVector2, rectangle: iRectangle) -> bool {
 		point.y < rectangle.y + rectangle.height \
 	)
 }
-recShift :: proc(rec: rl.Rectangle, off: rl.Vector2) -> rl.Rectangle {
+shiftRectangle :: proc(rec: rl.Rectangle, off: rl.Vector2) -> rl.Rectangle {
 	return {rec.x + off.x, rec.y + off.y, rec.width, rec.height}
 }
 

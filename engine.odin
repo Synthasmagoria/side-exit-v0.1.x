@@ -384,8 +384,6 @@ GameObject :: struct {
 	type:        typeid,
 }
 GameObjectFuncs :: struct {}
-globalGameObjects: ^[dynamic]GameObject = nil
-globalGameObjectIdCounter: i32 = min(i32)
 gameObjectEmptyProc :: proc(_: rawptr) {}
 createGameObject :: proc(
 	$T: typeid,
@@ -403,20 +401,20 @@ createGameObject :: proc(
 		drawEndProc = drawEndProc,
 		destroyProc = destroyProc,
 		data        = data,
-		id          = globalGameObjectIdCounter,
+		id          = global.gameObjectIdCounter,
 		type        = T,
 	}
-	append(globalGameObjects, object)
-	globalGameObjectIdCounter += 1
-	return &globalGameObjects[len(globalGameObjects) - 1]
+	append(&global.gameObjects, object)
+	global.gameObjectIdCounter += 1
+	return &global.gameObjects[len(global.gameObjects) - 1]
 }
 setGameObjectStartFunc :: proc()
 getGameObjectsOfType :: proc(type: typeid) -> [dynamic]^GameObject {
 	context.allocator = context.temp_allocator
 	objs := make([dynamic]^GameObject, 0, 10)
-	for i in 0 ..< len(globalGameObjects) {
-		if globalGameObjects[i].type == type {
-			append(&objs, &globalGameObjects[i])
+	for i in 0 ..< len(global.gameObjects) {
+		if global.gameObjects[i].type == type {
+			append(&objs, &global.gameObjects[i])
 		}
 	}
 	return objs
@@ -425,48 +423,58 @@ getGameObjectScreenPos :: proc(obj: ^GameObject) -> rl.Vector2 {
 	return obj.pos - global.camera.target + global.camera.offset
 }
 getFirstGameObjectOfType :: proc($T: typeid) -> ^T {
-	for i in 0 ..< len(globalGameObjects) {
-		if globalGameObjects[i].type == T {
-			return cast(^T)globalGameObjects[i].data
+	for i in 0 ..< len(global.gameObjects) {
+		if global.gameObjects[i].type == T {
+			return cast(^T)global.gameObjects[i].data
 		}
 	}
 	return nil
 }
 objectCollision :: proc(object: ^GameObject, offset: rl.Vector2) -> ^GameObject {
-	rec := getObjAbsColRec(object, offset)
-	for i in 0 ..< len(globalGameObjects) {
-		otherObject := &globalGameObjects[i]
-		if object.id != otherObject.id && recInRec(rec, getObjAbsColRec(otherObject, {0.0, 0.0})) {
-			return &globalGameObjects[i]
+	rec := getObjectAbsoluteCollisionRectangle(object, offset)
+	for i in 0 ..< len(global.gameObjects) {
+		otherObject := &global.gameObjects[i]
+		if object.id != otherObject.id &&
+		   rectangleInRectangle(
+			   rec,
+			   getObjectAbsoluteCollisionRectangle(otherObject, {0.0, 0.0}),
+		   ) {
+			return &global.gameObjects[i]
 		}
 	}
 	return nil
 }
 objectCollisionType :: proc(object: ^GameObject, type: typeid, offset: rl.Vector2) -> ^GameObject {
-	rec := getObjAbsColRec(object, offset)
-	for i in 0 ..< len(globalGameObjects) {
-		otherObject := &globalGameObjects[i]
+	rec := getObjectAbsoluteCollisionRectangle(object, offset)
+	for i in 0 ..< len(global.gameObjects) {
+		otherObject := &global.gameObjects[i]
 		if object.id != otherObject.id &&
 		   otherObject.type == type &&
-		   recInRec(rec, getObjAbsColRec(otherObject, {0.0, 0.0})) {
-			return &globalGameObjects[i]
+		   rectangleInRectangle(
+			   rec,
+			   getObjectAbsoluteCollisionRectangle(otherObject, {0.0, 0.0}),
+		   ) {
+			return &global.gameObjects[i]
 		}
 	}
 	return nil
 }
-getObjCenter :: proc(object: GameObject) -> rl.Vector2 {
+getObjectCenter :: proc(object: GameObject) -> rl.Vector2 {
 	return {
 		object.colRec.x + object.colRec.width / 2.0,
 		object.colRec.y + object.colRec.height / 2.0,
 	}
 }
-getObjCenterAbs :: proc(object: GameObject) -> rl.Vector2 {
+getObjectCenterAbsolute :: proc(object: GameObject) -> rl.Vector2 {
 	return {
 		object.colRec.x + object.colRec.width / 2.0 + object.pos.x,
 		object.colRec.y + object.colRec.height / 2.0 + object.pos.y,
 	}
 }
-getObjAbsColRec :: proc(object: ^GameObject, offset: rl.Vector2) -> rl.Rectangle {
+getObjectAbsoluteCollisionRectangle :: proc(
+	object: ^GameObject,
+	offset: rl.Vector2,
+) -> rl.Rectangle {
 	return {
 		object.pos.x + object.colRec.x + offset.x,
 		object.pos.y + object.colRec.y + offset.y,
@@ -477,11 +485,11 @@ getObjAbsColRec :: proc(object: ^GameObject, offset: rl.Vector2) -> rl.Rectangle
 debugDrawGameObjectCollisions :: proc() {
 	whiteTex := getTexture(.White32)
 	whiteTexSrc := getTextureRec(whiteTex)
-	for i in 0 ..< len(globalGameObjects) {
+	for i in 0 ..< len(global.gameObjects) {
 		rl.DrawTexturePro(
 			whiteTex,
 			whiteTexSrc,
-			getObjAbsColRec(&globalGameObjects[i], {0.0, 0.0}),
+			getObjectAbsoluteCollisionRectangle(&global.gameObjects[i], {0.0, 0.0}),
 			{0.0, 0.0},
 			0.0,
 			{0, 192, 0, 128},
