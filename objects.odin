@@ -108,7 +108,7 @@ drawPlayer :: proc(self: ^Player) {
 	}
 }
 MoveAndCollidePlayerResult :: struct {
-	newPosition:      rl.Vector2,
+	newPosition: rl.Vector2,
 	newVelocity: rl.Vector2,
 }
 moveAndCollidePlayer :: proc(
@@ -118,36 +118,68 @@ moveAndCollidePlayer :: proc(
 	facing: f32,
 ) -> MoveAndCollidePlayerResult {
 	result := MoveAndCollidePlayerResult {
-		newPosition      = position,
+		newPosition = position,
 		newVelocity = velocity,
 	}
 	collisionRectangleI32 := iRectangle {
-	    i32(collisionRectangle.x),
-	    i32(collisionRectangle.y),
-	    i32(collisionRectangle.width),
-	    i32(collisionRectangle.height),
+		i32(collisionRectangle.x),
+		i32(collisionRectangle.y),
+		i32(collisionRectangle.width),
+		i32(collisionRectangle.height),
 	}
-	absoluteHitboxDiagonal := shiftRectangle(collisionRectangle, result.newPosition + result.newVelocity)
-	if collisionRectangleDiagonal := doSolidCollision(absoluteHitboxDiagonal); collisionRectangleDiagonal != nil {
-		absoluteHitboxVertical := shiftRectangle(collisionRectangle, result.newPosition + {0.0, result.newVelocity.y})
-		if collisionRectangleVertical := doSolidCollision(absoluteHitboxVertical); collisionRectangleVertical != nil {
+	absoluteHitboxDiagonal := shiftRectangle(
+		collisionRectangle,
+		result.newPosition + result.newVelocity,
+	)
+	if collisionRectangleDiagonal := doSolidCollision(absoluteHitboxDiagonal);
+	   collisionRectangleDiagonal != nil {
+		absoluteHitboxVertical := shiftRectangle(
+			collisionRectangle,
+			result.newPosition + {0.0, result.newVelocity.y},
+		)
+		if collisionRectangleVertical := doSolidCollision(absoluteHitboxVertical);
+		   collisionRectangleVertical != nil {
 			verticalDirection := math.sign(result.newVelocity.y)
 			if (verticalDirection == 1.0) {
-				result.newPosition.y = f32(collisionRectangleVertical.?.y - collisionRectangleI32.y - collisionRectangleI32.height - 1.0)
+				result.newPosition.y = f32(
+					collisionRectangleVertical.?.y -
+					collisionRectangleI32.y -
+					collisionRectangleI32.height -
+					1.0,
+				)
 			} else {
-				result.newPosition.y = f32(collisionRectangleVertical.?.y + collisionRectangleVertical.?.height - collisionRectangleI32.y + 1.0)
+				result.newPosition.y = f32(
+					collisionRectangleVertical.?.y +
+					collisionRectangleVertical.?.height -
+					collisionRectangleI32.y +
+					1.0,
+				)
 			}
 			result.newVelocity.y = 0.0
 		} else {
 			result.newPosition.y += result.newVelocity.y
 		}
 
-		absoluteHitboxHorizontal := shiftRectangle(collisionRectangle, result.newPosition + {result.newVelocity.x, 0.0})
-		if collisionRectangleHorizontal := doSolidCollision(absoluteHitboxHorizontal); collisionRectangleHorizontal != nil {
+		absoluteHitboxHorizontal := shiftRectangle(
+			collisionRectangle,
+			result.newPosition + {result.newVelocity.x, 0.0},
+		)
+		if collisionRectangleHorizontal := doSolidCollision(absoluteHitboxHorizontal);
+		   collisionRectangleHorizontal != nil {
 			if (facing == 1.0) {
-				result.newPosition.x = f32(collisionRectangleHorizontal.?.x - collisionRectangleI32.x - collisionRectangleI32.width - 1.0)
+				result.newPosition.x = f32(
+					collisionRectangleHorizontal.?.x -
+					collisionRectangleI32.x -
+					collisionRectangleI32.width -
+					1.0,
+				)
 			} else {
-				result.newPosition.x = f32(collisionRectangleHorizontal.?.x + collisionRectangleHorizontal.?.width - collisionRectangleI32.x + 1.0)
+				result.newPosition.x = f32(
+					collisionRectangleHorizontal.?.x +
+					collisionRectangleHorizontal.?.width -
+					collisionRectangleI32.x +
+					1.0,
+				)
 			}
 		} else {
 			result.newPosition.x += result.newVelocity.x
@@ -180,6 +212,8 @@ ElevatorLeavingStateData :: struct {
 	alphaTween:    Tween,
 }
 Elevator :: struct {
+	visible:              bool,
+	instant:              bool,
 	interactionArrowSpr:  Sprite,
 	drawOffset:           rl.Vector2,
 	object:               ^GameObject,
@@ -196,7 +230,7 @@ createElevator :: proc(alloc: Alloc) -> ^Elevator {
 	self.interactionArrowSpr = createSprite(getSpriteDef(.InteractionIndicationArrow))
 	self.state = .Gone
 	self.drawOffset = {0.0, -224.0}
-	self.blend = rl.WHITE
+	self.blend = {255, 255, 255, 0}
 	self.panelBlend = rl.WHITE
 	self.activationDist = 128.0
 	self.object = createGameObject(
@@ -259,7 +293,9 @@ updateElevator :: proc(self: ^Elevator) {
 	}
 }
 drawElevator :: proc(self: ^Elevator) {
-	rl.DrawTextureV(getTexture(.Elevator), self.object.pos + self.drawOffset, self.blend)
+	if self.visible {
+		rl.DrawTextureV(getTexture(.Elevator), self.object.pos + self.drawOffset, self.blend)
+	}
 }
 drawElevatorEnd :: proc(self: ^Elevator) {
 	if self.drawInteractionArrow {
@@ -282,17 +318,23 @@ setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
 	//rl.PlaySound(getSound(.ElevatorArrive))
 	}
 	self.state = newState
-	switch (self.state) {
+	switch self.state {
 	case .Gone:
 		self.blend = {255, 255, 255, 0}
 	case .Arriving:
-		self.blend = {255, 255, 255, 0}
-		self.arrivingStateData.movementTween = createTween(
-			TweenVector2Range{{0.0, -224.0}, {0.0, 0.0}},
-			.InvExp,
-			2.0,
-		)
-		self.arrivingStateData.alphaTween = createTween(TweenU8Range{0, 255}, .Linear, 0.7)
+		if self.instant {
+			self.drawOffset = {0.0, 0.0}
+			self.blend.a = 255
+			setElevatorState(self, .Interactable)
+		} else {
+			self.blend = {255, 255, 255, 0}
+			self.arrivingStateData.movementTween = createTween(
+				TweenVector2Range{{0.0, -224.0}, {0.0, 0.0}},
+				.InvExp,
+				2.0,
+			)
+			self.arrivingStateData.alphaTween = createTween(TweenU8Range{0, 255}, .Linear, 0.7)
+		}
 	case .Interactable:
 	case .PlayerInside:
 		if player := getFirstGameObjectOfType(Player); player != nil {
@@ -361,4 +403,21 @@ drawStarBg :: proc(self: ^StarBg) {
 }
 destroyStarBg :: proc(self: ^StarBg) {
 	rl.UnloadTexture(self.genTex)
+}
+
+HubGraphics :: struct {
+	object: ^GameObject,
+}
+createHubGraphics :: proc(levelAlloc: Alloc) -> ^HubGraphics {
+	self := new(HubGraphics, levelAlloc)
+	self.object = createGameObject(
+		HubGraphics,
+		self,
+		drawProc = cast(proc(_: rawptr))drawHubGraphics,
+	)
+	return self
+}
+drawHubGraphics :: proc(self: ^HubGraphics) {
+	rl.DrawTextureV(getTexture(.HubBackground), {0.0, 0.0}, rl.WHITE)
+	rl.DrawTextureV(getTexture(.HubBuilding), {0.0, 0.0}, rl.WHITE)
 }

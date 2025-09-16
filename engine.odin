@@ -112,6 +112,8 @@ TextureName :: enum {
 	ElevatorWall3D,
 	ElevatorLights3D,
 	InteractionIndicationArrow,
+	HubBackground,
+	HubBuilding,
 	_Count,
 }
 getTexture :: proc(ind: TextureName) -> rl.Texture {
