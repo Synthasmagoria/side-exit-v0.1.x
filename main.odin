@@ -133,6 +133,10 @@ initLoadLevelProcs :: proc() {
 	loadLevelProcs[Level.Hub] = loadLevel_Hub
 	loadLevelProcs[Level.UnrulyLand] = loadLevel_UnrulyLand
 }
+loadLevel :: proc(level: Level) {
+	global.levelIndex = level
+	global.changeLevel = true
+}
 loadLevelGeneral :: proc(levelAlloc: Alloc) {
 	global.elevator = createElevator(levelAlloc)
 	global.elevator.object.pos = {0.0, 56.0}
@@ -155,6 +159,8 @@ loadLevel_Hub :: proc(levelAlloc: Alloc) {
 }
 loadLevel_UnrulyLand :: proc(levelAlloc: Alloc) {
 	global.cameraFollowPlayer = true
+	global.camera.offset = {0.0, 0.0}
+	global.camera.target = {0.0, 0.0}
 	loadLevelGeneral(levelAlloc)
 	generateWorld({-64, -64, 128, 128}, 0.5, 4, 8.0)
 	global.elevator.visible = false
@@ -261,18 +267,8 @@ Global :: struct {
 global := Global {
 	ambientLightingColor = {0.1, 0.1, 0.12, 1.0},
 	collisionRectangles = nil,
-	camera = {
-		offset = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},
-		target = {0.0, 0.0},
-		rotation = 0.0,
-		zoom = 1.0,
-	},
-	debugCamera = {
-		offset = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},
-		target = {0.0, 0.0},
-		rotation = 0.0,
-		zoom = 1.0,
-	},
+	camera = {zoom = 1.0},
+	debugCamera = {zoom = 1.0},
 	camera3D = {
 		position = {0.0, 0.0, 0.0},
 		target = {1.0, 0.0, 0.0},

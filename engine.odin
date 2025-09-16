@@ -710,3 +710,6 @@ updateTimer :: proc(timer: ^Timer) {
 isTimerFinished :: proc(timer: Timer) -> bool {
 	return timer.time == timer.duration
 }
+getTimerProgress :: proc(timer: Timer) -> f32 {
+	return timer.time / timer.duration
+}

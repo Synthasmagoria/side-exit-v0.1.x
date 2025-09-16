@@ -3,6 +3,7 @@ import c "core:c/libc"
 import "core:fmt"
 import "core:math"
 import "core:math/rand"
+import "core:mem"
 import "core:reflect"
 import rl "lib/raylib"
 
@@ -254,6 +255,7 @@ ElevatorPanelData :: struct {
 	buttonState:         [ELEVATOR_PANEL_BUTTON_COUNT.x][ELEVATOR_PANEL_BUTTON_COUNT.y]i32,
 	buttonSeparation:    rl.Vector2,
 	buttonArea:          rl.Rectangle,
+	buttonPressedCount:  i32,
 	knobState:           [2]f32,
 	knobSeparation:      rl.Vector2,
 	knobArea:            rl.Rectangle,
@@ -286,10 +288,17 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 				i32(relativeButtonPositionFloored.y),
 			}
 			rl.PlaySound(getSound(.ElevatorPanelButton))
-			if panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] == 1 {
-				panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] = 0
-			} else {
-				panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] = 1
+			if global.elevator3D.state == .Idle {
+				if panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] == 1 {
+					panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] = 0
+					panel.buttonPressedCount -= 1
+				} else {
+					panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] = 1
+					panel.buttonPressedCount += 1
+				}
+				if panel.buttonPressedCount >= 4 {
+					setElevator3DState(&global.elevator3D, .Leaving)
+				}
 			}
 		}
 	} else if pointInRectangle(position, panel.knobArea) {
@@ -341,22 +350,33 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 			panel.bigButtonSize.y,
 		}
 		if pointInRectangle(position, bigButtonRectangle) {
+			rl.PlaySound(getSound(.ElevatorPanelButton))
 			switch (int(relativePositionFloored.x)) {
 			case 0:
-				rl.PlaySound(getSound(.ElevatorPanelButton))
-				setElevator3DDoorState(&global.elevator3D, true, false, 0.4)
+				if global.elevator3D.state == .Idle {
+					setElevator3DDoorState(&global.elevator3D, true, false, 0.4)
+				}
 			case 1:
-				rl.PlaySound(getSound(.ElevatorPanelButton))
-				setElevator3DDoorState(&global.elevator3D, false, false, 0.4)
+				if global.elevator3D.state == .Idle {
+					setElevator3DDoorState(&global.elevator3D, false, false, 0.4)
+				}
 			case 2:
-				rl.PlaySound(getSound(.ElevatorPanelButton))
 			// TODO: Play ringing sound
 			}
 		}
 	}
 }
 ELEVATOR_PANEL_BUTTON_COUNT: iVector2 : {3, 8}
+Elevator3DState :: enum {
+	Idle,
+	Leaving,
+	Transit,
+}
+Elevator3DTransitStateData :: struct {
+	timer: Timer,
+}
 Elevator3D :: struct {
+	state:              Elevator3DState,
 	mainModel:          rl.Model,
 	leftDoorModel:      rl.Model,
 	rightDoorModel:     rl.Model,
@@ -369,6 +389,7 @@ Elevator3D :: struct {
 	panelData:          ElevatorPanelData,
 	lightFrameIndex:    f32,
 	doorsTween:         Tween,
+	transitStateData:   Elevator3DTransitStateData,
 }
 setElevator3DDoorState :: proc(e: ^Elevator3D, open: bool, instant: bool, delay: f32) {
 	if instant {
@@ -408,6 +429,7 @@ createElevator3D :: proc() -> Elevator3D {
 		panelRenderTextureHeight,
 	)
 	return Elevator3D {
+		state = .Idle,
 		mainModel = getModel(.Elevator),
 		leftDoorModel = getModel(.ElevatorSlidingDoorLeft),
 		rightDoorModel = getModel(.ElevatorSlidingDoorRight),
@@ -446,6 +468,23 @@ toggleElevatorLights :: proc(e: ^Elevator3D) {
 	setLightStatus(i32(e.lightFrameIndex))
 }
 updateElevator3D :: proc(e: ^Elevator3D) {
+	switch e.state {
+	case .Idle:
+	case .Leaving:
+		if tweenIsFinished(e.doorsTween) {
+			setElevator3DState(e, .Transit)
+		}
+	case .Transit:
+		previousTimerProgress := getTimerProgress(e.transitStateData.timer)
+		updateTimer(&e.transitStateData.timer)
+		currentTimerProgress := getTimerProgress(e.transitStateData.timer)
+		if previousTimerProgress < 0.5 && currentTimerProgress >= 0.5 {
+			loadLevel(.UnrulyLand)
+		}
+		if isTimerFinished(e.transitStateData.timer) {
+			setElevator3DState(e, .Idle)
+		}
+	}
 	tweenWasWaiting := tweenIsWaiting(e.doorsTween)
 	doorOpenProgress := updateAndStepTween(&e.doorsTween).(f32)
 	e.leftDoorModel.transform = rl.MatrixTranslate(0.0, 0.0, doorOpenProgress * 2.0)
@@ -495,6 +534,28 @@ drawElevator3D :: proc(e: ^Elevator3D) {
 
 	rl.DrawMesh(e.leftDoorModel.meshes[0], global.defaultMaterial3D, e.leftDoorModel.transform)
 	rl.DrawMesh(e.rightDoorModel.meshes[0], global.defaultMaterial3D, e.rightDoorModel.transform)
+}
+setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
+	if e.state == newState {
+		return
+	}
+	e.state = newState
+	fmt.println(e.state)
+	switch e.state {
+	case .Idle:
+		for x in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.x {
+			for y in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.y {
+				e.panelData.buttonState[x][y] = 0
+			}
+		}
+		setElevator3DDoorState(e, true, false, 0.0)
+	case .Leaving:
+		if isElevator3DDoorOpen(e) {
+			setElevator3DDoorState(e, false, false, 0.0)
+		}
+	case .Transit:
+		e.transitStateData.timer = createTimer(5.0)
+	}
 }
 renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^ElevatorPanelData) {
 	rl.EndMode3D()
