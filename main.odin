@@ -95,12 +95,15 @@ debugDrawGlobalCamera3DInfo :: proc(cam: rl.Camera3D, x: i32, y: i32) {
 }
 Global :: struct {
 	ambientLightingColor: rl.Vector4,
-	chunkWorld:           ChunkWorld,
+	elevator:             ^Elevator,
 	elevator3D:           Elevator3D,
 	camera:               rl.Camera2D,
 	camera3D:             rl.Camera3D,
+	player:               ^Player,
 	player3D:             Player3D,
 	lights3D:             [MAX_LIGHTS]Light3D,
+	collisionRectangles:  ChunkDataRectangles,
+	collisionPosition:    iVector2,
 	defaultMaterial3D:    rl.Material,
 	debugCamera3D:        rl.Camera3D,
 	debugMode:            bool,
@@ -109,7 +112,8 @@ Global :: struct {
 }
 global := Global {
 	ambientLightingColor = {0.1, 0.1, 0.12, 1.0},
-	chunkWorld = {pos = {-1, -1}, genCutoff = 0.5},
+	collisionPosition = {-1, -1},
+	collisionRectangles = nil,
 	camera = {
 		offset = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},
 		target = {0.0, 0.0},
@@ -179,20 +183,25 @@ main :: proc() {
 	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Elevator Game")
 	defer rl.CloseWindow()
 
-	// Engine init
+	// TODO: Only ever explicitly pass gameAlloc so that long-term memory allocations are explicit
+	// Currently this causes errors, I don't understand how this works apparently
+	//context.allocator = mem.panic_allocator()
 	gameArena: mem.Dynamic_Arena
 	mem.dynamic_arena_init(&gameArena)
 	defer mem.dynamic_arena_free_all(&gameArena)
 	gameAlloc := mem.dynamic_arena_allocator(&gameArena)
-	context.allocator = gameAlloc
-	// TODO: Only ever explicitly pass gameAlloc so that long-term memory allocations are explicit
-	// Currently this causes errors, I don't understand how this works apparently
-	//context.allocator = mem.panic_allocator()
+
+	levelArena: mem.Dynamic_Arena
+	mem.dynamic_arena_init(&levelArena)
+	defer mem.dynamic_arena_free_all(&levelArena)
+	levelAlloc := mem.dynamic_arena_allocator(&levelArena)
 
 	frameArena: mem.Dynamic_Arena
 	mem.dynamic_arena_init(&frameArena)
 	defer mem.dynamic_arena_free_all(&frameArena)
-	context.temp_allocator = mem.dynamic_arena_allocator(&frameArena)
+	frameAlloc := mem.dynamic_arena_allocator(&frameArena)
+	context.allocator = frameAlloc
+	context.temp_allocator = frameAlloc
 
 	init(gameAlloc)
 	defer deinit()
@@ -201,20 +210,16 @@ main :: proc() {
 	renderTexture3D := rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
 	defer rl.UnloadRenderTexture(renderTexture3D)
 
-	regenerateChunkWorld(&global.chunkWorld)
-
 	gameMusic := loadMusicStream(.KowloonSmokeBreak)
 	rl.PlayMusicStream(gameMusic)
 	gameObjects := make([dynamic]GameObject, context.allocator)
 	globalGameObjects = &gameObjects
 
-	// Game init
+	global.elevator = createElevator(context.allocator, {160.0, 202.0})
+	global.player = createPlayer(context.allocator, {64.0, 64.0})
 	global.elevator3D = createElevator3D()
 	global.player3D = createPlayer3D()
-
-	elevator := createElevator(context.allocator, {160.0, 202.0})
-	player := createPlayer(context.allocator, {64.0, 64.0})
-	_ = createStarBg(context.allocator)
+	_ = createChunkWorld(context.allocator)
 
 	mem.dynamic_arena_reset(&frameArena)
 
@@ -238,14 +243,13 @@ main :: proc() {
 			currentCamera3D = &global.debugCamera3D
 		}
 		global.camera.offset =
-			getObjCenterAbs(player.object^) * -1.0 + {WINDOW_WIDTH, WINDOW_HEIGHT} / 2.0
-		updateChunkWorld(&global.chunkWorld, player.object^)
+			getObjCenterAbs(global.player.object^) * -1.0 + {WINDOW_WIDTH, WINDOW_HEIGHT} / 2.0
+
 		rl.ClearBackground(rl.BLACK)
 		rl.BeginDrawing()
 		beginNestedTextureMode(gameRenderTexture)
 		rl.ClearBackground({0, 0, 0, 0})
 		rl.BeginMode2D(global.camera)
-		drawChunkWorld(&global.chunkWorld)
 		for object in globalGameObjects {
 			object.updateProc(object.data)
 		}
@@ -258,6 +262,7 @@ main :: proc() {
 		rl.EndMode2D()
 		endNestedTextureMode()
 		drawRenderTextureScaledToScreenBuffer(gameRenderTexture)
+
 		updatePlayer3D(&global.player3D)
 		updateElevator3D(&global.elevator3D)
 

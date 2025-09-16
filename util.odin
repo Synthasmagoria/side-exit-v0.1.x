@@ -42,13 +42,8 @@ getTextureDestRecCentered :: proc(tex: rl.Texture, areaSize: rl.Vector2) -> rl.R
 	}
 }
 getTextureDestinationRectangle :: proc(texture: rl.Texture, offset: rl.Vector2) -> rl.Rectangle {
-    textureSize := getTextureSize(texture)
-    return {
-        offset.x,
-        offset.y,
-        textureSize.x,
-        textureSize.y,
-    }
+	textureSize := getTextureSize(texture)
+	return {offset.x, offset.y, textureSize.x, textureSize.y}
 }
 getTextureDestRecCenteredFit :: proc(
 	tex: rl.Texture,

@@ -2,6 +2,9 @@ package game
 import "core:fmt"
 import "core:math"
 import "core:math/linalg"
+import "core:math/noise"
+import "core:mem"
+import "core:strings"
 import rl "lib/raylib"
 
 Player :: struct {
@@ -357,4 +360,239 @@ drawStarBg :: proc(self: ^StarBg) {
 }
 destroyStarBg :: proc(self: ^StarBg) {
 	rl.UnloadTexture(self.genTex)
+}
+
+LOADED_CHUNK_SIZE :: 3
+LOADED_CHUNK_COUNT :: LOADED_CHUNK_SIZE * LOADED_CHUNK_SIZE
+CHUNK_BLOCK_WIDTH :: 16
+CHUNK_BLOCK_WIDTH_PX :: 16
+CHUNK_BLOCK_COUNT :: CHUNK_BLOCK_WIDTH * CHUNK_BLOCK_WIDTH
+CHUNK_WIDTH_PX :: CHUNK_BLOCK_WIDTH * CHUNK_BLOCK_WIDTH_PX
+ChunkDataMatrix :: [LOADED_CHUNK_COUNT][CHUNK_BLOCK_COUNT]byte
+ChunkDataRectangles :: [LOADED_CHUNK_COUNT][dynamic]rl.Rectangle
+
+ChunkWorld :: struct {
+	data:      ChunkDataMatrix,
+	genCutoff: f32,
+	object:    ^GameObject,
+}
+
+chunkWorldCalcPos :: proc(target: GameObject) -> iVector2 {
+	targetCenter := getObjCenterAbs(target)
+	return iVector2 {
+		i32(math.floor((targetCenter.x - CHUNK_WIDTH_PX) / CHUNK_WIDTH_PX)),
+		i32(math.floor((targetCenter.y - CHUNK_WIDTH_PX) / CHUNK_WIDTH_PX)),
+	}
+}
+createChunkWorld :: proc(levelAlloc: Alloc) -> ^ChunkWorld {
+	self := new(ChunkWorld)
+	self.genCutoff = 0.5
+	self.object = createGameObject(
+		ChunkWorld,
+		self,
+		startProc = cast(proc(_: rawptr))startChunkWorld,
+		updateProc = cast(proc(_: rawptr))updateChunkWorld,
+		drawProc = cast(proc(_: rawptr))drawChunkWorld,
+	)
+	return self
+}
+startChunkWorld :: proc(self: ^ChunkWorld) {
+	regenerateChunkWorld(self)
+}
+updateChunkWorld :: proc(self: ^ChunkWorld) {
+	newPos := chunkWorldCalcPos(global.player.object^)
+	if (newPos.x != global.collisionPosition.x || newPos.y != global.collisionPosition.y) {
+		diffX := newPos.x - global.collisionPosition.x
+		unloadableChunks: [LOADED_CHUNK_COUNT]byte
+		if diffX < 0 {
+			unloadArea := iRectangleClampVal(
+				{LOADED_CHUNK_SIZE + diffX, 0, math.abs(diffX), LOADED_CHUNK_SIZE},
+				0,
+				LOADED_CHUNK_SIZE - 1,
+			)
+			unloadableChunks = chunkBitmaskOrRec(unloadableChunks, unloadArea)
+		} else if diffX > 0 {
+			unloadArea := iRectangleClampVal(
+				iRectangle{0, 0, diffX, LOADED_CHUNK_SIZE},
+				0,
+				LOADED_CHUNK_SIZE - 1,
+			)
+			unloadableChunks = chunkBitmaskOrRec(unloadableChunks, unloadArea)
+		}
+
+		diffY := newPos.y - global.collisionPosition.y
+		if diffY < 0 {
+			unloadArea := iRectangleClampVal(
+				{0, LOADED_CHUNK_SIZE + diffY, LOADED_CHUNK_SIZE, math.abs(diffY)},
+				0,
+				LOADED_CHUNK_SIZE - 1,
+			)
+			unloadableChunks = chunkBitmaskOrRec(unloadableChunks, unloadArea)
+		} else if diffY > 0 {
+			unloadArea := iRectangleClampVal(
+				{0, 0, LOADED_CHUNK_SIZE, diffY},
+				0,
+				LOADED_CHUNK_SIZE - 1,
+			)
+			unloadableChunks = chunkBitmaskOrRec(unloadableChunks, unloadArea)
+		}
+
+		moveChunks(self, chunkBitmaskNot(unloadableChunks), {-diffX, -diffY})
+		global.collisionPosition.x = newPos.x
+		global.collisionPosition.y = newPos.y
+		regenerateChunks(self, chunkBitmaskMirror(unloadableChunks))
+	}
+}
+moveChunks :: proc(chunkWorld: ^ChunkWorld, chunkBitmask: ChunkBitmask, diff: iVector2) {
+	chunkDataMatrix: ChunkDataMatrix
+	ChunkDataRectangles: ChunkDataRectangles
+	for i in 0 ..< len(chunkDataMatrix) {
+		if chunkBitmask[i] > 0 {
+			matPos := iVector2{i32(i) % LOADED_CHUNK_SIZE, i32(i) / LOADED_CHUNK_SIZE}
+			matRec := iRectangle{0, 0, LOADED_CHUNK_SIZE, LOADED_CHUNK_SIZE}
+			// TODO: Create error printing func
+			if !pointInIrec(matPos, matRec) {
+				posStr := fmt.tprintf("%v", matPos)
+				msgStrs := [?]string{"error (moveChunks): Invalid position ", posStr}
+				msg := strings.join(msgStrs[:], "", context.temp_allocator)
+				fmt.println(msg)
+				continue
+			}
+			matPosNew := iVector2{matPos.x + diff.x, matPos.y + diff.y}
+			if !pointInIrec(matPosNew, matRec) {
+				posStr := fmt.tprintf("%v", matPosNew)
+				msgStrs := [?]string{"error (moveChunks): Invalid new position", posStr}
+				msg := strings.join(msgStrs[:], "", context.temp_allocator)
+				fmt.println(msg)
+				continue
+			}
+			newInd := getChunkWorldInd(matPosNew.x, matPosNew.y)
+			mem.copy(&chunkDataMatrix[newInd], &chunkWorld.data[i], CHUNK_BLOCK_COUNT)
+			ChunkDataRectangles[newInd] = global.collisionRectangles[i]
+		}
+		free(&global.collisionRectangles[i])
+	}
+	chunkWorld.data = chunkDataMatrix
+	global.collisionRectangles = ChunkDataRectangles
+}
+regenerateChunks :: proc(chunkWorld: ^ChunkWorld, bitmask: ChunkBitmask) {
+	for val, i in bitmask {
+		if val > 0 {
+			regenerateChunk(chunkWorld, i32(i))
+		}
+	}
+}
+regenerateChunkWorld :: proc(chunkWorld: ^ChunkWorld) {
+	for i in 0 ..< LOADED_CHUNK_COUNT {
+		regenerateChunk(chunkWorld, i32(i))
+	}
+}
+regenerateChunk :: proc(chunkWorld: ^ChunkWorld, chunkIndex: i32) {
+	clear(&global.collisionRectangles[chunkIndex])
+	chunkPos :=
+		iVector2{chunkIndex % LOADED_CHUNK_SIZE, chunkIndex / LOADED_CHUNK_SIZE} +
+		global.collisionPosition
+	chunkWorldPosition := rl.Vector2 {
+		f32(chunkPos.x * CHUNK_WIDTH_PX),
+		f32(chunkPos.y * CHUNK_WIDTH_PX),
+	}
+	for i in 0 ..< CHUNK_BLOCK_COUNT {
+		x := i % CHUNK_BLOCK_WIDTH
+		y := i / CHUNK_BLOCK_WIDTH
+		xf := f32(x + 1 + CHUNK_BLOCK_WIDTH * int(chunkPos.x))
+		yf := f32(y + 1 + CHUNK_BLOCK_WIDTH * int(chunkPos.y))
+		f := rl.Vector2{xf, yf} / rl.Vector2{CHUNK_BLOCK_WIDTH, CHUNK_BLOCK_WIDTH}
+		n := noise.noise_2d(0, {f64(f.x), f64(f.y)})
+		val := u8(math.step(chunkWorld.genCutoff, n))
+		chunkWorld.data[chunkIndex][i] = val
+		if val > 0 {
+			rect := rl.Rectangle {
+				chunkWorldPosition.x + f32(x * CHUNK_BLOCK_WIDTH_PX),
+				chunkWorldPosition.y + f32(y * CHUNK_BLOCK_WIDTH_PX),
+				CHUNK_BLOCK_WIDTH_PX,
+				CHUNK_BLOCK_WIDTH_PX,
+			}
+			append(&global.collisionRectangles[chunkIndex], rect)
+		}
+	}
+}
+getChunkWorldInd :: proc(x: i32, y: i32) -> i32 {
+	assert_contextless(x >= 0 && x < LOADED_CHUNK_COUNT && y >= 0 && y < LOADED_CHUNK_COUNT)
+	return x + y * LOADED_CHUNK_SIZE
+}
+ChunkBitmask :: [LOADED_CHUNK_COUNT]byte
+chunkBitmaskOrRec :: proc(a: ChunkBitmask, irec: iRectangle) -> ChunkBitmask {
+	iRectangleAssertInv(irec)
+	out := a
+	clampedRec := iRectangleClampVal(irec, 0, 2)
+	// TODO: Or bits instead of looping
+	for x in irec.x ..< irec.x + irec.width {
+		for y in irec.y ..< irec.y + irec.height {
+			i := getChunkWorldInd(x, y)
+			out[i] = 1
+		}
+	}
+	return out
+}
+chunkBitmaskNot :: proc(val: ChunkBitmask) -> ChunkBitmask {
+	newVal := val
+	for i in 0 ..< len(val) {
+		newVal[i] ~= 1
+	}
+	return newVal
+}
+chunkBitmaskMirror :: proc(val: ChunkBitmask) -> ChunkBitmask {
+	newVal := val
+	for i in 0 ..< len(val) {
+		newVal[len(val) - 1 - i] = val[i]
+	}
+	return newVal
+}
+ChunkCollisionResult :: union {
+	rl.Rectangle,
+}
+chunkCollision :: proc(rec: rl.Rectangle) -> ChunkCollisionResult {
+	bitmask: ChunkBitmask
+	for i in 0 ..< len(bitmask) {
+		pos :=
+			iVector2{i32(i) % LOADED_CHUNK_SIZE, i32(i) / LOADED_CHUNK_SIZE} +
+			global.collisionPosition
+		matrixWorldRec := rl.Rectangle {
+			f32(pos.x * CHUNK_WIDTH_PX),
+			f32(pos.y * CHUNK_WIDTH_PX),
+			CHUNK_WIDTH_PX,
+			CHUNK_WIDTH_PX,
+		}
+		if recInRec(rec, matrixWorldRec) {
+			for solidRec in global.collisionRectangles[i] {
+				if recInRec(rec, solidRec) {
+					return solidRec
+				}
+			}
+		}
+	}
+	return nil
+}
+drawChunkWorld :: proc(chunkWorld: ^ChunkWorld) {
+	tex := getTexture(.White32)
+	texSrc := getTextureRec(tex)
+	for i in 0 ..< LOADED_CHUNK_COUNT {
+		x := i32(i % LOADED_CHUNK_SIZE)
+		y := i32(i / LOADED_CHUNK_SIZE)
+		dx := (global.collisionPosition.x + x) * CHUNK_WIDTH_PX
+		dy := (global.collisionPosition.y + y) * CHUNK_WIDTH_PX
+		for val, j in chunkWorld.data[i] {
+			if val > 0 {
+				xx := i32(j % CHUNK_BLOCK_WIDTH)
+				yy := i32(j / CHUNK_BLOCK_WIDTH)
+				texDest := rl.Rectangle {
+					f32(dx + xx * CHUNK_BLOCK_WIDTH_PX),
+					f32(dy + yy * CHUNK_BLOCK_WIDTH_PX),
+					CHUNK_BLOCK_WIDTH_PX,
+					CHUNK_BLOCK_WIDTH_PX,
+				}
+				rl.DrawTexturePro(getTexture(.White32), texSrc, texDest, {0.0, 0.0}, 0.0, rl.WHITE)
+			}
+		}
+	}
 }
