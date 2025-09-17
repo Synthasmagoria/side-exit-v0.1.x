@@ -99,14 +99,24 @@ rectangleInRectangleI32 :: proc(a: iRectangle, b: iRectangle) -> bool {
 	)
 }
 pointInRectangle :: proc {
-    pointInRectangleF32,
-    pointInRectangleI32,
+	pointInRectangleF32,
+	pointInRectangleI32,
 }
 pointInRectangleF32 :: proc(point: rl.Vector2, rectangle: rl.Rectangle) -> bool {
-	return( point.x >= rectangle.x && point.x < rectangle.x + rectangle.width && point.y >= rectangle.y && point.y < rectangle.y + rectangle.height)
+	return(
+		point.x >= rectangle.x &&
+		point.x < rectangle.x + rectangle.width &&
+		point.y >= rectangle.y &&
+		point.y < rectangle.y + rectangle.height \
+	)
 }
 pointInRectangleI32 :: proc(point: iVector2, rectangle: iRectangle) -> bool {
-	return(point.x >= rectangle.x && point.x < rectangle.x + rectangle.width && point.y >= rectangle.y && point.y < rectangle.y + rectangle.height)
+	return(
+		point.x >= rectangle.x &&
+		point.x < rectangle.x + rectangle.width &&
+		point.y >= rectangle.y &&
+		point.y < rectangle.y + rectangle.height \
+	)
 }
 shiftRectangle :: proc(rec: rl.Rectangle, off: rl.Vector2) -> rl.Rectangle {
 	return {rec.x + off.x, rec.y + off.y, rec.width, rec.height}
@@ -136,6 +146,10 @@ iRectangleGetInd :: proc(irec: iRectangle, maxWidth: i32) -> i32 {
 	return irec.x + irec.height * maxWidth
 }
 
+getScreenScale :: proc() -> rl.Vector2 {
+	screenSize := rl.Vector2{f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
+	return screenSize / rl.Vector2{WINDOW_WIDTH, WINDOW_HEIGHT}
+}
 drawRenderTextureScaledToScreenBuffer :: proc(rtex: rl.RenderTexture) {
 	rtex_size := getTextureSize(rtex.texture)
 	screen_size := rl.Vector2{cast(f32)rl.GetScreenWidth(), cast(f32)rl.GetScreenHeight()}
@@ -156,6 +170,9 @@ drawTextureRecDest :: proc(tex: rl.Texture, dest: rl.Rectangle) {
 }
 vector3ToStringTemp :: proc(v: rl.Vector3) -> cstring {
 	return rl.TextFormat("{{%f, %f, %f}}", v.x, v.y, v.z)
+}
+vector2ToStringTemp :: proc(v: rl.Vector2) -> cstring {
+	return rl.TextFormat("{{%f, %f}}", v.x, v.y)
 }
 debugDrawTextOutline :: proc(
 	text: cstring,

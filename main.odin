@@ -1,5 +1,7 @@
 package game
 
+import "base:runtime"
+import "core:c"
 import libc "core:c/libc"
 import "core:crypto/x25519"
 import "core:fmt"
@@ -27,6 +29,7 @@ init :: proc() {
 	initLoadLevelProcs()
 	global.gameRenderTexture = rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
 	global.defaultMaterial3D = loadPassthroughMaterial3D()
+	global.collisionRectangles = make([dynamic]iRectangle, 0, 1000, global.gameAlloc)
 	global.renderTextureStack = make([dynamic]rl.RenderTexture, 0, 5, global.gameAlloc)
 	global.gameObjects = make([dynamic]GameObject, 0, 100, global.gameAlloc)
 	global.gameObjectIdCounter = min(i32)
@@ -44,13 +47,20 @@ deinit :: proc() {
 }
 
 initMemory :: proc() {
+	// TODO: Debug switch on this
 	mem.dynamic_arena_init(&global.gameArena)
 	defer mem.dynamic_arena_free_all(&global.gameArena)
-	global.gameAlloc = mem.dynamic_arena_allocator(&global.gameArena)
+	global.gameAlloc = Alloc {
+		data      = &global.gameArena,
+		procedure = dynamicArenaAllocatorDebugProc_Game,
+	} //mem.dynamic_arena_allocator(&global.gameArena)
 
 	mem.dynamic_arena_init(&global.levelArena)
 	defer mem.dynamic_arena_free_all(&global.levelArena)
-	global.levelAlloc = mem.dynamic_arena_allocator(&global.levelArena)
+	global.levelAlloc = Alloc {
+		data      = &global.levelArena,
+		procedure = dynamicArenaAllocatorDebugProc_Level,
+	} //mem.dynamic_arena_allocator(&global.levelArena)
 
 	mem.dynamic_arena_init(&global.frameArena)
 	defer mem.dynamic_arena_free_all(&global.frameArena)
@@ -93,33 +103,49 @@ initLights :: proc() {
 		color    = {1.0, 1.0, 1.0, 1.0},
 	}
 }
-
+DEBUG_FONT_SIZE :: 12
+getDebugFontSize :: proc() -> i32 {
+	return i32(getScreenScale().x * DEBUG_FONT_SIZE)
+}
+debugDrawFrameTime :: proc(x: i32, y: i32) {
+	debugFontSize := getDebugFontSize()
+	frameTimeText := rl.TextFormat("Frame time: %fms", rl.GetFrameTime() * 1000.0)
+	stringSize := rl.MeasureText(frameTimeText, debugFontSize)
+	debugDrawTextOutline(frameTimeText, x - stringSize, y, debugFontSize, rl.WHITE, rl.BLACK)
+}
+debugDrawPlayerInfo :: proc(player: Player, x: i32, y: i32) {
+	debugFontSize := getDebugFontSize()
+	positionText := rl.TextFormat("Position: %s", vector2ToStringTemp(player.object.pos))
+	dy := y
+	debugDrawTextOutline(positionText, x, dy, debugFontSize, rl.WHITE, rl.BLACK)
+	dy += debugFontSize
+}
 debugDrawGlobalCamera3DInfo :: proc(cam: rl.Camera3D, x: i32, y: i32) {
 	dy := y
-	fontSize: i32 = 16
+	debugFontSize := getDebugFontSize()
 	debugDrawTextOutline(
 		rl.TextFormat("pos: %s", vector3ToStringTemp(cam.position)),
 		x,
 		dy,
-		fontSize,
+		debugFontSize,
 		rl.WHITE,
 		rl.BLACK,
 	)
-	dy += fontSize
+	dy += debugFontSize
 	debugDrawTextOutline(
 		rl.TextFormat("target: %s", vector3ToStringTemp(cam.target)),
 		x,
 		dy,
-		fontSize,
+		debugFontSize,
 		rl.WHITE,
 		rl.BLACK,
 	)
-	dy += fontSize
+	dy += debugFontSize
 	debugDrawTextOutline(
 		rl.TextFormat("look: %s", vector3ToStringTemp(cam.target - cam.position)),
 		x,
 		dy,
-		fontSize,
+		debugFontSize,
 		rl.WHITE,
 		rl.BLACK,
 	)
@@ -358,7 +384,6 @@ beginNestedTextureMode :: proc(renderTexture: rl.RenderTexture) {
 	}
 }
 endNestedTextureMode :: proc() {
-	g := global
 	if global.currentRenderTexture == nil {
 		panic("No render texture to pop off the stack")
 	} else {
@@ -369,6 +394,88 @@ endNestedTextureMode :: proc() {
 			global.currentRenderTexture = pop(&global.renderTextureStack)
 			rl.BeginTextureMode(global.currentRenderTexture.?)
 		}
+	}
+}
+
+debugPrintDynamicArenaAllocMessage :: proc(
+	allocatorType: string,
+	mode: mem.Allocator_Mode,
+	loc: runtime.Source_Code_Location,
+) {
+	fmt.println(
+		"(",
+		allocatorType,
+		")",
+		mode,
+		"at L:",
+		loc.line,
+		"C:",
+		loc.column,
+		"in",
+		loc.procedure,
+		"(",
+		loc.file_path,
+		")",
+	)
+}
+dynamicArenaAllocatorDebugProc_Level :: proc(
+	allocator_data: rawptr,
+	mode: mem.Allocator_Mode,
+	size: int,
+	alignment: int,
+	old_memory: rawptr,
+	old_size: int,
+	loc := #caller_location,
+) -> (
+	[]byte,
+	mem.Allocator_Error,
+) {
+	debugPrintDynamicArenaAllocMessage("level", mode, loc)
+	return mem.dynamic_arena_allocator_proc(
+		allocator_data,
+		mode,
+		size,
+		alignment,
+		old_memory,
+		old_size,
+	)
+}
+dynamicArenaAllocatorDebugProc_Game :: proc(
+	allocator_data: rawptr,
+	mode: mem.Allocator_Mode,
+	size: int,
+	alignment: int,
+	old_memory: rawptr,
+	old_size: int,
+	loc := #caller_location,
+) -> (
+	[]byte,
+	mem.Allocator_Error,
+) {
+	debugPrintDynamicArenaAllocMessage("game", mode, loc)
+	return mem.dynamic_arena_allocator_proc(
+		allocator_data,
+		mode,
+		size,
+		alignment,
+		old_memory,
+		old_size,
+	)
+}
+
+audioProcessEffectLPF :: proc "c" (buffer: rawptr, frames: c.uint) {
+	low: [2]f32 = {0.0, 0.0}
+	cutoff: f32 = 70.0 / 44100.0
+	k := cutoff / (cutoff + 0.159154931)
+
+	bufferData := cast([^]c.float)buffer
+	for i: c.uint = 0; i < frames * 2; i += 2 {
+		l := bufferData[i]
+		r := bufferData[i + 1]
+		low[0] += k * (l - low[0])
+		low[1] += k * (r - low[1])
+		bufferData[i] = low[0]
+		bufferData[i + 1] = low[1]
 	}
 }
 
@@ -410,6 +517,15 @@ main :: proc() {
 
 gameLoop :: proc() {
 	for !rl.WindowShouldClose() {
+		@(static) isLowPass := false
+		if rl.IsKeyPressed(.H) {
+			isLowPass = !isLowPass
+			if isLowPass {
+				rl.AttachAudioStreamProcessor(global.music.stream, audioProcessEffectLPF)
+			} else {
+				rl.DetachAudioStreamProcessor(global.music.stream, audioProcessEffectLPF)
+			}
+		}
 		if global.changeLevel {
 			mem.dynamic_arena_reset(&global.levelArena)
 			for object in global.gameObjects {
@@ -459,6 +575,8 @@ gameLoop :: proc() {
 				{WINDOW_WIDTH, WINDOW_HEIGHT} / 2.0
 		}
 
+		g := global
+
 		rl.ClearBackground(rl.BLACK)
 		rl.BeginDrawing()
 		beginNestedTextureMode(global.gameRenderTexture)
@@ -482,6 +600,7 @@ gameLoop :: proc() {
 				i -= 1
 			}
 		}
+
 		rl.EndMode2D()
 		endNestedTextureMode()
 		drawRenderTextureScaledToScreenBuffer(global.gameRenderTexture)
@@ -500,7 +619,12 @@ gameLoop :: proc() {
 		endNestedTextureMode()
 
 		drawRenderTextureScaledToScreenBuffer(global.gameRenderTexture)
-		debugDrawGlobalCamera3DInfo(currentCamera3D^, 4, 4)
+		if global.player3D.state != .Inactive {
+			debugDrawGlobalCamera3DInfo(currentCamera3D^, 4, 4)
+		} else {
+			debugDrawPlayerInfo(global.player^, 4, 4)
+		}
+		debugDrawFrameTime(rl.GetScreenWidth() - 4, 4)
 		rl.EndDrawing()
 		mem.dynamic_arena_reset(&global.frameArena)
 	}
