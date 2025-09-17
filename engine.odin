@@ -129,6 +129,7 @@ ModelName :: enum {
 	Elevator,
 	ElevatorSlidingDoorLeft,
 	ElevatorSlidingDoorRight,
+	ElevatorTitleMenu,
 	_Count,
 }
 getModel :: proc(ind: ModelName) -> rl.Model {
@@ -559,6 +560,7 @@ GameObject :: struct {
 	updateProc:  proc(data: rawptr),
 	drawProc:    proc(data: rawptr),
 	drawEndProc: proc(data: rawptr),
+	draw3DProc:  proc(data: rawptr),
 	destroyProc: proc(data: rawptr),
 	data:        rawptr,
 	pos:         rl.Vector2,
@@ -577,6 +579,7 @@ createGameObject :: proc(
 	updateProc: proc(_: rawptr) = gameObjectEmptyProc,
 	drawProc: proc(_: rawptr) = gameObjectEmptyProc,
 	drawEndProc: proc(_: rawptr) = gameObjectEmptyProc,
+	draw3DProc: proc(_: rawptr) = gameObjectEmptyProc,
 	destroyProc: proc(_: rawptr) = gameObjectEmptyProc,
 ) -> ^GameObject {
 	append(
@@ -586,6 +589,7 @@ createGameObject :: proc(
 			updateProc = updateProc,
 			drawProc = drawProc,
 			drawEndProc = drawEndProc,
+			draw3DProc = draw3DProc,
 			destroyProc = destroyProc,
 			data = data,
 			drawDepth = drawDepth,
@@ -609,6 +613,7 @@ destroyAllGameObjects :: proc() {
 	clear(&engine.gameObjects)
 	clear(&engine.gameObjectsDepthOrdered)
 }
+// TODO: Dirty flag for performance
 destroyGameObject :: proc(id: i32) {
 	removedGameObject := false
 	for i in 0 ..< len(engine.gameObjects) {

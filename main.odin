@@ -128,27 +128,37 @@ loadLevel :: proc(level: Level) {
 	global.levelIndex = level
 	global.changeLevel = true
 }
-loadLevelGeneral :: proc(levelAlloc: mem.Allocator) {
-	global.elevator = createElevator(levelAlloc)
-	global.elevator.object.pos = {0.0, 56.0}
-	global.player = createPlayer(levelAlloc)
+GeneralLevelObjects :: struct {
+	player:     ^Player,
+	elevator:   ^Elevator,
+	player3D:   ^Player3D,
+	elevator3D: ^Elevator3D,
+}
+loadLevelGeneral :: proc(levelAlloc: mem.Allocator) -> GeneralLevelObjects {
+	elevator := createElevator(levelAlloc)
+	elevator.object.pos = {0.0, 56.0}
+	player := createPlayer(levelAlloc)
+	player3D := createPlayer3D(levelAlloc)
+	elevator3D := createElevator3D(levelAlloc)
+	return {player, elevator, player3D, elevator3D}
 }
 loadLevel_TitleMenu :: proc(levelAlloc: mem.Allocator) {
 	global.cameraFollowPlayer = false
 	global.camera.target = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2}
 	global.camera.offset = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2}
 	_ = createTitleMenu(levelAlloc)
+	_ = createTitleMenuBackground(levelAlloc)
 }
 loadLevel_Hub :: proc(levelAlloc: mem.Allocator) {
 	global.cameraFollowPlayer = false
 	global.camera.target = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2}
 	global.camera.offset = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2}
-	loadLevelGeneral(levelAlloc)
+	generalObjects := loadLevelGeneral(levelAlloc)
 	_ = createHubGraphics(levelAlloc)
-	global.player.object.pos = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2}
-	global.elevator.object.pos = {146.0, 181.0}
-	global.elevator.visible = false
-	global.elevator.instant = true
+	generalObjects.player.object.pos = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2}
+	generalObjects.elevator.object.pos = {146.0, 181.0}
+	generalObjects.elevator.visible = false
+	generalObjects.elevator.instant = true
 
 	append(&engine.collisionRectangles, iRectangle{47, 0, 10, 237})
 	append(&engine.collisionRectangles, iRectangle{47, 237, 382, 11})
@@ -158,29 +168,26 @@ loadLevel_UnrulyLand :: proc(levelAlloc: mem.Allocator) {
 	global.cameraFollowPlayer = true
 	global.camera.offset = {0.0, 0.0}
 	global.camera.target = {0.0, 0.0}
-	loadLevelGeneral(levelAlloc)
+	generalObjects := loadLevelGeneral(levelAlloc)
 	generateWorld({-64, -64, 128, 128}, -0.5, 0, 8.0)
-	global.player.object.pos = {0.0, 0.0}
-	global.elevator.object.pos = {0.0, 0.0}
-	global.elevator.visible = true
-	global.elevator.instant = false
+	generalObjects.player.object.pos = {0.0, 0.0}
+	generalObjects.elevator.object.pos = {0.0, 0.0}
+	generalObjects.elevator.visible = true
+	generalObjects.elevator.instant = false
 	_ = createStarBackground(levelAlloc)
 }
 
 Global :: struct {
 	levelIndex:         Level,
 	changeLevel:        bool,
-	elevator:           ^Elevator,
-	elevator3D:         Elevator3D,
 	camera:             rl.Camera2D,
 	cameraFollowPlayer: bool,
 	camera3D:           rl.Camera3D,
-	player:             ^Player,
-	player3D:           Player3D,
 	debugCamera:        rl.Camera2D,
 	debugCamera3D:      rl.Camera3D,
 	debugMode:          bool,
 	music:              rl.Music,
+	windowCloseRequest: bool,
 }
 global := Global {
 	camera = {zoom = 1.0},
@@ -309,13 +316,12 @@ main :: proc() {
 
 	global.music = loadMusicStream(.KowloonSmokeBreak)
 	rl.PlayMusicStream(global.music)
-	global.player3D = createPlayer3D()
-	global.elevator3D = createElevator3D()
 	mem.dynamic_arena_reset(&engine.frameArena)
 
-	for !rl.WindowShouldClose() {
+	for !rl.WindowShouldClose() && !global.windowCloseRequest {
 		gameStep()
 	}
+
 	for i in 0 ..< len(engine.gameObjects) {
 		engine.gameObjects[i].destroyProc(engine.gameObjects[i].data)
 	}
@@ -323,6 +329,10 @@ main :: proc() {
 
 gameStep :: proc() {
 	player := getFirstGameObjectOfType(Player)
+	elevator := getFirstGameObjectOfType(Elevator)
+	player3D := getFirstGameObjectOfType(Player3D)
+	elevator3D := getFirstGameObjectOfType(Elevator3D)
+
 	if global.changeLevel {
 		destroyAllGameObjects()
 		mem.dynamic_arena_reset(&engine.levelArena)
@@ -341,7 +351,7 @@ gameStep :: proc() {
 	currentCamera := &global.camera
 	currentCamera3D := &global.camera3D
 	if global.debugMode {
-		if global.player3D.state != .Inactive && global.player3D.state != .Uninitialized {
+		if player3D != nil && player3D.state != .Inactive && player3D.state != .Uninitialized {
 			rl.UpdateCamera(&global.debugCamera3D, .FIRST_PERSON)
 			if rl.IsKeyDown(.SPACE) {
 				rl.CameraMoveUp(&global.debugCamera3D, 5.4 * TARGET_TIME_STEP)
@@ -395,25 +405,25 @@ gameStep :: proc() {
 	endNestedTextureMode()
 	drawRenderTextureScaledToScreenBuffer(engine.renderTexture)
 
-	updatePlayer3D(&global.player3D)
-	updateElevator3D(&global.elevator3D)
-
 	beginNestedTextureMode(engine.renderTexture)
 	rl.BeginMode3D(currentCamera3D^)
 
 	rl.ClearBackground({0.0, 0.0, 0.0, 0.0})
-	drawElevator3D(&global.elevator3D)
-	rl.DrawGrid(10, 1.0)
-
+	if global.debugMode {
+		rl.DrawGrid(10, 1.0)
+	}
+	for object in engine.gameObjects {
+		object.draw3DProc(object.data)
+	}
 	rl.EndMode3D()
 	endNestedTextureMode()
 
 	drawRenderTextureScaledToScreenBuffer(engine.renderTexture)
-	if global.player != nil {
-		if global.player3D.state != .Inactive {
+	if player != nil {
+		if player3D.state != .Inactive {
 			debugDrawGlobalCamera3DInfo(currentCamera3D^, 4, 4)
 		} else {
-			debugDrawPlayerInfo(global.player^, 4, 4)
+			debugDrawPlayerInfo(player^, 4, 4)
 		}
 	}
 	debugDrawFrameTime(rl.GetScreenWidth() - 4, 4)
