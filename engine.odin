@@ -3,6 +3,7 @@ import "core:c"
 import "core:c/libc"
 import "core:fmt"
 import "core:math"
+import "core:math/linalg"
 import "core:math/noise"
 import "core:mem"
 import "core:os"
@@ -24,6 +25,7 @@ initEngine :: proc() {
 	engine.collisionRectangles = make([dynamic]iRectangle, 0, 1000, engine.gameAlloc)
 	engine.renderTextureStack = make([dynamic]rl.RenderTexture, 0, 5, engine.gameAlloc)
 	engine.gameObjects = make([dynamic]GameObject, 0, 100, engine.gameAlloc)
+	engine.gameObjectsDepthOrdered = make([dynamic]^GameObject, 0, 100, engine.gameAlloc)
 	engine.gameObjectIdCounter = min(i32)
 }
 
@@ -61,22 +63,23 @@ deinitEngineMemory :: proc() {
 
 engine: Engine
 Engine :: struct {
-	frameArena:           mem.Dynamic_Arena,
-	frameAlloc:           mem.Allocator,
-	levelArena:           mem.Dynamic_Arena,
-	levelAlloc:           mem.Allocator,
-	gameArena:            mem.Dynamic_Arena,
-	gameAlloc:            mem.Allocator,
-	gameRenderTexture:    rl.RenderTexture,
-	currentRenderTexture: Maybe(rl.RenderTexture),
-	renderTextureStack:   [dynamic]rl.RenderTexture,
-	gameObjects:          [dynamic]GameObject,
-	gameObjectIdCounter:  i32,
-	lights3D:             [MAX_LIGHTS]Light3D,
-	collisionRectangles:  [dynamic]iRectangle,
-	defaultMaterial3D:    rl.Material,
-	renderTexture:        rl.RenderTexture,
-	ambientLightingColor: rl.Vector4,
+	frameArena:              mem.Dynamic_Arena,
+	frameAlloc:              mem.Allocator,
+	levelArena:              mem.Dynamic_Arena,
+	levelAlloc:              mem.Allocator,
+	gameArena:               mem.Dynamic_Arena,
+	gameAlloc:               mem.Allocator,
+	gameRenderTexture:       rl.RenderTexture,
+	currentRenderTexture:    Maybe(rl.RenderTexture),
+	renderTextureStack:      [dynamic]rl.RenderTexture,
+	gameObjects:             [dynamic]GameObject,
+	gameObjectsDepthOrdered: [dynamic]^GameObject,
+	gameObjectIdCounter:     i32,
+	lights3D:                [MAX_LIGHTS]Light3D,
+	collisionRectangles:     [dynamic]iRectangle,
+	defaultMaterial3D:       rl.Material,
+	renderTexture:           rl.RenderTexture,
+	ambientLightingColor:    rl.Vector4,
 }
 
 Resources :: struct {
@@ -365,7 +368,6 @@ resolveShaderIncludes :: proc(
 	}
 }
 
-
 traceLogShaderIncludeError :: proc(err: ResolveShaderIncludesError) {
 	switch err {
 	case .None:
@@ -441,6 +443,117 @@ setLightStatus :: proc(val: i32) {
 	}
 }
 
+GENERATION_BLOCK_SIZE :: 16
+generateCircleMask2D :: proc(radius: i32) -> [dynamic]byte {
+	diameter := radius + radius
+	maskLength := diameter * diameter
+	mask := make([dynamic]byte, maskLength, maskLength)
+	center := rl.Vector2{f32(radius) - 0.5, f32(radius) - 0.5}
+	for i in 0 ..< maskLength {
+		x := i % diameter
+		y := i / diameter
+		position := rl.Vector2{f32(x), f32(y)}
+		distance := linalg.distance(center, position)
+		mask[i] = u8(math.step(f32(radius) - 0.25, distance) == 1)
+	}
+	return mask
+}
+andMask2D :: proc(
+	dest: ^[dynamic]byte,
+	destWidth: i32,
+	mask: [dynamic]byte,
+	maskWidth: i32,
+	maskPosition: iVector2,
+) {
+	assert(linalg.fract(f32(len(dest)) / f32(destWidth)) == 0.0)
+	assert(linalg.fract(f32(len(mask)) / f32(maskWidth)) == 0.0)
+	destArea := iRectangle{0, 0, destWidth, i32(len(dest)) / destWidth}
+	maskArea := iRectangle{maskPosition.x, maskPosition.y, maskWidth, i32(len(mask)) / maskWidth}
+	assert(maskArea.x + maskArea.width <= destArea.width)
+	assert(maskArea.y + maskArea.height <= destArea.height)
+	for x in 0 ..< maskArea.width {
+		for y in 0 ..< maskArea.height {
+			destX := x + maskArea.x
+			destY := y + maskArea.y
+			destIndex := destX + destY * destWidth
+			dest[destIndex] &= mask[x + y * maskWidth]
+		}
+	}
+}
+generateWorld :: proc(area: iRectangle, threshold: f32, seed: i64, frequency: f64) {
+	clear(&engine.collisionRectangles)
+	blocks := make([dynamic]byte, area.width * area.height, area.width * area.height)
+	areaWidth := f64(area.width)
+	areaHeight := f64(area.height)
+	for x in 0 ..< area.width {
+		for y in 0 ..< area.height {
+			samplePosition := [2]f64 {
+				f64(x) / areaWidth * frequency,
+				f64(y) / areaHeight * frequency,
+			}
+			noiseValue := math.step(threshold, noise.noise_2d(seed, samplePosition))
+			blocks[x + y * area.width] = cast(byte)noiseValue
+		}
+	}
+	spawnAreaRadius: i32 = 5
+	spawnAreaMask := generateCircleMask2D(spawnAreaRadius)
+	andMask2D(
+		&blocks,
+		area.width,
+		spawnAreaMask,
+		spawnAreaRadius + spawnAreaRadius,
+		{area.width / 2 - spawnAreaRadius, area.height / 2 - spawnAreaRadius},
+	)
+	blockStartPosition: iVector2
+	wasPreviousBlockSolid: bool
+	for y in 0 ..< area.height {
+		for x in 0 ..< area.width {
+			isBlockSolid := blocks[x + y * area.height] == 1
+			if !wasPreviousBlockSolid && isBlockSolid {
+				blockStartPosition = {x, y}
+			} else if wasPreviousBlockSolid && !isBlockSolid {
+				collisionRectangle := iRectangle {
+					(blockStartPosition.x + area.x) * GENERATION_BLOCK_SIZE,
+					(blockStartPosition.y + area.y) * GENERATION_BLOCK_SIZE,
+					(x - blockStartPosition.x + 1) * GENERATION_BLOCK_SIZE,
+					GENERATION_BLOCK_SIZE,
+				}
+				append(&engine.collisionRectangles, collisionRectangle)
+			}
+			if isBlockSolid && x + 1 == area.width {
+				collisionRectangle := iRectangle {
+					(blockStartPosition.x + area.x) * GENERATION_BLOCK_SIZE,
+					(blockStartPosition.y + area.y) * GENERATION_BLOCK_SIZE,
+					(x - blockStartPosition.x + 1) * GENERATION_BLOCK_SIZE,
+					GENERATION_BLOCK_SIZE,
+				}
+				append(&engine.collisionRectangles, collisionRectangle)
+			}
+			wasPreviousBlockSolid = isBlockSolid
+		}
+	}
+}
+doSolidCollision :: proc(hitbox: rl.Rectangle) -> Maybe(iRectangle) {
+	hitboxI32 := iRectangle{i32(hitbox.x), i32(hitbox.y), i32(hitbox.width), i32(hitbox.height)}
+	for rectangle in engine.collisionRectangles {
+		if rectangleInRectangle(hitboxI32, rectangle) {
+			return rectangle
+		}
+	}
+	return nil
+}
+drawSolids :: proc() {
+	for rectangle in engine.collisionRectangles {
+		rectangleF32 := rl.Rectangle {
+			f32(rectangle.x),
+			f32(rectangle.y),
+			f32(rectangle.width),
+			f32(rectangle.height),
+		}
+		rl.DrawRectangleRec(rectangleF32, rl.WHITE)
+	}
+}
+
 GameObject :: struct {
 	startProc:   proc(data: rawptr),
 	updateProc:  proc(data: rawptr),
@@ -452,31 +565,85 @@ GameObject :: struct {
 	colRec:      rl.Rectangle,
 	id:          i32,
 	type:        typeid,
+	drawDepth:   i32,
 }
 GameObjectFuncs :: struct {}
 gameObjectEmptyProc :: proc(_: rawptr) {}
 createGameObject :: proc(
 	$T: typeid,
 	data: rawptr,
+	drawDepth: i32,
 	startProc: proc(_: rawptr) = gameObjectEmptyProc,
 	updateProc: proc(_: rawptr) = gameObjectEmptyProc,
 	drawProc: proc(_: rawptr) = gameObjectEmptyProc,
 	drawEndProc: proc(_: rawptr) = gameObjectEmptyProc,
 	destroyProc: proc(_: rawptr) = gameObjectEmptyProc,
 ) -> ^GameObject {
-	object := GameObject {
-		startProc   = startProc,
-		updateProc  = updateProc,
-		drawProc    = drawProc,
-		drawEndProc = drawEndProc,
-		destroyProc = destroyProc,
-		data        = data,
-		id          = engine.gameObjectIdCounter,
-		type        = T,
+	append(
+		&engine.gameObjects,
+		GameObject {
+			startProc = startProc,
+			updateProc = updateProc,
+			drawProc = drawProc,
+			drawEndProc = drawEndProc,
+			destroyProc = destroyProc,
+			data = data,
+			drawDepth = drawDepth,
+			id = engine.gameObjectIdCounter,
+			type = T,
+		},
+	)
+
+	object := &engine.gameObjects[len(engine.gameObjects) - 1]
+	if gameObjectHasDrawEvent(object^) {
+		insertGameObjectIntoDrawingOrder(object)
 	}
-	append(&engine.gameObjects, object)
+
 	engine.gameObjectIdCounter += 1
-	return &engine.gameObjects[len(engine.gameObjects) - 1]
+	return object
+}
+destroyAllGameObjects :: proc() {
+	for object in engine.gameObjects {
+		object.destroyProc(object.data)
+	}
+	clear(&engine.gameObjects)
+	clear(&engine.gameObjectsDepthOrdered)
+}
+destroyGameObject :: proc(id: i32) {
+	removedGameObject := false
+	for i in 0 ..< len(engine.gameObjects) {
+		if engine.gameObjects[i].id == id {
+			engine.gameObjects[i].destroyProc(engine.gameObjects[i].data)
+			unordered_remove(&engine.gameObjects, i)
+			removedGameObject = true
+			break
+		}
+	}
+	if removedGameObject {
+		clear(&engine.gameObjectsDepthOrdered)
+		for i in 0 ..< len(engine.gameObjects) {
+			if gameObjectHasDrawEvent(engine.gameObjects[i]) {
+				insertGameObjectIntoDrawingOrder(&engine.gameObjects[i])
+			}
+		}
+	}
+}
+gameObjectHasDrawEvent :: proc(object: GameObject) -> bool {
+	return object.drawProc != gameObjectEmptyProc || object.drawEndProc != gameObjectEmptyProc
+}
+insertGameObjectIntoDrawingOrder :: proc(object: ^GameObject) {
+	injected := false
+	for i in 0 ..< len(engine.gameObjectsDepthOrdered) {
+		o := engine.gameObjectsDepthOrdered[i]
+		if object.drawDepth > o.drawDepth {
+			inject_at(&engine.gameObjectsDepthOrdered, i, object)
+			injected = true
+			break
+		}
+	}
+	if !injected {
+		append(&engine.gameObjectsDepthOrdered, object)
+	}
 }
 setGameObjectStartFunc :: proc()
 getGameObjectsOfType :: proc(type: typeid) -> [dynamic]^GameObject {
@@ -564,6 +731,36 @@ debugDrawGameObjectCollisions :: proc() {
 			0.0,
 			{0, 192, 0, 128},
 		)
+	}
+}
+
+/*
+    TODO:
+    Starting/ending texture mode while in mode 2d/3d sets some state that makes stuff disappear
+    For this to work normally 2d/3d mode needs to be begin/end as well
+*/
+beginNestedTextureMode :: proc(renderTexture: rl.RenderTexture) {
+	if engine.currentRenderTexture == nil {
+		engine.currentRenderTexture = renderTexture
+		rl.BeginTextureMode(engine.currentRenderTexture.?)
+	} else {
+		rl.EndTextureMode()
+		append(&engine.renderTextureStack, engine.currentRenderTexture.?)
+		engine.currentRenderTexture = renderTexture
+		rl.BeginTextureMode(engine.currentRenderTexture.?)
+	}
+}
+endNestedTextureMode :: proc() {
+	if engine.renderTextureStack == nil {
+		panic("No render texture to pop off the stack")
+	} else {
+		rl.EndTextureMode()
+		if len(engine.renderTextureStack) == 0 {
+			engine.currentRenderTexture = nil
+		} else {
+			engine.currentRenderTexture = pop(&engine.renderTextureStack)
+			rl.BeginTextureMode(engine.currentRenderTexture.?)
+		}
 	}
 }
 

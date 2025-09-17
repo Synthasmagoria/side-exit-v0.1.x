@@ -224,6 +224,14 @@ loadPassthroughMaterial3D :: proc(albedoTexture: Maybe(rl.Texture) = nil) -> rl.
 	return material
 }
 
+printArray2D :: proc(array: [dynamic]$T, arrayWidth: i32) {
+	assert(linalg.fract(f32(len(array)) / f32(arrayWidth)) == 0.0)
+	rowCount := i32(len(array)) / arrayWidth
+	for i in 0 ..< rowCount {
+		fmt.println(array[i * arrayWidth:(i + 1) * arrayWidth])
+	}
+}
+
 enumNext :: proc(value: $T) -> T {
 	return T((i64(value) + 1) % i64(len(reflect.enum_field_names(T))))
 }

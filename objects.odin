@@ -42,6 +42,7 @@ createPlayer :: proc(alloc: mem.Allocator) -> ^Player {
 	self.object = createGameObject(
 		Player,
 		self,
+		0,
 		updateProc = cast(proc(_: rawptr))updatePlayer,
 		drawProc = cast(proc(_: rawptr))drawPlayer,
 	)
@@ -236,6 +237,7 @@ createElevator :: proc(alloc: mem.Allocator) -> ^Elevator {
 	self.object = createGameObject(
 		Elevator,
 		self,
+		0,
 		updateProc = cast(proc(_: rawptr))updateElevator,
 		drawProc = cast(proc(_: rawptr))drawElevator,
 		drawEndProc = cast(proc(_: rawptr))drawElevatorEnd,
@@ -377,6 +379,7 @@ createStarBackground :: proc(levelAlloc: mem.Allocator) -> ^StarBg {
 	self.object = createGameObject(
 		StarBg,
 		self,
+		0,
 		drawProc = cast(proc(_: rawptr))drawStarBg,
 		destroyProc = cast(proc(_: rawptr))destroyStarBg,
 	)
@@ -413,6 +416,7 @@ createHubGraphics :: proc(levelAlloc: mem.Allocator) -> ^HubGraphics {
 	self.object = createGameObject(
 		HubGraphics,
 		self,
+		0,
 		drawProc = cast(proc(_: rawptr))drawHubGraphics,
 	)
 	return self

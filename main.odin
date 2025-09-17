@@ -159,124 +159,6 @@ loadLevel_UnrulyLand :: proc(levelAlloc: mem.Allocator) {
 	_ = createStarBackground(levelAlloc)
 }
 
-GENERATION_BLOCK_SIZE :: 16
-generateCircleMask2D :: proc(radius: i32) -> [dynamic]byte {
-	diameter := radius + radius
-	maskLength := diameter * diameter
-	mask := make([dynamic]byte, maskLength, maskLength)
-	center := rl.Vector2{f32(radius) - 0.5, f32(radius) - 0.5}
-	for i in 0 ..< maskLength {
-		x := i % diameter
-		y := i / diameter
-		position := rl.Vector2{f32(x), f32(y)}
-		distance := linalg.distance(center, position)
-		mask[i] = u8(math.step(f32(radius) - 0.25, distance) == 1)
-	}
-	return mask
-}
-andMask2D :: proc(
-	dest: ^[dynamic]byte,
-	destWidth: i32,
-	mask: [dynamic]byte,
-	maskWidth: i32,
-	maskPosition: iVector2,
-) {
-	assert(linalg.fract(f32(len(dest)) / f32(destWidth)) == 0.0)
-	assert(linalg.fract(f32(len(mask)) / f32(maskWidth)) == 0.0)
-	destArea := iRectangle{0, 0, destWidth, i32(len(dest)) / destWidth}
-	maskArea := iRectangle{maskPosition.x, maskPosition.y, maskWidth, i32(len(mask)) / maskWidth}
-	assert(maskArea.x + maskArea.width <= destArea.width)
-	assert(maskArea.y + maskArea.height <= destArea.height)
-	for x in 0 ..< maskArea.width {
-		for y in 0 ..< maskArea.height {
-			destX := x + maskArea.x
-			destY := y + maskArea.y
-			destIndex := destX + destY * destWidth
-			dest[destIndex] &= mask[x + y * maskWidth]
-		}
-	}
-}
-printArray2D :: proc(array: [dynamic]$T, arrayWidth: i32) {
-	assert(linalg.fract(f32(len(array)) / f32(arrayWidth)) == 0.0)
-	rowCount := i32(len(array)) / arrayWidth
-	for i in 0 ..< rowCount {
-		fmt.println(array[i * arrayWidth:(i + 1) * arrayWidth])
-	}
-}
-generateWorld :: proc(area: iRectangle, threshold: f32, seed: i64, frequency: f64) {
-	clear(&engine.collisionRectangles)
-	blocks := make([dynamic]byte, area.width * area.height, area.width * area.height)
-	areaWidth := f64(area.width)
-	areaHeight := f64(area.height)
-	for x in 0 ..< area.width {
-		for y in 0 ..< area.height {
-			samplePosition := [2]f64 {
-				f64(x) / areaWidth * frequency,
-				f64(y) / areaHeight * frequency,
-			}
-			noiseValue := math.step(threshold, noise.noise_2d(seed, samplePosition))
-			blocks[x + y * area.width] = cast(byte)noiseValue
-		}
-	}
-	spawnAreaRadius: i32 = 5
-	spawnAreaMask := generateCircleMask2D(spawnAreaRadius)
-	andMask2D(
-		&blocks,
-		area.width,
-		spawnAreaMask,
-		spawnAreaRadius + spawnAreaRadius,
-		{area.width / 2 - spawnAreaRadius, area.height / 2 - spawnAreaRadius},
-	)
-	blockStartPosition: iVector2
-	wasPreviousBlockSolid: bool
-	for y in 0 ..< area.height {
-		for x in 0 ..< area.width {
-			isBlockSolid := blocks[x + y * area.height] == 1
-			if !wasPreviousBlockSolid && isBlockSolid {
-				blockStartPosition = {x, y}
-			} else if wasPreviousBlockSolid && !isBlockSolid {
-				collisionRectangle := iRectangle {
-					(blockStartPosition.x + area.x) * GENERATION_BLOCK_SIZE,
-					(blockStartPosition.y + area.y) * GENERATION_BLOCK_SIZE,
-					(x - blockStartPosition.x + 1) * GENERATION_BLOCK_SIZE,
-					GENERATION_BLOCK_SIZE,
-				}
-				append(&engine.collisionRectangles, collisionRectangle)
-			}
-			if isBlockSolid && x + 1 == area.width {
-				collisionRectangle := iRectangle {
-					(blockStartPosition.x + area.x) * GENERATION_BLOCK_SIZE,
-					(blockStartPosition.y + area.y) * GENERATION_BLOCK_SIZE,
-					(x - blockStartPosition.x + 1) * GENERATION_BLOCK_SIZE,
-					GENERATION_BLOCK_SIZE,
-				}
-				append(&engine.collisionRectangles, collisionRectangle)
-			}
-			wasPreviousBlockSolid = isBlockSolid
-		}
-	}
-}
-doSolidCollision :: proc(hitbox: rl.Rectangle) -> Maybe(iRectangle) {
-	hitboxI32 := iRectangle{i32(hitbox.x), i32(hitbox.y), i32(hitbox.width), i32(hitbox.height)}
-	for rectangle in engine.collisionRectangles {
-		if rectangleInRectangle(hitboxI32, rectangle) {
-			return rectangle
-		}
-	}
-	return nil
-}
-drawSolids :: proc() {
-	for rectangle in engine.collisionRectangles {
-		rectangleF32 := rl.Rectangle {
-			f32(rectangle.x),
-			f32(rectangle.y),
-			f32(rectangle.width),
-			f32(rectangle.height),
-		}
-		rl.DrawRectangleRec(rectangleF32, rl.WHITE)
-	}
-}
-
 Global :: struct {
 	levelIndex:         Level,
 	changeLevel:        bool,
@@ -309,36 +191,6 @@ global := Global {
 		fovy = 90.0,
 		projection = .PERSPECTIVE,
 	},
-}
-
-/*
-    TODO:
-    Starting/ending texture mode while in mode 2d/3d sets some state that makes stuff disappear
-    For this to work normally 2d/3d mode needs to be begin/end as well
-*/
-beginNestedTextureMode :: proc(renderTexture: rl.RenderTexture) {
-	if engine.currentRenderTexture == nil {
-		engine.currentRenderTexture = renderTexture
-		rl.BeginTextureMode(engine.currentRenderTexture.?)
-	} else {
-		rl.EndTextureMode()
-		append(&engine.renderTextureStack, engine.currentRenderTexture.?)
-		engine.currentRenderTexture = renderTexture
-		rl.BeginTextureMode(engine.currentRenderTexture.?)
-	}
-}
-endNestedTextureMode :: proc() {
-	if engine.renderTextureStack == nil {
-		panic("No render texture to pop off the stack")
-	} else {
-		rl.EndTextureMode()
-		if len(engine.renderTextureStack) == 0 {
-			engine.currentRenderTexture = nil
-		} else {
-			engine.currentRenderTexture = pop(&engine.renderTextureStack)
-			rl.BeginTextureMode(engine.currentRenderTexture.?)
-		}
-	}
 }
 
 debugPrintDynamicArenaAllocMessage :: proc(
@@ -459,11 +311,8 @@ main :: proc() {
 gameLoop :: proc() {
 	for !rl.WindowShouldClose() {
 		if global.changeLevel {
+			destroyAllGameObjects()
 			mem.dynamic_arena_reset(&engine.levelArena)
-			for object in engine.gameObjects {
-				object.destroyProc(object.data)
-			}
-			clear(&engine.gameObjects)
 			loadLevelProcs[global.levelIndex](engine.levelAlloc)
 			for object in engine.gameObjects {
 				object.startProc(object.data)
@@ -507,30 +356,29 @@ gameLoop :: proc() {
 				{WINDOW_WIDTH, WINDOW_HEIGHT} / 2.0
 		}
 
+		if rl.IsKeyPressed(.A) {
+			if stars := getFirstGameObjectOfType(StarBg); stars != nil {
+				destroyGameObject(stars.object.id)
+			} else {
+				_ = createStarBackground(engine.levelAlloc)
+			}
+		}
+
 		rl.ClearBackground(rl.BLACK)
 		rl.BeginDrawing()
 		beginNestedTextureMode(engine.renderTexture)
 		rl.ClearBackground({0, 0, 0, 0})
 		rl.BeginMode2D(currentCamera^)
 		drawSolids()
-		{
-			i := len(engine.gameObjects) - 1
-			for i >= 0 {
-				engine.gameObjects[i].updateProc(engine.gameObjects[i].data)
-				i -= 1
-			}
-			i = len(engine.gameObjects) - 1
-			for i >= 0 {
-				engine.gameObjects[i].drawProc(engine.gameObjects[i].data)
-				i -= 1
-			}
-			i = len(engine.gameObjects) - 1
-			for i >= 0 {
-				engine.gameObjects[i].drawEndProc(engine.gameObjects[i].data)
-				i -= 1
-			}
+		for object in engine.gameObjects {
+			object.updateProc(object.data)
 		}
-
+		for object in engine.gameObjectsDepthOrdered {
+			object.drawProc(object.data)
+		}
+		for object in engine.gameObjectsDepthOrdered {
+			object.drawEndProc(object.data)
+		}
 		rl.EndMode2D()
 		endNestedTextureMode()
 		drawRenderTextureScaledToScreenBuffer(engine.renderTexture)
