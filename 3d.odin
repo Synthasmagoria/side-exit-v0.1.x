@@ -499,7 +499,6 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 	}
 }
 drawElevator3D :: proc(e: ^Elevator3D) {
-	g := global
 	renderElevator3DPanelTexture(e.panelRenderTexture, &e.panelData)
 	transform := rl.MatrixIdentity()
 	applyLightToShader(e.wallMaterial.shader)
@@ -516,10 +515,10 @@ drawElevator3D :: proc(e: ^Elevator3D) {
 	applyLightToShader(e.lightMaterial.shader)
 	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.Ceiling], e.lightMaterial, transform)
 
-	applyLightToShader(global.defaultMaterial3D.shader)
+	applyLightToShader(engine.defaultMaterial3D.shader)
 	rl.DrawMesh(
 		e.mainModel.meshes[Elevator3DModelMeshes.PanelBox],
-		global.defaultMaterial3D,
+		engine.defaultMaterial3D,
 		transform,
 	)
 
@@ -532,8 +531,8 @@ drawElevator3D :: proc(e: ^Elevator3D) {
 	setShaderValue(e.panelMaterial.shader, "flipY", &panelFlipY)
 	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.Panel], e.panelMaterial, transform)
 
-	rl.DrawMesh(e.leftDoorModel.meshes[0], global.defaultMaterial3D, e.leftDoorModel.transform)
-	rl.DrawMesh(e.rightDoorModel.meshes[0], global.defaultMaterial3D, e.rightDoorModel.transform)
+	rl.DrawMesh(e.leftDoorModel.meshes[0], engine.defaultMaterial3D, e.leftDoorModel.transform)
+	rl.DrawMesh(e.rightDoorModel.meshes[0], engine.defaultMaterial3D, e.rightDoorModel.transform)
 }
 setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 	if e.state == newState {

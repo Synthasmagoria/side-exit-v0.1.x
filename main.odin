@@ -11,15 +11,8 @@ import "core:math/noise"
 import mem "core:mem"
 import rl "lib/raylib"
 
-raylibFree :: libc.free
-raylibMalloc :: libc.malloc
-raylibCalloc :: libc.calloc
-raylibRealloc :: libc.realloc
-
-Alloc :: mem.Allocator
-
 init :: proc() {
-	initMemory()
+	initEngine()
 	loadModels()
 	loadTextures()
 	loadShaders()
@@ -27,12 +20,7 @@ init :: proc() {
 	initSpriteDefs()
 	initLights()
 	initLoadLevelProcs()
-	global.gameRenderTexture = rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
-	global.defaultMaterial3D = loadPassthroughMaterial3D()
-	global.collisionRectangles = make([dynamic]iRectangle, 0, 1000, global.gameAlloc)
-	global.renderTextureStack = make([dynamic]rl.RenderTexture, 0, 5, global.gameAlloc)
-	global.gameObjects = make([dynamic]GameObject, 0, 100, global.gameAlloc)
-	global.gameObjectIdCounter = min(i32)
+	engine.defaultMaterial3D = loadPassthroughMaterial3D()
 	global.levelIndex = .UnrulyLand
 	global.changeLevel = true
 }
@@ -42,60 +30,33 @@ deinit :: proc() {
 	unloadTextures()
 	unloadShaders()
 	unloadSounds()
-	unloadMaterialMapOnly(global.defaultMaterial3D)
-	deinitMemory()
-}
-
-initMemory :: proc() {
-	// TODO: Debug switch on this
-	mem.dynamic_arena_init(&global.gameArena)
-	defer mem.dynamic_arena_free_all(&global.gameArena)
-	global.gameAlloc = Alloc {
-		data      = &global.gameArena,
-		procedure = dynamicArenaAllocatorDebugProc_Game,
-	} //mem.dynamic_arena_allocator(&global.gameArena)
-
-	mem.dynamic_arena_init(&global.levelArena)
-	defer mem.dynamic_arena_free_all(&global.levelArena)
-	global.levelAlloc = Alloc {
-		data      = &global.levelArena,
-		procedure = dynamicArenaAllocatorDebugProc_Level,
-	} //mem.dynamic_arena_allocator(&global.levelArena)
-
-	mem.dynamic_arena_init(&global.frameArena)
-	defer mem.dynamic_arena_free_all(&global.frameArena)
-	global.frameAlloc = mem.dynamic_arena_allocator(&global.frameArena)
-}
-
-deinitMemory :: proc() {
-	mem.dynamic_arena_destroy(&global.gameArena)
-	mem.dynamic_arena_destroy(&global.levelArena)
-	mem.dynamic_arena_destroy(&global.frameArena)
+	deinitEngine()
 }
 
 initLights :: proc() {
-	global.lights3D[0] = Light3D {
+	engine.ambientLightingColor = {0.1, 0.1, 0.12, 1.0}
+	engine.lights3D[0] = Light3D {
 		enabled  = 1,
 		type     = .Point,
 		position = {0.0, 3.0, 0.0},
 		target   = {0.0, 0.0, 0.0},
 		color    = {1.0, 1.0, 1.0, 1.0},
 	}
-	global.lights3D[1] = Light3D {
+	engine.lights3D[1] = Light3D {
 		enabled  = 0,
 		type     = .Point,
 		position = {0.0, 0.0, 0.0},
 		target   = {0.0, 0.0, 0.0},
 		color    = {1.0, 1.0, 1.0, 1.0},
 	}
-	global.lights3D[2] = Light3D {
+	engine.lights3D[2] = Light3D {
 		enabled  = 0,
 		type     = .Point,
 		position = {0.0, 0.0, 0.0},
 		target   = {0.0, 0.0, 0.0},
 		color    = {1.0, 1.0, 1.0, 1.0},
 	}
-	global.lights3D[3] = Light3D {
+	engine.lights3D[3] = Light3D {
 		enabled  = 0,
 		type     = .Point,
 		position = {0.0, 0.0, 0.0},
@@ -156,7 +117,7 @@ Level :: enum {
 	UnrulyLand,
 	_Count,
 }
-loadLevelProcs: [Level._Count]proc(_: Alloc)
+loadLevelProcs: [Level._Count]proc(_: mem.Allocator)
 initLoadLevelProcs :: proc() {
 	loadLevelProcs[Level.Hub] = loadLevel_Hub
 	loadLevelProcs[Level.UnrulyLand] = loadLevel_UnrulyLand
@@ -165,12 +126,12 @@ loadLevel :: proc(level: Level) {
 	global.levelIndex = level
 	global.changeLevel = true
 }
-loadLevelGeneral :: proc(levelAlloc: Alloc) {
+loadLevelGeneral :: proc(levelAlloc: mem.Allocator) {
 	global.elevator = createElevator(levelAlloc)
 	global.elevator.object.pos = {0.0, 56.0}
 	global.player = createPlayer(levelAlloc)
 }
-loadLevel_Hub :: proc(levelAlloc: Alloc) {
+loadLevel_Hub :: proc(levelAlloc: mem.Allocator) {
 	global.cameraFollowPlayer = false
 	global.camera.target = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2}
 	global.camera.offset = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2}
@@ -181,11 +142,11 @@ loadLevel_Hub :: proc(levelAlloc: Alloc) {
 	global.elevator.visible = false
 	global.elevator.instant = true
 
-	append(&global.collisionRectangles, iRectangle{47, 0, 10, 237})
-	append(&global.collisionRectangles, iRectangle{47, 237, 382, 11})
-	append(&global.collisionRectangles, iRectangle{419, 0, 8, 236})
+	append(&engine.collisionRectangles, iRectangle{47, 0, 10, 237})
+	append(&engine.collisionRectangles, iRectangle{47, 237, 382, 11})
+	append(&engine.collisionRectangles, iRectangle{419, 0, 8, 236})
 }
-loadLevel_UnrulyLand :: proc(levelAlloc: Alloc) {
+loadLevel_UnrulyLand :: proc(levelAlloc: mem.Allocator) {
 	global.cameraFollowPlayer = true
 	global.camera.offset = {0.0, 0.0}
 	global.camera.target = {0.0, 0.0}
@@ -243,7 +204,7 @@ printArray2D :: proc(array: [dynamic]$T, arrayWidth: i32) {
 	}
 }
 generateWorld :: proc(area: iRectangle, threshold: f32, seed: i64, frequency: f64) {
-	clear(&global.collisionRectangles)
+	clear(&engine.collisionRectangles)
 	blocks := make([dynamic]byte, area.width * area.height, area.width * area.height)
 	areaWidth := f64(area.width)
 	areaHeight := f64(area.height)
@@ -280,7 +241,7 @@ generateWorld :: proc(area: iRectangle, threshold: f32, seed: i64, frequency: f6
 					(x - blockStartPosition.x + 1) * GENERATION_BLOCK_SIZE,
 					GENERATION_BLOCK_SIZE,
 				}
-				append(&global.collisionRectangles, collisionRectangle)
+				append(&engine.collisionRectangles, collisionRectangle)
 			}
 			if isBlockSolid && x + 1 == area.width {
 				collisionRectangle := iRectangle {
@@ -289,7 +250,7 @@ generateWorld :: proc(area: iRectangle, threshold: f32, seed: i64, frequency: f6
 					(x - blockStartPosition.x + 1) * GENERATION_BLOCK_SIZE,
 					GENERATION_BLOCK_SIZE,
 				}
-				append(&global.collisionRectangles, collisionRectangle)
+				append(&engine.collisionRectangles, collisionRectangle)
 			}
 			wasPreviousBlockSolid = isBlockSolid
 		}
@@ -297,7 +258,7 @@ generateWorld :: proc(area: iRectangle, threshold: f32, seed: i64, frequency: f6
 }
 doSolidCollision :: proc(hitbox: rl.Rectangle) -> Maybe(iRectangle) {
 	hitboxI32 := iRectangle{i32(hitbox.x), i32(hitbox.y), i32(hitbox.width), i32(hitbox.height)}
-	for rectangle in global.collisionRectangles {
+	for rectangle in engine.collisionRectangles {
 		if rectangleInRectangle(hitboxI32, rectangle) {
 			return rectangle
 		}
@@ -305,7 +266,7 @@ doSolidCollision :: proc(hitbox: rl.Rectangle) -> Maybe(iRectangle) {
 	return nil
 }
 drawSolids :: proc() {
-	for rectangle in global.collisionRectangles {
+	for rectangle in engine.collisionRectangles {
 		rectangleF32 := rl.Rectangle {
 			f32(rectangle.x),
 			f32(rectangle.y),
@@ -317,38 +278,21 @@ drawSolids :: proc() {
 }
 
 Global :: struct {
-	levelIndex:           Level,
-	changeLevel:          bool,
-	ambientLightingColor: rl.Vector4,
-	elevator:             ^Elevator,
-	elevator3D:           Elevator3D,
-	camera:               rl.Camera2D,
-	cameraFollowPlayer:   bool,
-	camera3D:             rl.Camera3D,
-	player:               ^Player,
-	player3D:             Player3D,
-	lights3D:             [MAX_LIGHTS]Light3D,
-	collisionRectangles:  [dynamic]iRectangle,
-	defaultMaterial3D:    rl.Material,
-	debugCamera:          rl.Camera2D,
-	debugCamera3D:        rl.Camera3D,
-	debugMode:            bool,
-	currentRenderTexture: Maybe(rl.RenderTexture),
-	renderTextureStack:   [dynamic]rl.RenderTexture,
-	gameObjects:          [dynamic]GameObject,
-	gameObjectIdCounter:  i32,
-	frameArena:           mem.Dynamic_Arena,
-	frameAlloc:           Alloc,
-	levelArena:           mem.Dynamic_Arena,
-	levelAlloc:           Alloc,
-	gameArena:            mem.Dynamic_Arena,
-	gameAlloc:            Alloc,
-	gameRenderTexture:    rl.RenderTexture,
-	music:                rl.Music,
+	levelIndex:         Level,
+	changeLevel:        bool,
+	elevator:           ^Elevator,
+	elevator3D:         Elevator3D,
+	camera:             rl.Camera2D,
+	cameraFollowPlayer: bool,
+	camera3D:           rl.Camera3D,
+	player:             ^Player,
+	player3D:           Player3D,
+	debugCamera:        rl.Camera2D,
+	debugCamera3D:      rl.Camera3D,
+	debugMode:          bool,
+	music:              rl.Music,
 }
 global := Global {
-	ambientLightingColor = {0.1, 0.1, 0.12, 1.0},
-	collisionRectangles = nil,
 	camera = {zoom = 1.0},
 	debugCamera = {zoom = 1.0},
 	camera3D = {
@@ -373,26 +317,26 @@ global := Global {
     For this to work normally 2d/3d mode needs to be begin/end as well
 */
 beginNestedTextureMode :: proc(renderTexture: rl.RenderTexture) {
-	if global.currentRenderTexture == nil {
-		global.currentRenderTexture = renderTexture
-		rl.BeginTextureMode(global.currentRenderTexture.?)
+	if engine.currentRenderTexture == nil {
+		engine.currentRenderTexture = renderTexture
+		rl.BeginTextureMode(engine.currentRenderTexture.?)
 	} else {
 		rl.EndTextureMode()
-		append(&global.renderTextureStack, global.currentRenderTexture.?)
-		global.currentRenderTexture = renderTexture
-		rl.BeginTextureMode(global.currentRenderTexture.?)
+		append(&engine.renderTextureStack, engine.currentRenderTexture.?)
+		engine.currentRenderTexture = renderTexture
+		rl.BeginTextureMode(engine.currentRenderTexture.?)
 	}
 }
 endNestedTextureMode :: proc() {
-	if global.currentRenderTexture == nil {
+	if engine.renderTextureStack == nil {
 		panic("No render texture to pop off the stack")
 	} else {
 		rl.EndTextureMode()
-		if len(global.renderTextureStack) == 0 {
-			global.currentRenderTexture = nil
+		if len(engine.renderTextureStack) == 0 {
+			engine.currentRenderTexture = nil
 		} else {
-			global.currentRenderTexture = pop(&global.renderTextureStack)
-			rl.BeginTextureMode(global.currentRenderTexture.?)
+			engine.currentRenderTexture = pop(&engine.renderTextureStack)
+			rl.BeginTextureMode(engine.currentRenderTexture.?)
 		}
 	}
 }
@@ -488,7 +432,7 @@ WINDOW_HEIGHT :: 360
 main :: proc() {
 	// Raylib init
 	rl.SetConfigFlags({.WINDOW_RESIZABLE}) // TODO: Remove artifacts from main framebuffer when resizing
-	rl.SetTraceLogLevel(.WARNING)
+	rl.SetTraceLogLevel(.INFO)
 	rl.SetTargetFPS(TARGET_FPS)
 	rl.InitAudioDevice()
 	defer rl.CloseAudioDevice()
@@ -499,41 +443,29 @@ main :: proc() {
 	// Currently this causes errors, I don't understand how this works apparently
 	//context.allocator = mem.panic_allocator()
 	init()
+	context.allocator = engine.frameAlloc
+	context.temp_allocator = engine.frameAlloc
 	defer deinit()
-
-	context.allocator = global.frameAlloc
-	context.temp_allocator = global.frameAlloc
 
 	global.music = loadMusicStream(.KowloonSmokeBreak)
 	rl.PlayMusicStream(global.music)
-
 	global.player3D = createPlayer3D()
 	global.elevator3D = createElevator3D()
-
-	mem.dynamic_arena_reset(&global.frameArena)
+	mem.dynamic_arena_reset(&engine.frameArena)
 
 	gameLoop()
 }
 
 gameLoop :: proc() {
 	for !rl.WindowShouldClose() {
-		@(static) isLowPass := false
-		if rl.IsKeyPressed(.H) {
-			isLowPass = !isLowPass
-			if isLowPass {
-				rl.AttachAudioStreamProcessor(global.music.stream, audioProcessEffectLPF)
-			} else {
-				rl.DetachAudioStreamProcessor(global.music.stream, audioProcessEffectLPF)
-			}
-		}
 		if global.changeLevel {
-			mem.dynamic_arena_reset(&global.levelArena)
-			for object in global.gameObjects {
+			mem.dynamic_arena_reset(&engine.levelArena)
+			for object in engine.gameObjects {
 				object.destroyProc(object.data)
 			}
-			clear(&global.gameObjects)
-			loadLevelProcs[global.levelIndex](global.levelAlloc)
-			for object in global.gameObjects {
+			clear(&engine.gameObjects)
+			loadLevelProcs[global.levelIndex](engine.levelAlloc)
+			for object in engine.gameObjects {
 				object.startProc(object.data)
 			}
 			global.changeLevel = false
@@ -575,40 +507,38 @@ gameLoop :: proc() {
 				{WINDOW_WIDTH, WINDOW_HEIGHT} / 2.0
 		}
 
-		g := global
-
 		rl.ClearBackground(rl.BLACK)
 		rl.BeginDrawing()
-		beginNestedTextureMode(global.gameRenderTexture)
+		beginNestedTextureMode(engine.renderTexture)
 		rl.ClearBackground({0, 0, 0, 0})
 		rl.BeginMode2D(currentCamera^)
 		drawSolids()
 		{
-			i := len(global.gameObjects) - 1
+			i := len(engine.gameObjects) - 1
 			for i >= 0 {
-				global.gameObjects[i].updateProc(global.gameObjects[i].data)
+				engine.gameObjects[i].updateProc(engine.gameObjects[i].data)
 				i -= 1
 			}
-			i = len(global.gameObjects) - 1
+			i = len(engine.gameObjects) - 1
 			for i >= 0 {
-				global.gameObjects[i].drawProc(global.gameObjects[i].data)
+				engine.gameObjects[i].drawProc(engine.gameObjects[i].data)
 				i -= 1
 			}
-			i = len(global.gameObjects) - 1
+			i = len(engine.gameObjects) - 1
 			for i >= 0 {
-				global.gameObjects[i].drawEndProc(global.gameObjects[i].data)
+				engine.gameObjects[i].drawEndProc(engine.gameObjects[i].data)
 				i -= 1
 			}
 		}
 
 		rl.EndMode2D()
 		endNestedTextureMode()
-		drawRenderTextureScaledToScreenBuffer(global.gameRenderTexture)
+		drawRenderTextureScaledToScreenBuffer(engine.renderTexture)
 
 		updatePlayer3D(&global.player3D)
 		updateElevator3D(&global.elevator3D)
 
-		beginNestedTextureMode(global.gameRenderTexture)
+		beginNestedTextureMode(engine.renderTexture)
 		rl.BeginMode3D(currentCamera3D^)
 
 		rl.ClearBackground({0.0, 0.0, 0.0, 0.0})
@@ -618,7 +548,7 @@ gameLoop :: proc() {
 		rl.EndMode3D()
 		endNestedTextureMode()
 
-		drawRenderTextureScaledToScreenBuffer(global.gameRenderTexture)
+		drawRenderTextureScaledToScreenBuffer(engine.renderTexture)
 		if global.player3D.state != .Inactive {
 			debugDrawGlobalCamera3DInfo(currentCamera3D^, 4, 4)
 		} else {
@@ -626,9 +556,9 @@ gameLoop :: proc() {
 		}
 		debugDrawFrameTime(rl.GetScreenWidth() - 4, 4)
 		rl.EndDrawing()
-		mem.dynamic_arena_reset(&global.frameArena)
+		mem.dynamic_arena_reset(&engine.frameArena)
 	}
-	for object in global.gameObjects {
+	for object in engine.gameObjects {
 		object.destroyProc(object.data)
 	}
 }

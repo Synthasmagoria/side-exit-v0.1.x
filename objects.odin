@@ -25,7 +25,7 @@ Player :: struct {
 	airjumpCount:   i32,
 	airjumpIndex:   i32,
 }
-createPlayer :: proc(alloc: Alloc) -> ^Player {
+createPlayer :: proc(alloc: mem.Allocator) -> ^Player {
 	self := new(Player, alloc)
 	self.idleSpr = createSprite(getSpriteDef(.SynthIdle))
 	self.walkSpr = createSprite(getSpriteDef(.SynthWalk))
@@ -225,7 +225,7 @@ Elevator :: struct {
 	panelBlend:           rl.Color,
 	activationDist:       f32,
 }
-createElevator :: proc(alloc: Alloc) -> ^Elevator {
+createElevator :: proc(alloc: mem.Allocator) -> ^Elevator {
 	self := new(Elevator, alloc)
 	self.interactionArrowSpr = createSprite(getSpriteDef(.InteractionIndicationArrow))
 	self.state = .Gone
@@ -367,7 +367,7 @@ StarBg :: struct {
 	scrollSpd:  rl.Vector2,
 	object:     ^GameObject,
 }
-createStarBackground :: proc(levelAlloc: Alloc) -> ^StarBg {
+createStarBackground :: proc(levelAlloc: mem.Allocator) -> ^StarBg {
 	self := new(StarBg, levelAlloc)
 	self.genTex = web10CreateTexture({128, 128}, getSpriteDef(.Star), 16)
 	self.frameSize = {128.0, 128.0}
@@ -408,7 +408,7 @@ destroyStarBg :: proc(self: ^StarBg) {
 HubGraphics :: struct {
 	object: ^GameObject,
 }
-createHubGraphics :: proc(levelAlloc: Alloc) -> ^HubGraphics {
+createHubGraphics :: proc(levelAlloc: mem.Allocator) -> ^HubGraphics {
 	self := new(HubGraphics, levelAlloc)
 	self.object = createGameObject(
 		HubGraphics,

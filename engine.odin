@@ -1,5 +1,6 @@
 package game
 import "core:c"
+import "core:c/libc"
 import "core:fmt"
 import "core:math"
 import "core:math/noise"
@@ -10,6 +11,73 @@ import "core:reflect"
 import "core:strings"
 import rl "lib/raylib"
 import rlgl "lib/raylib/rlgl"
+
+raylibFree :: libc.free
+raylibMalloc :: libc.malloc
+raylibCalloc :: libc.calloc
+raylibRealloc :: libc.realloc
+
+initEngine :: proc() {
+	initEngineMemory()
+	en := engine
+	engine.renderTexture = rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
+	engine.collisionRectangles = make([dynamic]iRectangle, 0, 1000, engine.gameAlloc)
+	engine.renderTextureStack = make([dynamic]rl.RenderTexture, 0, 5, engine.gameAlloc)
+	engine.gameObjects = make([dynamic]GameObject, 0, 100, engine.gameAlloc)
+	engine.gameObjectIdCounter = min(i32)
+}
+
+deinitEngine :: proc() {
+	unloadMaterialMapOnly(engine.defaultMaterial3D)
+	deinitEngineMemory()
+}
+
+initEngineMemory :: proc() {
+	// TODO: Debug switch on this
+	mem.dynamic_arena_init(&engine.gameArena)
+	defer mem.dynamic_arena_free_all(&engine.gameArena)
+	engine.gameAlloc = mem.Allocator {
+		data      = &engine.gameArena,
+		procedure = dynamicArenaAllocatorDebugProc_Game,
+	} //mem.dynamic_arena_allocator(&engine.gameArena)
+
+	mem.dynamic_arena_init(&engine.levelArena)
+	defer mem.dynamic_arena_free_all(&engine.levelArena)
+	engine.levelAlloc = mem.Allocator {
+		data      = &engine.levelArena,
+		procedure = dynamicArenaAllocatorDebugProc_Level,
+	} //mem.dynamic_arena_allocator(&engine.levelArena)
+
+	mem.dynamic_arena_init(&engine.frameArena)
+	defer mem.dynamic_arena_free_all(&engine.frameArena)
+	engine.frameAlloc = mem.dynamic_arena_allocator(&engine.frameArena)
+}
+
+deinitEngineMemory :: proc() {
+	mem.dynamic_arena_destroy(&engine.gameArena)
+	mem.dynamic_arena_destroy(&engine.levelArena)
+	mem.dynamic_arena_destroy(&engine.frameArena)
+}
+
+engine: Engine
+Engine :: struct {
+	frameArena:           mem.Dynamic_Arena,
+	frameAlloc:           mem.Allocator,
+	levelArena:           mem.Dynamic_Arena,
+	levelAlloc:           mem.Allocator,
+	gameArena:            mem.Dynamic_Arena,
+	gameAlloc:            mem.Allocator,
+	gameRenderTexture:    rl.RenderTexture,
+	currentRenderTexture: Maybe(rl.RenderTexture),
+	renderTextureStack:   [dynamic]rl.RenderTexture,
+	gameObjects:          [dynamic]GameObject,
+	gameObjectIdCounter:  i32,
+	lights3D:             [MAX_LIGHTS]Light3D,
+	collisionRectangles:  [dynamic]iRectangle,
+	defaultMaterial3D:    rl.Material,
+	renderTexture:        rl.RenderTexture,
+	ambientLightingColor: rl.Vector4,
+}
 
 Resources :: struct {
 	models:     [ModelName._Count]rl.Model,
@@ -330,7 +398,7 @@ lightShaderPreviousId: u32 = 0
 MAX_LIGHTS :: 4
 // TODO: Possibly optimizable with constant locations by using a shader include system
 applyLightToShader :: proc(shd: rl.Shader) {
-	setShaderValue(shd, "ambient", &global.ambientLightingColor)
+	setShaderValue(shd, "ambient", &engine.ambientLightingColor)
 	setShaderValue(shd, "viewPos", &global.camera3D.position)
 
 	if shd.id == lightShaderPreviousId {
@@ -338,38 +406,38 @@ applyLightToShader :: proc(shd: rl.Shader) {
 	}
 	lightShaderPreviousId = shd.id
 
-	setShaderValue(shd, "lights[0].enabled", &global.lights3D[0].enabled)
-	type0 := c.int(global.lights3D[0].type)
+	setShaderValue(shd, "lights[0].enabled", &engine.lights3D[0].enabled)
+	type0 := c.int(engine.lights3D[0].type)
 	setShaderValue(shd, "lights[0].type", &type0)
-	setShaderValue(shd, "lights[0].position", &global.lights3D[0].position)
-	setShaderValue(shd, "lights[0].target", &global.lights3D[0].target)
-	setShaderValue(shd, "lights[0].color", &global.lights3D[0].color)
+	setShaderValue(shd, "lights[0].position", &engine.lights3D[0].position)
+	setShaderValue(shd, "lights[0].target", &engine.lights3D[0].target)
+	setShaderValue(shd, "lights[0].color", &engine.lights3D[0].color)
 
-	setShaderValue(shd, "lights[1].enabled", &global.lights3D[1].enabled)
-	type1 := c.int(global.lights3D[1].type)
+	setShaderValue(shd, "lights[1].enabled", &engine.lights3D[1].enabled)
+	type1 := c.int(engine.lights3D[1].type)
 	setShaderValue(shd, "lights[1].type", &type1)
-	setShaderValue(shd, "lights[1].position", &global.lights3D[1].position)
-	setShaderValue(shd, "lights[1].target", &global.lights3D[1].target)
-	setShaderValue(shd, "lights[1].color", &global.lights3D[1].color)
+	setShaderValue(shd, "lights[1].position", &engine.lights3D[1].position)
+	setShaderValue(shd, "lights[1].target", &engine.lights3D[1].target)
+	setShaderValue(shd, "lights[1].color", &engine.lights3D[1].color)
 
-	setShaderValue(shd, "lights[2].enabled", &global.lights3D[2].enabled)
-	type2 := c.int(global.lights3D[2].type)
+	setShaderValue(shd, "lights[2].enabled", &engine.lights3D[2].enabled)
+	type2 := c.int(engine.lights3D[2].type)
 	setShaderValue(shd, "lights[2].type", &type2)
-	setShaderValue(shd, "lights[2].position", &global.lights3D[2].position)
-	setShaderValue(shd, "lights[2].target", &global.lights3D[2].target)
-	setShaderValue(shd, "lights[2].color", &global.lights3D[2].color)
+	setShaderValue(shd, "lights[2].position", &engine.lights3D[2].position)
+	setShaderValue(shd, "lights[2].target", &engine.lights3D[2].target)
+	setShaderValue(shd, "lights[2].color", &engine.lights3D[2].color)
 
-	setShaderValue(shd, "lights[3].enabled", &global.lights3D[3].enabled)
-	type3 := c.int(global.lights3D[3].type)
+	setShaderValue(shd, "lights[3].enabled", &engine.lights3D[3].enabled)
+	type3 := c.int(engine.lights3D[3].type)
 	setShaderValue(shd, "lights[3].type", &type3)
-	setShaderValue(shd, "lights[3].position", &global.lights3D[3].position)
-	setShaderValue(shd, "lights[3].target", &global.lights3D[3].target)
-	setShaderValue(shd, "lights[3].color", &global.lights3D[3].color)
+	setShaderValue(shd, "lights[3].position", &engine.lights3D[3].position)
+	setShaderValue(shd, "lights[3].target", &engine.lights3D[3].target)
+	setShaderValue(shd, "lights[3].color", &engine.lights3D[3].color)
 }
 ACTIVE_LIGHTS :: 1
 setLightStatus :: proc(val: i32) {
 	for i in 0 ..< ACTIVE_LIGHTS {
-		global.lights3D[i].enabled = val
+		engine.lights3D[i].enabled = val
 	}
 }
 
@@ -403,20 +471,20 @@ createGameObject :: proc(
 		drawEndProc = drawEndProc,
 		destroyProc = destroyProc,
 		data        = data,
-		id          = global.gameObjectIdCounter,
+		id          = engine.gameObjectIdCounter,
 		type        = T,
 	}
-	append(&global.gameObjects, object)
-	global.gameObjectIdCounter += 1
-	return &global.gameObjects[len(global.gameObjects) - 1]
+	append(&engine.gameObjects, object)
+	engine.gameObjectIdCounter += 1
+	return &engine.gameObjects[len(engine.gameObjects) - 1]
 }
 setGameObjectStartFunc :: proc()
 getGameObjectsOfType :: proc(type: typeid) -> [dynamic]^GameObject {
 	context.allocator = context.temp_allocator
 	objs := make([dynamic]^GameObject, 0, 10)
-	for i in 0 ..< len(global.gameObjects) {
-		if global.gameObjects[i].type == type {
-			append(&objs, &global.gameObjects[i])
+	for i in 0 ..< len(engine.gameObjects) {
+		if engine.gameObjects[i].type == type {
+			append(&objs, &engine.gameObjects[i])
 		}
 	}
 	return objs
@@ -425,38 +493,38 @@ getGameObjectScreenPos :: proc(obj: ^GameObject) -> rl.Vector2 {
 	return obj.pos - global.camera.target + global.camera.offset
 }
 getFirstGameObjectOfType :: proc($T: typeid) -> ^T {
-	for i in 0 ..< len(global.gameObjects) {
-		if global.gameObjects[i].type == T {
-			return cast(^T)global.gameObjects[i].data
+	for i in 0 ..< len(engine.gameObjects) {
+		if engine.gameObjects[i].type == T {
+			return cast(^T)engine.gameObjects[i].data
 		}
 	}
 	return nil
 }
 objectCollision :: proc(object: ^GameObject, offset: rl.Vector2) -> ^GameObject {
 	rec := getObjectAbsoluteCollisionRectangle(object, offset)
-	for i in 0 ..< len(global.gameObjects) {
-		otherObject := &global.gameObjects[i]
+	for i in 0 ..< len(engine.gameObjects) {
+		otherObject := &engine.gameObjects[i]
 		if object.id != otherObject.id &&
 		   rectangleInRectangle(
 			   rec,
 			   getObjectAbsoluteCollisionRectangle(otherObject, {0.0, 0.0}),
 		   ) {
-			return &global.gameObjects[i]
+			return &engine.gameObjects[i]
 		}
 	}
 	return nil
 }
 objectCollisionType :: proc(object: ^GameObject, type: typeid, offset: rl.Vector2) -> ^GameObject {
 	rec := getObjectAbsoluteCollisionRectangle(object, offset)
-	for i in 0 ..< len(global.gameObjects) {
-		otherObject := &global.gameObjects[i]
+	for i in 0 ..< len(engine.gameObjects) {
+		otherObject := &engine.gameObjects[i]
 		if object.id != otherObject.id &&
 		   otherObject.type == type &&
 		   rectangleInRectangle(
 			   rec,
 			   getObjectAbsoluteCollisionRectangle(otherObject, {0.0, 0.0}),
 		   ) {
-			return &global.gameObjects[i]
+			return &engine.gameObjects[i]
 		}
 	}
 	return nil
@@ -487,11 +555,11 @@ getObjectAbsoluteCollisionRectangle :: proc(
 debugDrawGameObjectCollisions :: proc() {
 	whiteTex := getTexture(.White32)
 	whiteTexSrc := getTextureRec(whiteTex)
-	for i in 0 ..< len(global.gameObjects) {
+	for i in 0 ..< len(engine.gameObjects) {
 		rl.DrawTexturePro(
 			whiteTex,
 			whiteTexSrc,
-			getObjectAbsoluteCollisionRectangle(&global.gameObjects[i], {0.0, 0.0}),
+			getObjectAbsoluteCollisionRectangle(&engine.gameObjects[i], {0.0, 0.0}),
 			{0.0, 0.0},
 			0.0,
 			{0, 192, 0, 128},
