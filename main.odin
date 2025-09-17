@@ -1,8 +1,10 @@
 package game
 
 import libc "core:c/libc"
+import "core:crypto/x25519"
 import "core:fmt"
 import "core:math"
+import "core:math/linalg"
 import "core:math/noise"
 import mem "core:mem"
 import rl "lib/raylib"
@@ -28,7 +30,7 @@ init :: proc() {
 	global.renderTextureStack = make([dynamic]rl.RenderTexture, 0, 5, global.gameAlloc)
 	global.gameObjects = make([dynamic]GameObject, 0, 100, global.gameAlloc)
 	global.gameObjectIdCounter = min(i32)
-	global.levelIndex = .Hub
+	global.levelIndex = .UnrulyLand
 	global.changeLevel = true
 }
 
@@ -162,13 +164,58 @@ loadLevel_UnrulyLand :: proc(levelAlloc: Alloc) {
 	global.camera.offset = {0.0, 0.0}
 	global.camera.target = {0.0, 0.0}
 	loadLevelGeneral(levelAlloc)
-	generateWorld({-64, -64, 128, 128}, 0.5, 4, 8.0)
-	global.elevator.visible = false
-	global.elevator.instant = true
+	generateWorld({-64, -64, 128, 128}, -0.5, 0, 8.0)
+	global.player.object.pos = {0.0, 0.0}
+	global.elevator.object.pos = {0.0, 0.0}
+	global.elevator.visible = true
+	global.elevator.instant = false
 	_ = createStarBackground(levelAlloc)
 }
 
 GENERATION_BLOCK_SIZE :: 16
+generateCircleMask2D :: proc(radius: i32) -> [dynamic]byte {
+	diameter := radius + radius
+	maskLength := diameter * diameter
+	mask := make([dynamic]byte, maskLength, maskLength)
+	center := rl.Vector2{f32(radius) - 0.5, f32(radius) - 0.5}
+	for i in 0 ..< maskLength {
+		x := i % diameter
+		y := i / diameter
+		position := rl.Vector2{f32(x), f32(y)}
+		distance := linalg.distance(center, position)
+		mask[i] = u8(math.step(f32(radius) - 0.25, distance) == 1)
+	}
+	return mask
+}
+andMask2D :: proc(
+	dest: ^[dynamic]byte,
+	destWidth: i32,
+	mask: [dynamic]byte,
+	maskWidth: i32,
+	maskPosition: iVector2,
+) {
+	assert(linalg.fract(f32(len(dest)) / f32(destWidth)) == 0.0)
+	assert(linalg.fract(f32(len(mask)) / f32(maskWidth)) == 0.0)
+	destArea := iRectangle{0, 0, destWidth, i32(len(dest)) / destWidth}
+	maskArea := iRectangle{maskPosition.x, maskPosition.y, maskWidth, i32(len(mask)) / maskWidth}
+	assert(maskArea.x + maskArea.width <= destArea.width)
+	assert(maskArea.y + maskArea.height <= destArea.height)
+	for x in 0 ..< maskArea.width {
+		for y in 0 ..< maskArea.height {
+			destX := x + maskArea.x
+			destY := y + maskArea.y
+			destIndex := destX + destY * destWidth
+			dest[destIndex] &= mask[x + y * maskWidth]
+		}
+	}
+}
+printArray2D :: proc(array: [dynamic]$T, arrayWidth: i32) {
+	assert(linalg.fract(f32(len(array)) / f32(arrayWidth)) == 0.0)
+	rowCount := i32(len(array)) / arrayWidth
+	for i in 0 ..< rowCount {
+		fmt.println(array[i * arrayWidth:(i + 1) * arrayWidth])
+	}
+}
 generateWorld :: proc(area: iRectangle, threshold: f32, seed: i64, frequency: f64) {
 	clear(&global.collisionRectangles)
 	blocks := make([dynamic]byte, area.width * area.height, area.width * area.height)
@@ -184,6 +231,15 @@ generateWorld :: proc(area: iRectangle, threshold: f32, seed: i64, frequency: f6
 			blocks[x + y * area.width] = cast(byte)noiseValue
 		}
 	}
+	spawnAreaRadius: i32 = 5
+	spawnAreaMask := generateCircleMask2D(spawnAreaRadius)
+	andMask2D(
+		&blocks,
+		area.width,
+		spawnAreaMask,
+		spawnAreaRadius + spawnAreaRadius,
+		{area.width / 2 - spawnAreaRadius, area.height / 2 - spawnAreaRadius},
+	)
 	blockStartPosition: iVector2
 	wasPreviousBlockSolid: bool
 	for y in 0 ..< area.height {
