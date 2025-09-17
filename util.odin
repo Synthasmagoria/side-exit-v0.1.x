@@ -23,6 +23,12 @@ unloadMaterialNoMap :: proc(material: rl.Material) {
 	}
 }
 
+wrapi :: proc(val, mn, mx: $T) -> T {
+	newVal := val - mn
+	newVal = T(f32(newVal) - math.floor(f32(val) / f32(mx - mn)) * f32(mx - mn))
+	return newVal + mn
+}
+
 charLower :: proc(c: u8) -> u8 {
 	if c >= 'A' && c <= 'Z' {
 		return c + ('a' - 'A')
@@ -150,6 +156,53 @@ getScreenScale :: proc() -> rl.Vector2 {
 	screenSize := rl.Vector2{f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
 	return screenSize / rl.Vector2{WINDOW_WIDTH, WINDOW_HEIGHT}
 }
+
+vector3ToStringTemp :: proc(v: rl.Vector3) -> cstring {
+	return rl.TextFormat("{{%f, %f, %f}}", v.x, v.y, v.z)
+}
+vector2ToStringTemp :: proc(v: rl.Vector2) -> cstring {
+	return rl.TextFormat("{{%f, %f}}", v.x, v.y)
+}
+
+HorizontalTextAlign :: enum {
+	Left,
+	Center,
+	Right,
+}
+VerticalTextAlign :: enum {
+	Top,
+	Middle,
+	Bottom,
+}
+drawTextAligned :: proc(
+	text: cstring,
+	position: rl.Vector2,
+	font: rl.Font,
+	fontSize: f32,
+	color: rl.Color,
+	horizontalAlign: HorizontalTextAlign,
+	verticalAlign: VerticalTextAlign,
+) {
+	textSize := rl.MeasureTextEx(font, text, fontSize, 1.0)
+	textPosition: rl.Vector2 = {0.0, 0.0}
+	switch horizontalAlign {
+	case .Left:
+		textPosition.x = position.x
+	case .Center:
+		textPosition.x = position.x - textSize.x / 2.0
+	case .Right:
+		textPosition.x = position.x - textSize.x
+	}
+	switch verticalAlign {
+	case .Top:
+		textPosition.y = position.y
+	case .Middle:
+		textPosition.y = position.y - textSize.y / 2.0
+	case .Bottom:
+		textPosition.y = position.y - textSize.y
+	}
+	rl.DrawTextEx(font, text, textPosition, fontSize, 1.0, color)
+}
 drawRenderTextureScaledToScreenBuffer :: proc(rtex: rl.RenderTexture) {
 	rtex_size := getTextureSize(rtex.texture)
 	screen_size := rl.Vector2{cast(f32)rl.GetScreenWidth(), cast(f32)rl.GetScreenHeight()}
@@ -167,12 +220,6 @@ drawRenderTextureScaledToScreenBuffer :: proc(rtex: rl.RenderTexture) {
 
 drawTextureRecDest :: proc(tex: rl.Texture, dest: rl.Rectangle) {
 	rl.DrawTexturePro(tex, getTextureRec(tex), dest, rl.Vector2{0.0, 0.0}, 0.0, rl.WHITE)
-}
-vector3ToStringTemp :: proc(v: rl.Vector3) -> cstring {
-	return rl.TextFormat("{{%f, %f, %f}}", v.x, v.y, v.z)
-}
-vector2ToStringTemp :: proc(v: rl.Vector2) -> cstring {
-	return rl.TextFormat("{{%f, %f}}", v.x, v.y)
 }
 debugDrawTextOutline :: proc(
 	text: cstring,

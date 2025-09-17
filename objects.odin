@@ -359,6 +359,62 @@ setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
 	}
 }
 
+TITLE_MENU_TEXT_SIZE_BIG :: 32
+TITLE_MENU_TEXT_SIZE_SMALL :: 16
+TitleMenu :: struct {
+	object:      ^GameObject,
+	options:     [2]string,
+	optionIndex: i32,
+}
+createTitleMenu :: proc(levelAlloc: mem.Allocator) -> ^TitleMenu {
+	self := new(TitleMenu, levelAlloc)
+	self.options = [2]string{"Start", "Quit"}
+	self.optionIndex = 0
+	self.object = createGameObject(
+		TitleMenu,
+		self,
+		0,
+		updateProc = cast(proc(_: rawptr))updateTitleMenu,
+		drawProc = cast(proc(_: rawptr))drawTitleMenu,
+	)
+	self.object.pos = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 + WINDOW_HEIGHT / 4}
+	return self
+}
+updateTitleMenu :: proc(self: ^TitleMenu) {
+	// TODO: Play menu select sound
+	if rl.IsKeyPressed(.DOWN) {
+		self.optionIndex = (self.optionIndex + 1) % i32(len(self.options))
+	} else if rl.IsKeyPressed(.UP) {
+		self.optionIndex = wrapi(self.optionIndex - 1, 0, i32(len(self.options)))
+	}
+}
+
+drawTitleMenu :: proc(self: ^TitleMenu) {
+	font := rl.GetFontDefault()
+	for i in 0 ..< len(self.options) {
+		if i32(i) != self.optionIndex {
+			drawTextAligned(
+				strings.clone_to_cstring(self.options[i]),
+				self.object.pos + {0.0, f32(i) * TITLE_MENU_TEXT_SIZE_BIG},
+				font,
+				TITLE_MENU_TEXT_SIZE_SMALL,
+				rl.WHITE,
+				.Center,
+				.Middle,
+			)
+		}
+	}
+	drawTextAligned(
+		strings.clone_to_cstring(self.options[self.optionIndex]),
+		self.object.pos + {0.0, f32(self.optionIndex) * TITLE_MENU_TEXT_SIZE_BIG},
+		font,
+		TITLE_MENU_TEXT_SIZE_BIG,
+		rl.WHITE,
+		.Center,
+		.Middle,
+	)
+}
+
 StarBg :: struct {
 	genTex:     rl.Texture,
 	frameSize:  rl.Vector2,

@@ -21,7 +21,7 @@ init :: proc() {
 	initLights()
 	initLoadLevelProcs()
 	engine.defaultMaterial3D = loadPassthroughMaterial3D()
-	global.levelIndex = .UnrulyLand
+	global.levelIndex = .TitleMenu
 	global.changeLevel = true
 }
 
@@ -113,12 +113,14 @@ debugDrawGlobalCamera3DInfo :: proc(cam: rl.Camera3D, x: i32, y: i32) {
 }
 
 Level :: enum {
+	TitleMenu,
 	Hub,
 	UnrulyLand,
 	_Count,
 }
 loadLevelProcs: [Level._Count]proc(_: mem.Allocator)
 initLoadLevelProcs :: proc() {
+	loadLevelProcs[Level.TitleMenu] = loadLevel_TitleMenu
 	loadLevelProcs[Level.Hub] = loadLevel_Hub
 	loadLevelProcs[Level.UnrulyLand] = loadLevel_UnrulyLand
 }
@@ -130,6 +132,12 @@ loadLevelGeneral :: proc(levelAlloc: mem.Allocator) {
 	global.elevator = createElevator(levelAlloc)
 	global.elevator.object.pos = {0.0, 56.0}
 	global.player = createPlayer(levelAlloc)
+}
+loadLevel_TitleMenu :: proc(levelAlloc: mem.Allocator) {
+	global.cameraFollowPlayer = false
+	global.camera.target = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2}
+	global.camera.offset = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2}
+	_ = createTitleMenu(levelAlloc)
 }
 loadLevel_Hub :: proc(levelAlloc: mem.Allocator) {
 	global.cameraFollowPlayer = false
@@ -305,108 +313,111 @@ main :: proc() {
 	global.elevator3D = createElevator3D()
 	mem.dynamic_arena_reset(&engine.frameArena)
 
-	gameLoop()
+	for !rl.WindowShouldClose() {
+		gameStep()
+	}
+	for i in 0 ..< len(engine.gameObjects) {
+		engine.gameObjects[i].destroyProc(engine.gameObjects[i].data)
+	}
 }
 
-gameLoop :: proc() {
-	for !rl.WindowShouldClose() {
-		if global.changeLevel {
-			destroyAllGameObjects()
-			mem.dynamic_arena_reset(&engine.levelArena)
-			loadLevelProcs[global.levelIndex](engine.levelAlloc)
-			for object in engine.gameObjects {
-				object.startProc(object.data)
-			}
-			global.changeLevel = false
-		}
-		rl.UpdateMusicStream(global.music)
-
-		debugModePrevious := global.debugMode
-		if rl.IsKeyPressed(.BACKSPACE) {
-			global.debugMode = global.debugMode ? false : true
-		}
-		currentCamera := &global.camera
-		currentCamera3D := &global.camera3D
-		if global.debugMode {
-			if global.player3D.state != .Inactive && global.player3D.state != .Uninitialized {
-				rl.UpdateCamera(&global.debugCamera3D, .FIRST_PERSON)
-				if rl.IsKeyDown(.SPACE) {
-					rl.CameraMoveUp(&global.debugCamera3D, 5.4 * TARGET_TIME_STEP)
-				} else if rl.IsKeyDown(.LEFT_SHIFT) {
-					rl.CameraMoveUp(&global.debugCamera3D, -5.4 * TARGET_TIME_STEP)
-				}
-				rl.DisableCursor()
-				currentCamera3D = &global.debugCamera3D
-			} else {
-				if !debugModePrevious {
-					global.debugCamera.offset = global.camera.offset
-					global.debugCamera.target = global.camera.target
-				}
-				mouseWheelMovement := rl.GetMouseWheelMoveV()
-				if rl.IsMouseButtonDown(.MIDDLE) {
-					global.debugCamera.target -= rl.GetMouseDelta()
-				}
-				global.debugCamera.zoom += mouseWheelMovement.y * 0.02
-				currentCamera = &global.debugCamera
-			}
-		}
-		if global.cameraFollowPlayer {
-			global.camera.offset =
-				getObjectCenterAbsolute(global.player.object^) * -1.0 +
-				{WINDOW_WIDTH, WINDOW_HEIGHT} / 2.0
-		}
-
-		if rl.IsKeyPressed(.A) {
-			if stars := getFirstGameObjectOfType(StarBg); stars != nil {
-				destroyGameObject(stars.object.id)
-			} else {
-				_ = createStarBackground(engine.levelAlloc)
-			}
-		}
-
-		rl.ClearBackground(rl.BLACK)
-		rl.BeginDrawing()
-		beginNestedTextureMode(engine.renderTexture)
-		rl.ClearBackground({0, 0, 0, 0})
-		rl.BeginMode2D(currentCamera^)
-		drawSolids()
+gameStep :: proc() {
+	player := getFirstGameObjectOfType(Player)
+	if global.changeLevel {
+		destroyAllGameObjects()
+		mem.dynamic_arena_reset(&engine.levelArena)
+		loadLevelProcs[global.levelIndex](engine.levelAlloc)
 		for object in engine.gameObjects {
-			object.updateProc(object.data)
+			object.startProc(object.data)
 		}
-		for object in engine.gameObjectsDepthOrdered {
-			object.drawProc(object.data)
+		global.changeLevel = false
+	}
+	rl.UpdateMusicStream(global.music)
+
+	debugModePrevious := global.debugMode
+	if rl.IsKeyPressed(.BACKSPACE) {
+		global.debugMode = global.debugMode ? false : true
+	}
+	currentCamera := &global.camera
+	currentCamera3D := &global.camera3D
+	if global.debugMode {
+		if global.player3D.state != .Inactive && global.player3D.state != .Uninitialized {
+			rl.UpdateCamera(&global.debugCamera3D, .FIRST_PERSON)
+			if rl.IsKeyDown(.SPACE) {
+				rl.CameraMoveUp(&global.debugCamera3D, 5.4 * TARGET_TIME_STEP)
+			} else if rl.IsKeyDown(.LEFT_SHIFT) {
+				rl.CameraMoveUp(&global.debugCamera3D, -5.4 * TARGET_TIME_STEP)
+			}
+			rl.DisableCursor()
+			currentCamera3D = &global.debugCamera3D
+		} else {
+			if !debugModePrevious {
+				global.debugCamera.offset = global.camera.offset
+				global.debugCamera.target = global.camera.target
+			}
+			mouseWheelMovement := rl.GetMouseWheelMoveV()
+			if rl.IsMouseButtonDown(.MIDDLE) {
+				global.debugCamera.target -= rl.GetMouseDelta()
+			}
+			global.debugCamera.zoom += mouseWheelMovement.y * 0.02
+			currentCamera = &global.debugCamera
 		}
-		for object in engine.gameObjectsDepthOrdered {
-			object.drawEndProc(object.data)
+	}
+	if global.cameraFollowPlayer && player != nil {
+		global.camera.offset =
+			getObjectCenterAbsolute(player.object^) * -1.0 + {WINDOW_WIDTH, WINDOW_HEIGHT} / 2.0
+	}
+
+	if rl.IsKeyPressed(.A) {
+		if stars := getFirstGameObjectOfType(StarBg); stars != nil {
+			destroyGameObject(stars.object.id)
+		} else {
+			_ = createStarBackground(engine.levelAlloc)
 		}
-		rl.EndMode2D()
-		endNestedTextureMode()
-		drawRenderTextureScaledToScreenBuffer(engine.renderTexture)
+	}
 
-		updatePlayer3D(&global.player3D)
-		updateElevator3D(&global.elevator3D)
+	rl.ClearBackground(rl.BLACK)
+	rl.BeginDrawing()
+	beginNestedTextureMode(engine.renderTexture)
+	rl.ClearBackground({0, 0, 0, 0})
+	rl.BeginMode2D(currentCamera^)
+	drawSolids()
+	for object in engine.gameObjects {
+		object.updateProc(object.data)
+	}
+	for object in engine.gameObjectsDepthOrdered {
+		object.drawProc(object.data)
+	}
+	for object in engine.gameObjectsDepthOrdered {
+		object.drawEndProc(object.data)
+	}
+	rl.EndMode2D()
+	endNestedTextureMode()
+	drawRenderTextureScaledToScreenBuffer(engine.renderTexture)
 
-		beginNestedTextureMode(engine.renderTexture)
-		rl.BeginMode3D(currentCamera3D^)
+	updatePlayer3D(&global.player3D)
+	updateElevator3D(&global.elevator3D)
 
-		rl.ClearBackground({0.0, 0.0, 0.0, 0.0})
-		drawElevator3D(&global.elevator3D)
-		rl.DrawGrid(10, 1.0)
+	beginNestedTextureMode(engine.renderTexture)
+	rl.BeginMode3D(currentCamera3D^)
 
-		rl.EndMode3D()
-		endNestedTextureMode()
+	rl.ClearBackground({0.0, 0.0, 0.0, 0.0})
+	drawElevator3D(&global.elevator3D)
+	rl.DrawGrid(10, 1.0)
 
-		drawRenderTextureScaledToScreenBuffer(engine.renderTexture)
+	rl.EndMode3D()
+	endNestedTextureMode()
+
+	drawRenderTextureScaledToScreenBuffer(engine.renderTexture)
+	if global.player != nil {
 		if global.player3D.state != .Inactive {
 			debugDrawGlobalCamera3DInfo(currentCamera3D^, 4, 4)
 		} else {
 			debugDrawPlayerInfo(global.player^, 4, 4)
 		}
-		debugDrawFrameTime(rl.GetScreenWidth() - 4, 4)
-		rl.EndDrawing()
-		mem.dynamic_arena_reset(&engine.frameArena)
 	}
-	for object in engine.gameObjects {
-		object.destroyProc(object.data)
-	}
+	debugDrawFrameTime(rl.GetScreenWidth() - 4, 4)
+
+	rl.EndDrawing()
+	mem.dynamic_arena_reset(&engine.frameArena)
 }
