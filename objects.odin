@@ -45,7 +45,7 @@ createPlayer :: proc(alloc: mem.Allocator) -> ^Player {
 	self.object = createGameObject(
 		Player,
 		self,
-		0,
+		-100,
 		updateProc = cast(proc(_: rawptr))updatePlayer,
 		drawProc = cast(proc(_: rawptr))drawPlayer,
 	)
@@ -345,9 +345,12 @@ setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
 		if player := getFirstGameObjectOfType(Player); player != nil {
 			player.frozen = 1
 		}
-		if player3D := getFirstGameObjectOfType(Player3D); player3D != nil {
-			movePlayer3D(player3D, PLAYER_3D_OUTSIDE_POSITION, PLAYER_3D_INSIDE_POSITION, .Looking)
-		}
+		movePlayer3D(
+			&global.player3D,
+			PLAYER_3D_OUTSIDE_POSITION,
+			PLAYER_3D_INSIDE_POSITION,
+			.Looking,
+		)
 	case .Leaving:
 		self.blend = rl.WHITE
 		self.leavingStateData.movementTween = createTween(
@@ -545,8 +548,6 @@ Player3D :: struct {
 	lookingStateData: Player3DLookingStateData,
 	yaw:              f32,
 	pitch:            f32,
-	elevator3D:       ^Elevator3D,
-	object:           ^GameObject,
 }
 Player3DMovingStateData :: struct {
 	movementTween: Tween,
@@ -572,30 +573,17 @@ Player3DLookingStateData :: struct {
 	pitchTween:      Tween,
 	verticalState:   PlayerLookingStateVertical,
 }
-createPlayer3D :: proc(levelAlloc: mem.Allocator) -> ^Player3D {
-	self := new(Player3D, levelAlloc)
-	self.lookingStateData = {
-		yawTween        = createFinishedTween(0.0),
-		pitchTween      = createFinishedTween(0.0),
-		horizontalState = .Forward,
-		verticalState   = .Middle,
+createPlayer3D :: proc() -> Player3D {
+	self := Player3D {
+		lookingStateData = {
+			yawTween = createFinishedTween(0.0),
+			pitchTween = createFinishedTween(0.0),
+			horizontalState = .Forward,
+			verticalState = .Middle,
+		},
 	}
-	setPlayer3DState(self, .Inactive)
-	self.object = createGameObject(
-		Player3D,
-		self,
-		0,
-		startProc = cast(proc(_: rawptr))startPlayer3D,
-		updateProc = cast(proc(_: rawptr))updatePlayer3D,
-	)
+	setPlayer3DState(&self, .Inactive)
 	return self
-}
-startPlayer3D :: proc(self: ^Player3D) {
-	if elevator3D := getFirstGameObjectOfType(Elevator3D); elevator3D != nil {
-		self.elevator3D = elevator3D
-	} else {
-		panic("No Elevator3D in level, Player3D is dependent on Elevator3D")
-	}
 }
 setPlayer3DState :: proc(player: ^Player3D, nextState: Player3DState) {
 	if player.state == nextState {
@@ -625,10 +613,8 @@ setPlayer3DState :: proc(player: ^Player3D, nextState: Player3DState) {
 		player.lookingStateData.pitchTween = createFinishedTween(player.pitch)
 	case .Moving:
 		if previousState == .Inactive {
-			if elevator3D := getFirstGameObjectOfType(Elevator3D); elevator3D != nil {
-				setElevator3DDoorState(elevator3D, true, true, 0.0)
-				setElevator3DDoorState(elevator3D, false, false, 5.0)
-			}
+			setElevator3DDoorState(&global.elevator3D, true, true, 0.0)
+			setElevator3DDoorState(&global.elevator3D, false, false, 5.0)
 		}
 	case .Panel:
 	}
@@ -696,7 +682,7 @@ updatePlayer3D :: proc(self: ^Player3D) {
 			if data.horizontalState == .Forward && data.verticalState == .Middle {
 				if rl.IsKeyPressed(.LEFT_SHIFT) {
 					movePlayer3D(self, global.camera3D.position, PLAYER_3D_PANEL_POSITION, .Panel)
-				} else if rl.IsKeyPressed(.Z) && isElevator3DDoorOpen(self.elevator3D) {
+				} else if rl.IsKeyPressed(.Z) && isElevator3DDoorOpen(&global.elevator3D) {
 					movePlayer3D(
 						self,
 						global.camera3D.position,
@@ -722,7 +708,7 @@ updatePlayer3D :: proc(self: ^Player3D) {
 		if !rl.IsMouseButtonPressed(.LEFT) {
 			break
 		}
-		panelMesh := self.elevator3D.mainModel.meshes[Elevator3DModelMeshes.Panel]
+		panelMesh := global.elevator3D.mainModel.meshes[Elevator3DModelMeshes.Panel]
 		panelBbox := rl.GetMeshBoundingBox(panelMesh)
 		ray := rl.GetScreenToWorldRay(rl.GetMousePosition(), global.camera3D)
 		rayCollision := rl.GetRayCollisionBox(ray, panelBbox)
@@ -736,8 +722,8 @@ updatePlayer3D :: proc(self: ^Player3D) {
 			panelPositionNormalized.y = 1.0 - panelPositionNormalized.y
 			panelPosition :=
 				panelPositionNormalized *
-				getTextureSize(self.elevator3D.panelRenderTexture.texture)
-			elevatorPanel3DInput(&self.elevator3D.panelData, panelPosition)
+				getTextureSize(global.elevator3D.panelRenderTexture.texture)
+			elevatorPanel3DInput(&global.elevator3D.panelData, panelPosition)
 		} else {
 			fmt.println("No collision")
 		}
@@ -807,21 +793,17 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 				i32(relativeButtonPositionFloored.y),
 			}
 			rl.PlaySound(getSound(.ElevatorPanelButton))
-			if elevator3D := getFirstGameObjectOfType(Elevator3D); elevator3D != nil {
-				if elevator3D.state == .Idle {
-					if panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] == 1 {
-						panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] = 0
-						panel.buttonPressedCount -= 1
-					} else {
-						panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] = 1
-						panel.buttonPressedCount += 1
-					}
-					if panel.buttonPressedCount >= 4 {
-						setElevator3DState(elevator3D, .Leaving)
-					}
+			if global.elevator3D.state == .Idle {
+				if panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] == 1 {
+					panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] = 0
+					panel.buttonPressedCount -= 1
+				} else {
+					panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] = 1
+					panel.buttonPressedCount += 1
 				}
-			} else {
-				panic("No Elevator3D in level, ElevatorPanel3D pepends on Elevator3D")
+				if panel.buttonPressedCount >= 4 {
+					setElevator3DState(&global.elevator3D, .Leaving)
+				}
 			}
 		}
 	} else if pointInRectangle(position, panel.knobArea) {
@@ -872,21 +854,19 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 			panel.bigButtonSize.x,
 			panel.bigButtonSize.y,
 		}
-		if elevator3D := getFirstGameObjectOfType(Elevator3D); elevator3D != nil {
-			if pointInRectangle(position, bigButtonRectangle) {
-				rl.PlaySound(getSound(.ElevatorPanelButton))
-				switch (int(relativePositionFloored.x)) {
-				case 0:
-					if elevator3D.state == .Idle {
-						setElevator3DDoorState(elevator3D, true, false, 0.4)
-					}
-				case 1:
-					if elevator3D.state == .Idle {
-						setElevator3DDoorState(elevator3D, false, false, 0.4)
-					}
-				case 2:
-				// TODO: Play ringing sound
+		if pointInRectangle(position, bigButtonRectangle) {
+			rl.PlaySound(getSound(.ElevatorPanelButton))
+			switch (int(relativePositionFloored.x)) {
+			case 0:
+				if global.elevator3D.state == .Idle {
+					setElevator3DDoorState(&global.elevator3D, true, false, 0.4)
 				}
+			case 1:
+				if global.elevator3D.state == .Idle {
+					setElevator3DDoorState(&global.elevator3D, false, false, 0.4)
+				}
+			case 2:
+			// TODO: Play ringing sound
 			}
 		} else {
 			panic("No Elevator3D in level, ElevatorPanel3D depends on Elevator3D")
@@ -917,7 +897,6 @@ Elevator3D :: struct {
 	lightFrameIndex:    f32,
 	doorsTween:         Tween,
 	transitStateData:   Elevator3DTransitStateData,
-	object:             ^GameObject,
 }
 setElevator3DDoorState :: proc(e: ^Elevator3D, open: bool, instant: bool, delay: f32) {
 	if instant {
@@ -942,7 +921,7 @@ isElevator3DDoorOpen :: proc(e: ^Elevator3D) -> bool {
 				getTweenProgressDurationOnly(e.doorsTween) < 0.5) \
 	)
 }
-createElevator3D :: proc(levelAlloc: mem.Allocator) -> ^Elevator3D {
+createElevator3D :: proc() -> Elevator3D {
 	lightMaterial := rl.LoadMaterialDefault()
 	lightMaterial.shader = getShader(.AnimatedTexture3D)
 	rl.SetMaterialTexture(&lightMaterial, .ALBEDO, getTexture(.ElevatorLights3D))
@@ -956,42 +935,36 @@ createElevator3D :: proc(levelAlloc: mem.Allocator) -> ^Elevator3D {
 		ELEVATOR_3D_PANEL_RENDER_TEXTURE_WIDTH,
 		panelRenderTextureHeight,
 	)
-	self := new(Elevator3D, levelAlloc)
-	self.state = .Idle
-	self.mainModel = getModel(.Elevator)
-	self.leftDoorModel = getModel(.ElevatorSlidingDoorLeft)
-	self.rightDoorModel = getModel(.ElevatorSlidingDoorRight)
-	self.wallMaterial = loadPassthroughMaterial3D(getTexture(.ElevatorWall3D))
-	self.lightMaterial = lightMaterial
-	self.floorMaterial = loadPassthroughMaterial3D()
-	self.panelMaterial = loadPassthroughMaterial3D(panelRenderTexture.texture)
-	self.panelRenderTexture = panelRenderTexture
-	self.panelData = {
-		buttonArea          = {
-			21.0,
-			60.0,
-			24.0 * f32(ELEVATOR_PANEL_BUTTON_COUNT.x),
-			24.0 * f32(ELEVATOR_PANEL_BUTTON_COUNT.y),
+	self := Elevator3D {
+		state = .Idle,
+		mainModel = getModel(.Elevator),
+		leftDoorModel = getModel(.ElevatorSlidingDoorLeft),
+		rightDoorModel = getModel(.ElevatorSlidingDoorRight),
+		wallMaterial = loadPassthroughMaterial3D(getTexture(.ElevatorWall3D)),
+		lightMaterial = lightMaterial,
+		floorMaterial = loadPassthroughMaterial3D(),
+		panelMaterial = loadPassthroughMaterial3D(panelRenderTexture.texture),
+		panelRenderTexture = panelRenderTexture,
+		panelData = {
+			buttonArea = {
+				21.0,
+				60.0,
+				24.0 * f32(ELEVATOR_PANEL_BUTTON_COUNT.x),
+				24.0 * f32(ELEVATOR_PANEL_BUTTON_COUNT.y),
+			},
+			buttonSeparation = {24.0, 24.0},
+			knobArea = {110.0, 60.0, 44.0, 44.0 * 2},
+			knobSeparation = {0.0, 44.0},
+			sliderArea = {101.0, 167.0, 24.0 * 3.0, 80.0},
+			sliderSeparation = {24.0, 0.0},
+			bigButtonArea = {14.0, 263.0, 39.0 * 3.0, 30.0},
+			bigButtonSeparation = {39.0, 0.0},
+			bigButtonSize = {30.0, 30.0},
+			screenArea = {16.0, 12.0, 148.0, 38.0},
 		},
-		buttonSeparation    = {24.0, 24.0},
-		knobArea            = {110.0, 60.0, 44.0, 44.0 * 2},
-		knobSeparation      = {0.0, 44.0},
-		sliderArea          = {101.0, 167.0, 24.0 * 3.0, 80.0},
-		sliderSeparation    = {24.0, 0.0},
-		bigButtonArea       = {14.0, 263.0, 39.0 * 3.0, 30.0},
-		bigButtonSeparation = {39.0, 0.0},
-		bigButtonSize       = {30.0, 30.0},
-		screenArea          = {16.0, 12.0, 148.0, 38.0},
+		lightFrameIndex = 1.0,
+		doorsTween = createFinishedTween(f32(1.0)),
 	}
-	self.lightFrameIndex = 1.0
-	self.doorsTween = createFinishedTween(f32(1.0))
-	self.object = createGameObject(
-		Elevator3D,
-		self,
-		0,
-		updateProc = cast(proc(_: rawptr))updateElevator3D,
-		draw3DProc = cast(proc(_: rawptr))drawElevator3D,
-	)
 	return self
 }
 toggleElevatorLights :: proc(e: ^Elevator3D) {

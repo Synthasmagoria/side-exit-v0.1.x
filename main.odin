@@ -129,18 +129,14 @@ loadLevel :: proc(level: Level) {
 	global.changeLevel = true
 }
 GeneralLevelObjects :: struct {
-	player:     ^Player,
-	elevator:   ^Elevator,
-	player3D:   ^Player3D,
-	elevator3D: ^Elevator3D,
+	player:   ^Player,
+	elevator: ^Elevator,
 }
 loadLevelGeneral :: proc(levelAlloc: mem.Allocator) -> GeneralLevelObjects {
 	elevator := createElevator(levelAlloc)
 	elevator.object.pos = {0.0, 56.0}
 	player := createPlayer(levelAlloc)
-	player3D := createPlayer3D(levelAlloc)
-	elevator3D := createElevator3D(levelAlloc)
-	return {player, elevator, player3D, elevator3D}
+	return {player, elevator}
 }
 loadLevel_TitleMenu :: proc(levelAlloc: mem.Allocator) {
 	global.cameraFollowPlayer = false
@@ -183,6 +179,8 @@ Global :: struct {
 	camera:             rl.Camera2D,
 	cameraFollowPlayer: bool,
 	camera3D:           rl.Camera3D,
+	player3D:           Player3D,
+	elevator3D:         Elevator3D,
 	debugCamera:        rl.Camera2D,
 	debugCamera3D:      rl.Camera3D,
 	debugMode:          bool,
@@ -318,6 +316,9 @@ main :: proc() {
 	rl.PlayMusicStream(global.music)
 	mem.dynamic_arena_reset(&engine.frameArena)
 
+	global.player3D = createPlayer3D()
+	global.elevator3D = createElevator3D()
+
 	for !rl.WindowShouldClose() && !global.windowCloseRequest {
 		gameStep()
 	}
@@ -330,8 +331,6 @@ main :: proc() {
 gameStep :: proc() {
 	player := getFirstGameObjectOfType(Player)
 	elevator := getFirstGameObjectOfType(Elevator)
-	player3D := getFirstGameObjectOfType(Player3D)
-	elevator3D := getFirstGameObjectOfType(Elevator3D)
 
 	if global.changeLevel {
 		destroyAllGameObjects()
@@ -351,7 +350,7 @@ gameStep :: proc() {
 	currentCamera := &global.camera
 	currentCamera3D := &global.camera3D
 	if global.debugMode {
-		if player3D != nil && player3D.state != .Inactive && player3D.state != .Uninitialized {
+		if global.player3D.state != .Inactive && global.player3D.state != .Uninitialized {
 			rl.UpdateCamera(&global.debugCamera3D, .FIRST_PERSON)
 			if rl.IsKeyDown(.SPACE) {
 				rl.CameraMoveUp(&global.debugCamera3D, 5.4 * TARGET_TIME_STEP)
@@ -412,15 +411,18 @@ gameStep :: proc() {
 	if global.debugMode {
 		rl.DrawGrid(10, 1.0)
 	}
+	updateElevator3D(&global.elevator3D)
+	updatePlayer3D(&global.player3D)
 	for object in engine.gameObjects {
 		object.draw3DProc(object.data)
 	}
+	drawElevator3D(&global.elevator3D)
 	rl.EndMode3D()
 	endNestedTextureMode()
 
 	drawRenderTextureScaledToScreenBuffer(engine.renderTexture)
 	if player != nil {
-		if player3D.state != .Inactive {
+		if global.player3D.state != .Inactive {
 			debugDrawGlobalCamera3DInfo(currentCamera3D^, 4, 4)
 		} else {
 			debugDrawPlayerInfo(player^, 4, 4)

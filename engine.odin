@@ -11,7 +11,6 @@ import "core:path/filepath"
 import "core:reflect"
 import "core:strings"
 import rl "lib/raylib"
-import rlgl "lib/raylib/rlgl"
 
 raylibFree :: libc.free
 raylibMalloc :: libc.malloc
@@ -20,7 +19,6 @@ raylibRealloc :: libc.realloc
 
 initEngine :: proc() {
 	initEngineMemory()
-	en := engine
 	engine.renderTexture = rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
 	engine.collisionRectangles = make([dynamic]iRectangle, 0, 1000, engine.gameAlloc)
 	engine.renderTextureStack = make([dynamic]rl.RenderTexture, 0, 5, engine.gameAlloc)
