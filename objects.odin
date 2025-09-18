@@ -9,6 +9,7 @@ import "core:mem"
 import "core:reflect"
 import "core:strings"
 import rl "lib/raylib"
+import rlgl "lib/raylib/rlgl"
 
 Player :: struct {
 	object:         ^GameObject,
@@ -426,9 +427,9 @@ drawTitleMenu :: proc(self: ^TitleMenu) {
 }
 
 TitleMenuBackground :: struct {
-	object: ^GameObject,
-	yaw:    f32,
-	pitch:  f32,
+	object:               ^GameObject,
+	elevatorAngle:        f32,
+	backgroundShaderTime: f32,
 }
 createTitleMenuBackground :: proc(levelAlloc: mem.Allocator) -> ^TitleMenuBackground {
 	self := new(TitleMenuBackground, levelAlloc)
@@ -437,17 +438,44 @@ createTitleMenuBackground :: proc(levelAlloc: mem.Allocator) -> ^TitleMenuBackgr
 		self,
 		0,
 		updateProc = cast(proc(_: rawptr))updateTitleMenuBackground,
+		drawProc = cast(proc(_: rawptr))drawTitleMenuBackground,
 		draw3DProc = cast(proc(_: rawptr))drawTitleMenuBackground3D,
 	)
-	self.yaw = 0.0
-	self.pitch = 0.2
+	self.elevatorAngle = 0.0
 	return self
 }
 updateTitleMenuBackground :: proc(self: ^TitleMenuBackground) {
-	self.yaw += TARGET_TIME_STEP * 0.5
+	self.elevatorAngle += TARGET_TIME_STEP * 30.0
+	self.backgroundShaderTime += TARGET_TIME_STEP
+}
+drawTitleMenuBackground :: proc(self: ^TitleMenuBackground) {
+	backgroundShaderTexture := getTexture(.White32)
+	backgroundShaderSource := getTextureRec(backgroundShaderTexture)
+	backgroundShaderDest := rl.Rectangle{0.0, 0.0, WINDOW_WIDTH, WINDOW_HEIGHT}
+	backgroundShader := getShader(.TitleMenuFog)
+	rl.BeginShaderMode(backgroundShader)
+	setShaderValue(backgroundShader, "time", &self.backgroundShaderTime)
+	rl.DrawTexturePro(
+		backgroundShaderTexture,
+		backgroundShaderSource,
+		backgroundShaderDest,
+		{0.0, 0.0},
+		0.0,
+		rl.WHITE,
+	)
+	rl.EndShaderMode()
 }
 drawTitleMenuBackground3D :: proc(self: ^TitleMenuBackground) {
-	rl.DrawModelWires(getModel(.ElevatorTitleMenu), FORWARD_3D * 3.0, 1.0, rl.WHITE)
+	rlgl.DisableBackfaceCulling()
+	rl.DrawModelWiresEx(
+		getModel(.ElevatorTitleMenu),
+		FORWARD_3D * 25.0 + RIGHT_3D * 16.0,
+		{0.1, 1.0, 0.0},
+		self.elevatorAngle,
+		{1.0, 1.0, 1.0},
+		rl.WHITE,
+	)
+	rlgl.EnableBackfaceCulling()
 }
 
 StarBg :: struct {
@@ -875,6 +903,7 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 }
 ELEVATOR_PANEL_BUTTON_COUNT: iVector2 : {3, 8}
 Elevator3DState :: enum {
+	Invisible,
 	Idle,
 	Leaving,
 	Transit,
@@ -977,6 +1006,7 @@ toggleElevatorLights :: proc(e: ^Elevator3D) {
 }
 updateElevator3D :: proc(e: ^Elevator3D) {
 	switch e.state {
+	case .Invisible:
 	case .Idle:
 	case .Leaving:
 		if tweenIsFinished(e.doorsTween) {
@@ -1007,6 +1037,9 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 	}
 }
 drawElevator3D :: proc(e: ^Elevator3D) {
+	if e.state == .Invisible {
+		return
+	}
 	renderElevator3DPanelTexture(e.panelRenderTexture, &e.panelData)
 	transform := rl.MatrixIdentity()
 	applyLightToShader(e.wallMaterial.shader)
@@ -1049,6 +1082,7 @@ setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 	e.state = newState
 	fmt.println(e.state)
 	switch e.state {
+	case .Invisible:
 	case .Idle:
 		for x in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.x {
 			for y in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.y {

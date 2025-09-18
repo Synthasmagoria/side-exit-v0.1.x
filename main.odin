@@ -142,6 +142,9 @@ loadLevel_TitleMenu :: proc(levelAlloc: mem.Allocator) {
 	global.cameraFollowPlayer = false
 	global.camera.target = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2}
 	global.camera.offset = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2}
+	global.camera3D.position = {0.0, 0.0, 0.0}
+	global.camera3D.target = FORWARD_3D
+	setElevator3DState(&global.elevator3D, .Invisible)
 	_ = createTitleMenu(levelAlloc)
 	_ = createTitleMenuBackground(levelAlloc)
 }
@@ -297,7 +300,7 @@ WINDOW_HEIGHT :: 360
 main :: proc() {
 	// Raylib init
 	rl.SetConfigFlags({.WINDOW_RESIZABLE}) // TODO: Remove artifacts from main framebuffer when resizing
-	rl.SetTraceLogLevel(.INFO)
+	rl.SetTraceLogLevel(.WARNING)
 	rl.SetTargetFPS(TARGET_FPS)
 	rl.InitAudioDevice()
 	defer rl.CloseAudioDevice()

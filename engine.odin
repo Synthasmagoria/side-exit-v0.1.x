@@ -33,9 +33,9 @@ deinitEngine :: proc() {
 }
 
 initEngineMemory :: proc() {
-	// TODO: Debug switch on this
 	mem.dynamic_arena_init(&engine.gameArena)
 	defer mem.dynamic_arena_free_all(&engine.gameArena)
+	// TODO: Debug switch on memory tracking
 	engine.gameAlloc = mem.Allocator {
 		data      = &engine.gameArena,
 		procedure = dynamicArenaAllocatorDebugProc_Game,
@@ -232,6 +232,7 @@ ShaderNames :: enum {
 	AnimatedTextureRepeatPosition,
 	Passthrough3D,
 	AnimatedTexture3D,
+	TitleMenuFog,
 	_Count,
 }
 globalShaders: [ShaderNames._Count]rl.Shader
