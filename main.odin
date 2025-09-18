@@ -140,10 +140,8 @@ loadLevelGeneral :: proc(levelAlloc: mem.Allocator) -> GeneralLevelObjects {
 }
 loadLevel_TitleMenu :: proc(levelAlloc: mem.Allocator) {
 	global.cameraFollowPlayer = false
-	global.camera.target = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2}
-	global.camera.offset = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2}
-	global.camera3D.position = {0.0, 0.0, 0.0}
-	global.camera3D.target = FORWARD_3D
+	global.camera = getZeroCamera2D()
+	global.camera3D = getZeroCamera3D()
 	setElevator3DState(&global.elevator3D, .Invisible)
 	_ = createTitleMenu(levelAlloc)
 	_ = createTitleMenuBackground(levelAlloc)
@@ -300,7 +298,7 @@ WINDOW_HEIGHT :: 360
 main :: proc() {
 	// Raylib init
 	rl.SetConfigFlags({.WINDOW_RESIZABLE}) // TODO: Remove artifacts from main framebuffer when resizing
-	rl.SetTraceLogLevel(.WARNING)
+	rl.SetTraceLogLevel(.INFO)
 	rl.SetTargetFPS(TARGET_FPS)
 	rl.InitAudioDevice()
 	defer rl.CloseAudioDevice()
@@ -390,10 +388,8 @@ gameStep :: proc() {
 
 	rl.ClearBackground(rl.BLACK)
 	rl.BeginDrawing()
-	beginNestedTextureMode(engine.renderTexture)
+	beginModeStacked(currentCamera^, engine.renderTexture)
 	rl.ClearBackground({0, 0, 0, 0})
-	rl.BeginMode2D(currentCamera^)
-	drawSolids()
 	for object in engine.gameObjects {
 		object.updateProc(object.data)
 	}
@@ -403,13 +399,11 @@ gameStep :: proc() {
 	for object in engine.gameObjectsDepthOrdered {
 		object.drawEndProc(object.data)
 	}
-	rl.EndMode2D()
-	endNestedTextureMode()
+	endModeStacked()
+
 	drawRenderTextureScaledToScreenBuffer(engine.renderTexture)
 
-	beginNestedTextureMode(engine.renderTexture)
-	rl.BeginMode3D(currentCamera3D^)
-
+	beginModeStacked(currentCamera3D^, engine.renderTexture)
 	rl.ClearBackground({0.0, 0.0, 0.0, 0.0})
 	if global.debugMode {
 		rl.DrawGrid(10, 1.0)
@@ -420,10 +414,10 @@ gameStep :: proc() {
 		object.draw3DProc(object.data)
 	}
 	drawElevator3D(&global.elevator3D)
-	rl.EndMode3D()
-	endNestedTextureMode()
+	endModeStacked()
 
 	drawRenderTextureScaledToScreenBuffer(engine.renderTexture)
+
 	if player != nil {
 		if global.player3D.state != .Inactive {
 			debugDrawGlobalCamera3DInfo(currentCamera3D^, 4, 4)

@@ -461,7 +461,7 @@ drawTitleMenuBackground :: proc(self: ^TitleMenuBackground) {
 		backgroundShaderDest,
 		{0.0, 0.0},
 		0.0,
-		rl.WHITE,
+		{255, 255, 255, 192},
 	)
 	rl.EndShaderMode()
 }
@@ -543,6 +543,28 @@ createHubGraphics :: proc(levelAlloc: mem.Allocator) -> ^HubGraphics {
 drawHubGraphics :: proc(self: ^HubGraphics) {
 	rl.DrawTextureV(getTexture(.HubBackground), {0.0, 0.0}, rl.WHITE)
 	rl.DrawTextureV(getTexture(.HubBuilding), {0.0, 0.0}, rl.WHITE)
+}
+
+UnrulyLandGraphics :: struct {
+	object:             ^GameObject,
+	blockRenderTexture: rl.RenderTexture,
+}
+createUnrulyLandGraphics :: proc(levelAlloc: mem.Allocator) -> ^UnrulyLandGraphics {
+	self := new(UnrulyLandGraphics, levelAlloc)
+	self.blockRenderTexture = rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
+	self.object = createGameObject(
+		UnrulyLandGraphics,
+		self,
+		100,
+		destroyProc = cast(proc(_: rawptr))destroyUnrulyLandGraphics,
+	)
+	return self
+}
+drawUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
+
+}
+destroyUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
+	rl.UnloadRenderTexture(self.blockRenderTexture)
 }
 
 FORWARD_3D :: rl.Vector3{1.0, 0.0, 0.0} // out of elevator
@@ -640,6 +662,9 @@ setPlayer3DState :: proc(player: ^Player3D, nextState: Player3DState) {
 		player.lookingStateData.yawTween = createFinishedTween(player.yaw)
 		player.lookingStateData.pitchTween = createFinishedTween(player.pitch)
 	case .Moving:
+		if global.elevator3D.state == .Invisible {
+			setElevator3DState(&global.elevator3D, .Idle)
+		}
 		if previousState == .Inactive {
 			setElevator3DDoorState(&global.elevator3D, true, true, 0.0)
 			setElevator3DDoorState(&global.elevator3D, false, false, 5.0)
@@ -1099,8 +1124,7 @@ setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 	}
 }
 renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^ElevatorPanelData) {
-	rl.EndMode3D()
-	beginNestedTextureMode(renderTexture)
+	beginModeStacked(getZeroCamera2D(), renderTexture)
 	rl.ClearBackground({0, 0, 0, 0})
 
 	buttonSprite := createSprite(getSpriteDef(.ElevatorPanelButton))
@@ -1166,11 +1190,8 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 
 	bigButtonTexture := getTexture(.ElevatorPanelBigButtons)
 	rl.DrawTextureV(bigButtonTexture, {data.bigButtonArea.x, data.bigButtonArea.y}, rl.WHITE)
-
 	rl.DrawRectangleRec(data.screenArea, rl.BLACK)
-
-	endNestedTextureMode()
-	rl.BeginMode3D(global.camera3D)
+	endModeStacked()
 }
 destroyElevator3D :: proc(e: ^Elevator3D) {
 	unloadMaterialMapOnly(e.wallMaterial)

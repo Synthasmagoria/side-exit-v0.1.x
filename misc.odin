@@ -24,7 +24,7 @@ web10CreateTexture :: proc(size: iVector2, spr_def: SpriteDef, num: i32) -> rl.T
 
 	rtex := rl.LoadRenderTexture(tex_w, size.y)
 	defer rl.UnloadRenderTexture(rtex)
-	beginNestedTextureMode(rtex)
+	beginModeStacked(getZeroCamera2D(), rtex)
 	rl.ClearBackground(rl.Color{0, 0, 0, 0})
 
 	for i: i32 = 0; i < spr_def.frame_count; i += 1 {
@@ -36,7 +36,7 @@ web10CreateTexture :: proc(size: iVector2, spr_def: SpriteDef, num: i32) -> rl.T
 		}
 	}
 
-	endNestedTextureMode()
+	endModeStacked()
 	img := rl.LoadImageFromTexture(rtex.texture)
 	return rl.LoadTextureFromImage(img)
 }

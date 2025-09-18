@@ -19,9 +19,9 @@ raylibRealloc :: libc.realloc
 
 initEngine :: proc() {
 	initEngineMemory()
+	engine.renderTextureStack = createRenderTextureStack()
 	engine.renderTexture = rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
 	engine.collisionRectangles = make([dynamic]iRectangle, 0, 1000, engine.gameAlloc)
-	engine.renderTextureStack = make([dynamic]rl.RenderTexture, 0, 5, engine.gameAlloc)
 	engine.gameObjects = make([dynamic]GameObject, 0, 100, engine.gameAlloc)
 	engine.gameObjectsDepthOrdered = make([dynamic]^GameObject, 0, 100, engine.gameAlloc)
 	engine.gameObjectIdCounter = min(i32)
@@ -69,7 +69,7 @@ Engine :: struct {
 	gameAlloc:               mem.Allocator,
 	gameRenderTexture:       rl.RenderTexture,
 	currentRenderTexture:    Maybe(rl.RenderTexture),
-	renderTextureStack:      [dynamic]rl.RenderTexture,
+	renderTextureStack:      RenderTextureStack,
 	gameObjects:             [dynamic]GameObject,
 	gameObjectsDepthOrdered: [dynamic]^GameObject,
 	gameObjectIdCounter:     i32,
@@ -738,32 +738,122 @@ debugDrawGameObjectCollisions :: proc() {
 	}
 }
 
+getZeroCamera2D :: proc() -> rl.Camera2D {
+	return {
+		offset = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},
+		target = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},
+		rotation = 0.0,
+		zoom = 1.0,
+	}
+}
+
+getZeroCamera3D :: proc() -> rl.Camera3D {
+	return {
+		position = {0.0, 0.0, 0.0},
+		target = FORWARD_3D,
+		up = UP_3D,
+		projection = .PERSPECTIVE,
+		fovy = 90.0,
+	}
+}
+
 /*
     TODO:
     Starting/ending texture mode while in mode 2d/3d sets some state that makes stuff disappear
     For this to work normally 2d/3d mode needs to be begin/end as well
 */
-beginNestedTextureMode :: proc(renderTexture: rl.RenderTexture) {
-	if engine.currentRenderTexture == nil {
-		engine.currentRenderTexture = renderTexture
-		rl.BeginTextureMode(engine.currentRenderTexture.?)
-	} else {
-		rl.EndTextureMode()
-		append(&engine.renderTextureStack, engine.currentRenderTexture.?)
-		engine.currentRenderTexture = renderTexture
-		rl.BeginTextureMode(engine.currentRenderTexture.?)
-	}
+RenderTextureStackCamera :: union {
+	rl.Camera2D,
+	rl.Camera3D,
 }
-endNestedTextureMode :: proc() {
-	if engine.renderTextureStack == nil {
-		panic("No render texture to pop off the stack")
-	} else {
+ENGINE_RENDER_TEXTURE_STACK_CAPACITY :: 5
+RenderTextureStack :: struct {
+	renderTextureStack: [ENGINE_RENDER_TEXTURE_STACK_CAPACITY]Maybe(rl.RenderTexture),
+	renderCameraStack:  [ENGINE_RENDER_TEXTURE_STACK_CAPACITY]RenderTextureStackCamera,
+	count:              i32,
+}
+
+/*
+    Can I safely call BeginMode2D/3D without calling the EndMode counterpart?
+*/
+createRenderTextureStack :: proc() -> RenderTextureStack {
+	rts: RenderTextureStack
+	for i in 0 ..< ENGINE_RENDER_TEXTURE_STACK_CAPACITY {
+		rts.renderTextureStack[i] = nil
+		rts.renderTextureStack[i] = nil
+	}
+	return rts
+}
+beginModeStacked :: proc(
+	camera: RenderTextureStackCamera,
+	renderTexture: Maybe(rl.RenderTexture),
+) {
+	rts := &engine.renderTextureStack
+	assert(rts.count + 1 < ENGINE_RENDER_TEXTURE_STACK_CAPACITY)
+	if rts.count > 0 {
+		switch c in rts.renderCameraStack[rts.count - 1] {
+		case rl.Camera2D:
+			rl.EndMode2D()
+		case rl.Camera3D:
+			rl.EndMode3D()
+		case nil:
+			unreachable()
+		}
+		if rts.renderTextureStack[rts.count - 1] != nil {
+			rl.EndTextureMode()
+		}
+	}
+	if renderTexture != nil {
+		rl.BeginTextureMode(renderTexture.?)
+	}
+	usingCamera := camera
+	switch c in camera {
+	case rl.Camera2D:
+		rl.BeginMode2D(c)
+	case rl.Camera3D:
+		rl.BeginMode3D(c)
+	case nil:
+		assert(rts.count > 0)
+		usingCamera = rts.renderCameraStack[rts.count - 1]
+		switch cc in usingCamera {
+		case rl.Camera2D:
+			rl.BeginMode2D(cc)
+		case rl.Camera3D:
+			rl.BeginMode3D(cc)
+		case nil:
+			unreachable()
+		}
+	}
+	rts.renderCameraStack[rts.count] = usingCamera
+	rts.renderTextureStack[rts.count] = renderTexture
+	rts.count += 1
+}
+endModeStacked :: proc() {
+	rts := &engine.renderTextureStack
+	assert(rts.count > 0)
+	rts.count -= 1
+	switch c in rts.renderCameraStack[rts.count] {
+	case rl.Camera2D:
+		rl.EndMode2D()
+	case rl.Camera3D:
+		rl.EndMode3D()
+	case nil:
+		unreachable()
+	}
+	if rts.renderTextureStack[rts.count] != nil {
 		rl.EndTextureMode()
-		if len(engine.renderTextureStack) == 0 {
-			engine.currentRenderTexture = nil
-		} else {
-			engine.currentRenderTexture = pop(&engine.renderTextureStack)
-			rl.BeginTextureMode(engine.currentRenderTexture.?)
+	}
+	if rts.count > 0 {
+		if rts.renderTextureStack[rts.count - 1] != nil {
+			rl.BeginTextureMode(rts.renderTextureStack[rts.count - 1].?)
+		}
+		switch c in rts.renderCameraStack[rts.count - 1] {
+		case rl.Camera2D:
+			rl.BeginMode2D(c)
+		case rl.Camera3D:
+			rl.BeginMode3D(c)
+		case nil:
+			unreachable()
 		}
 	}
 }
