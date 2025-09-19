@@ -11,11 +11,11 @@ files="$OUT_DIR/game.wasm.o lib/raylib/raylib/build/wasm/release/libraylib.web.a
 
 # index_template.html contains the javascript code that calls the procedures in
 # source/main_web/main_web.odin
-flags="-sUSE_GLFW=3 -sWASM_BIGINT -sWARN_ON_UNDEFINED_SYMBOLS=0 -sASSERTIONS --shell-file index_template.html --preload-file tex"
-preload=""
+flags="-sUSE_GLFW=3 -sWASM_BIGINT -sWARN_ON_UNDEFINED_SYMBOLS=0 -sASSERTIONS --shell-file index_template.html"
+preload="--preload-file aud --preload-file mod --preload-file shd --preload-file sfx --preload-file tex"
 
 # For debugging: Add `-g` to `emcc` (gives better error callstack in chrome)
-emcc -o $OUT_DIR/index.html $files $flags
+emcc -o $OUT_DIR/index.html $files $flags $preload
 
 rm $OUT_DIR/game.wasm.o
 

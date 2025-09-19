@@ -230,9 +230,10 @@ initSpriteDefs :: proc() {
 
 ShaderNames :: enum {
 	AnimatedTextureRepeatPosition,
-	Passthrough3D,
-	AnimatedTexture3D,
+	FlipY,
 	TitleMenuFog,
+	AnimatedTexture3D,
+	Passthrough3D,
 	_Count,
 }
 globalShaders: [ShaderNames._Count]rl.Shader
@@ -273,14 +274,14 @@ loadAndResolveShader :: proc(name: string) -> Maybe(rl.Shader) {
 	vertPath := strings.join(vertPathParts[:], "")
 	fragPath := strings.join(fragPathParts[:], "")
 
-	vertCodeBytes, vertFileReadSuccess := os.read_entire_file(vertPath)
+	vertCodeBytes, vertFileReadSuccess := readEntireFile(vertPath)
 	if !vertFileReadSuccess {
 		msgParts := [?]string{"Couldn't read vertex shader at '", vertPath, "'"}
 		rl.TraceLog(.WARNING, strings.clone_to_cstring(strings.join(msgParts[:], "")))
 		return nil
 	}
 
-	fragCodeBytes, fragCodeReadSuccess := os.read_entire_file(fragPath)
+	fragCodeBytes, fragCodeReadSuccess := readEntireFile(fragPath)
 	if !fragCodeReadSuccess {
 		msgParts := [?]string{"Coultn't read fragment shader at '", fragPath, "'"}
 		rl.TraceLog(.WARNING, strings.clone_to_cstring(strings.join(msgParts[:], "")))
@@ -348,7 +349,7 @@ resolveShaderIncludes :: proc(
 				vertCodeLoopSlice[openingQuote + 1:closingQuote + 1],
 			}
 
-			includeCodeBytes, includeCodeReadSuccess := os.read_entire_file(
+			includeCodeBytes, includeCodeReadSuccess := readEntireFile(
 				strings.join(includePathParts[:], ""),
 			)
 			if !includeCodeReadSuccess {

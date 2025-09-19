@@ -28,18 +28,22 @@ when ODIN_ARCH == .wasm32 || ODIN_ARCH == .wasm64p32 {
 
 		initRaylib()
 		init()
+		setGameGlobals()
 	}
 
 	@(export)
 	main_update :: proc "c" () -> bool {
 		context = web_context
-
+		gameStep()
 		return true
 	}
 
 	@(export)
 	main_end :: proc "c" () {
 		context = web_context
+		for i in 0 ..< len(engine.gameObjects) {
+			engine.gameObjects[i].destroyProc(engine.gameObjects[i].data)
+		}
 		deinit()
 		deinitRaylib()
 	}
@@ -47,7 +51,7 @@ when ODIN_ARCH == .wasm32 || ODIN_ARCH == .wasm64p32 {
 	@(export)
 	web_window_size_changed :: proc "c" (w: c.int, h: c.int) {
 		context = web_context
-		// game.parent_window_size_changed(int(w), int(h))
+		rl.SetWindowSize(w, h)
 	}
 } else {
 	main :: proc() {

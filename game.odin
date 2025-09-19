@@ -294,9 +294,9 @@ WINDOW_WIDTH :: 480
 WINDOW_HEIGHT :: 360
 
 initRaylib :: proc() {
-    rl.SetConfigFlags({.WINDOW_RESIZABLE}) // TODO: Remove artifacts from main framebuffer when resizing
+	rl.SetConfigFlags({.WINDOW_RESIZABLE}) // TODO: Remove artifacts from main framebuffer when resizing
 	when ODIN_DEBUG {
-		rl.SetTraceLogLevel(.INFO)
+		rl.SetTraceLogLevel(.WARNING)
 	} else {
 		rl.SetTraceLogLevel(.ERROR)
 	}
@@ -311,7 +311,7 @@ deinitRaylib :: proc() {
 }
 
 setGameGlobals :: proc() {
-    global.music = loadMusicStream(.KowloonSmokeBreak)
+	global.music = loadMusicStream(.KowloonSmokeBreak)
 	rl.PlayMusicStream(global.music)
 
 	global.player3D = createPlayer3D()
