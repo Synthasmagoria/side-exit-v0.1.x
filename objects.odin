@@ -477,7 +477,7 @@ drawTitleMenuBackground3D :: proc(self: ^TitleMenuBackground) {
 	rlgl.EnableBackfaceCulling()
 }
 
-StarBg :: struct {
+StarBackground :: struct {
 	genTex:     rl.Texture,
 	frameSize:  rl.Vector2,
 	frameIndex: f32,
@@ -487,23 +487,27 @@ StarBg :: struct {
 	scrollSpd:  rl.Vector2,
 	object:     ^GameObject,
 }
-createStarBackground :: proc(levelAlloc: mem.Allocator) -> ^StarBg {
-	self := new(StarBg, levelAlloc)
+createStarBackground :: proc(levelAlloc: mem.Allocator) -> ^StarBackground {
+	self := new(StarBackground, levelAlloc)
 	self.genTex = web10CreateTexture({128, 128}, getSpriteDef(.Star), 16)
 	self.frameSize = {128.0, 128.0}
 	self.frameSpd = 4.0
 	self.frameCount = getSpriteDef(.Star).frame_count
 	self.scrollSpd = rl.Vector2{30.0, 30.0}
 	self.object = createGameObject(
-		StarBg,
+		StarBackground,
 		self,
 		0,
-		drawProc = cast(proc(_: rawptr))drawStarBg,
-		destroyProc = cast(proc(_: rawptr))destroyStarBg,
+		updateProc = cast(proc(_: rawptr))updateStarBackground,
+		drawProc = cast(proc(_: rawptr))drawStarBackground,
+		destroyProc = cast(proc(_: rawptr))destroyStarBackground,
 	)
 	return self
 }
-drawStarBg :: proc(self: ^StarBg) {
+updateStarBackground :: proc(self: ^StarBackground) {
+	self.object.pos = global.camera.target - global.camera.offset
+}
+drawStarBackground :: proc(self: ^StarBackground) {
 	shd := getShader(.AnimatedTextureRepeatPosition)
 	rl.BeginShaderMode(shd)
 	frameCountLoc := rl.GetShaderLocation(shd, "frameCount")
@@ -522,7 +526,7 @@ drawStarBg :: proc(self: ^StarBg) {
 	)
 	rl.EndShaderMode()
 }
-destroyStarBg :: proc(self: ^StarBg) {
+destroyStarBackground :: proc(self: ^StarBackground) {
 	rl.UnloadTexture(self.genTex)
 }
 
@@ -555,12 +559,39 @@ createUnrulyLandGraphics :: proc(levelAlloc: mem.Allocator) -> ^UnrulyLandGraphi
 		UnrulyLandGraphics,
 		self,
 		100,
+		drawProc = cast(proc(_: rawptr))drawUnrulyLandGraphics,
 		destroyProc = cast(proc(_: rawptr))destroyUnrulyLandGraphics,
 	)
 	return self
 }
 drawUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
-
+	beginModeStacked(nil, self.blockRenderTexture)
+	rl.ClearBackground({0, 0, 0, 0})
+	for rectangle in engine.collisionRectangles {
+		rectangleF32 := rl.Rectangle {
+			f32(rectangle.x),
+			f32(rectangle.y),
+			f32(rectangle.width),
+			f32(rectangle.height),
+		}
+		rl.DrawRectangleRec(rectangleF32, rl.WHITE)
+	}
+	endModeStacked()
+	outlineShader := getShader(.InsetOutline)
+	rl.BeginShaderMode(outlineShader)
+	outlineThickness: f32 = 2.0
+	setShaderValue(outlineShader, "outlineThickness", &outlineThickness)
+	renderTextureSize := getTextureSize(self.blockRenderTexture.texture)
+	outlineShaderTexelSize := rl.Vector2{1.0, 1.0} / renderTextureSize
+	setShaderValue(outlineShader, "texelSize", &outlineShaderTexelSize)
+	outlineShaderFlipY: i32 = 1
+	setShaderValue(outlineShader, "flipY", &outlineShaderFlipY)
+	rl.DrawTextureV(
+		self.blockRenderTexture.texture,
+		global.camera.target - global.camera.offset,
+		rl.WHITE,
+	)
+	rl.EndShaderMode()
 }
 destroyUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
 	rl.UnloadRenderTexture(self.blockRenderTexture)

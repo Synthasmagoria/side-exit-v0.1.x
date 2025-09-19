@@ -19,7 +19,7 @@ init :: proc() {
 	initLights()
 	initLoadLevelProcs()
 	engine.defaultMaterial3D = loadPassthroughMaterial3D()
-	global.levelIndex = .TitleMenu
+	global.levelIndex = .UnrulyLand
 	global.changeLevel = true
 }
 
@@ -170,6 +170,7 @@ loadLevel_UnrulyLand :: proc(levelAlloc: mem.Allocator) {
 	generalObjects.elevator.visible = true
 	generalObjects.elevator.instant = false
 	_ = createStarBackground(levelAlloc)
+	_ = createUnrulyLandGraphics(levelAlloc)
 }
 
 Global :: struct {
@@ -368,7 +369,7 @@ gameStep :: proc() {
 	}
 
 	if rl.IsKeyPressed(.A) {
-		if stars := getFirstGameObjectOfType(StarBg); stars != nil {
+		if stars := getFirstGameObjectOfType(StarBackground); stars != nil {
 			destroyGameObject(stars.object.id)
 		} else {
 			_ = createStarBackground(engine.levelAlloc)

@@ -1,5 +1,5 @@
 #version 100
-precision highp float;
+precision mediump float;
 
 vec3 mod289_v3(in vec3 x) {
     return x - floor(x * (1. / 289.)) * 289.;

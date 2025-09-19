@@ -10,10 +10,14 @@ varying vec2 fragTexCoord;
 varying vec4 fragColor;
 
 uniform mat4 mvp;
+uniform int flipY;
 
 void main() {
-    fragPosition = vertexPosition.xy;
-    fragTexCoord = vertexTexCoord;
+    if (flipY == 0) {
+        fragTexCoord = vertexTexCoord;
+    } else {
+        fragTexCoord = vec2(vertexTexCoord.x, 1.0 - vertexTexCoord.y);
+    }
     fragColor = vertexColor;
     gl_Position = mvp * vec4(vertexPosition, 1.0);
 }

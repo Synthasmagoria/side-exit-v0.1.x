@@ -1,4 +1,5 @@
 #version 100
+precision mediump float;
 
 attribute vec3 vertexPosition;
 attribute vec2 vertexTexCoord;

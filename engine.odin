@@ -231,6 +231,7 @@ initSpriteDefs :: proc() {
 ShaderNames :: enum {
 	AnimatedTextureRepeatPosition,
 	FlipY,
+	InsetOutline,
 	TitleMenuFog,
 	AnimatedTexture3D,
 	Passthrough3D,
@@ -542,17 +543,6 @@ doSolidCollision :: proc(hitbox: rl.Rectangle) -> Maybe(iRectangle) {
 		}
 	}
 	return nil
-}
-drawSolids :: proc() {
-	for rectangle in engine.collisionRectangles {
-		rectangleF32 := rl.Rectangle {
-			f32(rectangle.x),
-			f32(rectangle.y),
-			f32(rectangle.width),
-			f32(rectangle.height),
-		}
-		rl.DrawRectangleRec(rectangleF32, rl.WHITE)
-	}
 }
 
 GameObject :: struct {
