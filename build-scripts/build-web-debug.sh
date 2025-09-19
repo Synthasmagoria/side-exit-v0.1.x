@@ -1,13 +1,13 @@
-OUT_DIR="build/web"
+OUT_DIR="build/wasm"
 mkdir -p $OUT_DIR
 
-odin build . -target:js_wasm32 -build-mode:obj -define:RAYLIB_WASM_LIB=env.o -define:RAYGUI_WASM_LIB=env.o -out:$OUT_DIR/game.wasm.o
+odin build . -target:js_wasm32 -build-mode:obj -define:RAYLIB_WASM_LIB=env.o -out:$OUT_DIR/game.wasm.o
 
 ODIN_PATH=$(odin root)
 
 cp $ODIN_PATH/core/sys/wasm/js/odin.js $OUT_DIR
 
-files="$OUT_DIR/game.wasm.o ${ODIN_PATH}/vendor/raylib/wasm/libraylib.a ${ODIN_PATH}/vendor/raylib/wasm/libraygui.a"
+files="$OUT_DIR/game.wasm.o lib/raylib/raylib/build/wasm/release/libraylib.a
 
 # index_template.html contains the javascript code that calls the procedures in
 # source/main_web/main_web.odin

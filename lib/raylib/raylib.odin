@@ -100,7 +100,11 @@ MAX_TEXT_BUFFER_LENGTH :: #config(RAYLIB_MAX_TEXT_BUFFER_LENGTH, 1024)
 #assert(size_of(rune) == size_of(c.int))
 
 RAYLIB_SHARED :: #config(RAYLIB_SHARED, false)
-RAYLIB_WASM_LIB :: #config(RAYLIB_WASM_LIB, "wasm/libraylib.a")
+when ODIN_DEBUG {
+	RAYLIB_WASM_LIB :: #config(RAYLIB_WASM_LIB, "raylib/build/wasm/debug/libraylib.a")
+} else {
+	RAYLIB_WASM_LIB :: #config(RAYLIB_WASM_LIB, "raylib/build/wasm/release/libraylib.a")
+}
 
 when ODIN_OS == .Windows {
 	@(extra_linker_flags = "/NODEFAULTLIB:" + ("msvcrt" when RAYLIB_SHARED else "libcmt"))

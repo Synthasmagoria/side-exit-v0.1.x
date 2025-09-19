@@ -113,7 +113,11 @@ import "core:c"
 VERSION :: "5.0"
 
 RAYLIB_SHARED :: #config(RAYLIB_SHARED, false)
-RAYLIB_WASM_LIB :: #config(RAYLIB_WASM_LIB, "../wasm/libraylib.a")
+when ODIN_DEBUG {
+	RAYLIB_WASM_LIB :: #config(RAYLIB_WASM_LIB, "../raylib/build/wasm/debug/libraylib.a")
+} else {
+	RAYLIB_WASM_LIB :: #config(RAYLIB_WASM_LIB, "../raylib/build/wasm/release/libraylib.a")
+}
 
 // Note: We pull in the full raylib library. If you want a truly stand-alone rlgl, then:
 // - Compile a separate rlgl library and use that in the foreign import blocks below.

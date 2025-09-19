@@ -31,5 +31,16 @@
     "shell": "system",
     "show_summary": true,
     "show_command": true
+  },
+  {
+    "label": "Build Raylib all",
+    "command": "build-scripts/build-raylib-all.sh",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "hide": "never",
+    "shell": "system",
+    "show_summary": true,
+    "show_command": true
   }
 ]

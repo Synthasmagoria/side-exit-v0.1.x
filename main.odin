@@ -298,7 +298,11 @@ WINDOW_HEIGHT :: 360
 main :: proc() {
 	// Raylib init
 	rl.SetConfigFlags({.WINDOW_RESIZABLE}) // TODO: Remove artifacts from main framebuffer when resizing
-	rl.SetTraceLogLevel(.INFO)
+	when ODIN_DEBUG {
+	    rl.SetTraceLogLevel(.INFO)
+	} else {
+	    rl.SetTraceLogLevel(.ERROR)
+	}
 	rl.SetTargetFPS(TARGET_FPS)
 	rl.InitAudioDevice()
 	defer rl.CloseAudioDevice()
