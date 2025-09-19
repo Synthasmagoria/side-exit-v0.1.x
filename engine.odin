@@ -35,18 +35,25 @@ deinitEngine :: proc() {
 initEngineMemory :: proc() {
 	mem.dynamic_arena_init(&engine.gameArena)
 	defer mem.dynamic_arena_free_all(&engine.gameArena)
-	// TODO: Debug switch on memory tracking
-	engine.gameAlloc = mem.Allocator {
-		data      = &engine.gameArena,
-		procedure = dynamicArenaAllocatorDebugProc_Game,
-	} //mem.dynamic_arena_allocator(&engine.gameArena)
+	when ODIN_DEBUG {
+		engine.gameAlloc = mem.Allocator {
+			data      = &engine.gameArena,
+			procedure = dynamicArenaAllocatorDebugProc_Game,
+		}
+	} else {
+		engine.gameAlloc = mem.dynamic_arena_allocator(&engine.gameArena)
+	}
 
 	mem.dynamic_arena_init(&engine.levelArena)
 	defer mem.dynamic_arena_free_all(&engine.levelArena)
-	engine.levelAlloc = mem.Allocator {
-		data      = &engine.levelArena,
-		procedure = dynamicArenaAllocatorDebugProc_Level,
-	} //mem.dynamic_arena_allocator(&engine.levelArena)
+	when ODIN_DEBUG {
+		engine.levelAlloc = mem.Allocator {
+			data      = &engine.levelArena,
+			procedure = dynamicArenaAllocatorDebugProc_Level,
+		}
+	} else {
+		engine.levelAlloc = mem.dynamic_arena_allocator(&engine.levelArena)
+	}
 
 	mem.dynamic_arena_init(&engine.frameArena)
 	defer mem.dynamic_arena_free_all(&engine.frameArena)

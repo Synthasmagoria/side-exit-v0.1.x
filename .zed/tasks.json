@@ -12,7 +12,18 @@
   },
   {
     "label": "Build debug",
-    "command": "odin build . -debug -o:none",
+    "command": "odin build . -debug -o:none -out:build/tgs3-debug",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "hide": "never",
+    "shell": "system",
+    "show_summary": true,
+    "show_command": true
+  },
+  {
+    "label": "Build release",
+    "command": "odin build . -o:speed -out:build/tgs3-release",
     "use_new_terminal": false,
     "allow_concurrent_runs": false,
     "reveal": "always",

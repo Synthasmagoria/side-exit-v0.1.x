@@ -2,7 +2,7 @@
   {
     "label": "Debug",
     "adapter": "CodeLLDB",
-    "program": "tgs3",
+    "program": "build/tgs3-debug",
     "request": "launch",
     "build": "Build debug"
   }

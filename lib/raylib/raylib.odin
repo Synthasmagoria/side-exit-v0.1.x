@@ -106,7 +106,19 @@ when ODIN_OS == .Windows {
 	@(extra_linker_flags = "/NODEFAULTLIB:" + ("msvcrt" when RAYLIB_SHARED else "libcmt"))
 	foreign import lib {"windows/raylibdll.lib" when RAYLIB_SHARED else "windows/raylib.lib", "system:Winmm.lib", "system:Gdi32.lib", "system:User32.lib", "system:Shell32.lib"}
 } else when ODIN_OS == .Linux {
-	foreign import lib {"raylib/src/libraylib.so.5.5.0" when RAYLIB_SHARED else "raylib/src/libraylib.a", "system:dl", "system:pthread"}
+	when ODIN_DEBUG {
+		when RAYLIB_SHARED {
+			foreign import lib "raylib/build/linux/debug/libraylib.so.5.5.0"
+		} else {
+			foreign import lib {"raylib/build/linux/debug/libraylib.a", "system:dl", "system:pthread"}
+		}
+	} else {
+		when RAYLIB_SHARED {
+			foreign import lib "raylib/build/linux/release/libraylib.so.5.5.0"
+		} else {
+			foreign import lib {"raylib/build/linux/release/libraylib.a", "system:dl", "system:pthread"}
+		}
+	}
 } else when ODIN_OS == .Darwin {
 	foreign import lib {"macos/libraylib.550.dylib" when RAYLIB_SHARED else "macos/libraylib.a", "system:Cocoa.framework", "system:OpenGL.framework", "system:IOKit.framework"}
 } else when ODIN_ARCH == .wasm32 || ODIN_ARCH == .wasm64p32 {
