@@ -1,6 +1,5 @@
 package game
 import "core:c"
-import "core:c/libc"
 import "core:fmt"
 import "core:math"
 import "core:math/linalg"
@@ -11,11 +10,6 @@ import "core:path/filepath"
 import "core:reflect"
 import "core:strings"
 import rl "lib/raylib"
-
-raylibFree :: libc.free
-raylibMalloc :: libc.malloc
-raylibCalloc :: libc.calloc
-raylibRealloc :: libc.realloc
 
 initEngine :: proc() {
 	initEngineMemory()
@@ -28,7 +22,6 @@ initEngine :: proc() {
 }
 
 deinitEngine :: proc() {
-	unloadMaterialMapOnly(engine.defaultMaterial3D)
 	deinitEngineMemory()
 }
 

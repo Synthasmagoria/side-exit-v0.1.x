@@ -1,5 +1,4 @@
 package game
-import c "core:c/libc"
 import "core:fmt"
 import "core:math"
 import "core:math/linalg"
@@ -1194,9 +1193,5 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 	endModeStacked()
 }
 destroyElevator3D :: proc(e: ^Elevator3D) {
-	unloadMaterialMapOnly(e.wallMaterial)
-	unloadMaterialMapOnly(e.lightMaterial)
-	unloadMaterialMapOnly(e.floorMaterial)
-	unloadMaterialMapOnly(e.panelMaterial)
 	rl.UnloadRenderTexture(e.panelRenderTexture)
 }
