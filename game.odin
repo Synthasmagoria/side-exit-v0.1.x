@@ -19,7 +19,8 @@ init :: proc() {
 	initLights()
 	initLoadLevelProcs()
 	engine.defaultMaterial3D = loadPassthroughMaterial3D()
-	global.levelIndex = .UnrulyLand
+	global.musicLPFFrequency = 44100.0
+	global.levelIndex = .Hub
 	global.changeLevel = true
 }
 
@@ -61,53 +62,6 @@ initLights :: proc() {
 		target   = {0.0, 0.0, 0.0},
 		color    = {1.0, 1.0, 1.0, 1.0},
 	}
-}
-DEBUG_FONT_SIZE :: 12
-getDebugFontSize :: proc() -> i32 {
-	return i32(getScreenScale().x * DEBUG_FONT_SIZE)
-}
-debugDrawFrameTime :: proc(x: i32, y: i32) {
-	debugFontSize := getDebugFontSize()
-	frameTimeText := rl.TextFormat("Frame time: %fms", rl.GetFrameTime() * 1000.0)
-	stringSize := rl.MeasureText(frameTimeText, debugFontSize)
-	debugDrawTextOutline(frameTimeText, x - stringSize, y, debugFontSize, rl.WHITE, rl.BLACK)
-}
-debugDrawPlayerInfo :: proc(player: Player, x: i32, y: i32) {
-	debugFontSize := getDebugFontSize()
-	positionText := rl.TextFormat("Position: %s", vector2ToStringTemp(player.object.pos))
-	dy := y
-	debugDrawTextOutline(positionText, x, dy, debugFontSize, rl.WHITE, rl.BLACK)
-	dy += debugFontSize
-}
-debugDrawGlobalCamera3DInfo :: proc(cam: rl.Camera3D, x: i32, y: i32) {
-	dy := y
-	debugFontSize := getDebugFontSize()
-	debugDrawTextOutline(
-		rl.TextFormat("pos: %s", vector3ToStringTemp(cam.position)),
-		x,
-		dy,
-		debugFontSize,
-		rl.WHITE,
-		rl.BLACK,
-	)
-	dy += debugFontSize
-	debugDrawTextOutline(
-		rl.TextFormat("target: %s", vector3ToStringTemp(cam.target)),
-		x,
-		dy,
-		debugFontSize,
-		rl.WHITE,
-		rl.BLACK,
-	)
-	dy += debugFontSize
-	debugDrawTextOutline(
-		rl.TextFormat("look: %s", vector3ToStringTemp(cam.target - cam.position)),
-		x,
-		dy,
-		debugFontSize,
-		rl.WHITE,
-		rl.BLACK,
-	)
 }
 
 Level :: enum {
@@ -185,6 +139,7 @@ Global :: struct {
 	debugCamera3D:      rl.Camera3D,
 	debugMode:          bool,
 	music:              rl.Music,
+	musicLPFFrequency:  f32,
 	windowCloseRequest: bool,
 }
 global := Global {
@@ -206,27 +161,6 @@ global := Global {
 	},
 }
 
-debugPrintDynamicArenaAllocMessage :: proc(
-	allocatorType: string,
-	mode: mem.Allocator_Mode,
-	loc: runtime.Source_Code_Location,
-) {
-	fmt.println(
-		"(",
-		allocatorType,
-		")",
-		mode,
-		"at L:",
-		loc.line,
-		"C:",
-		loc.column,
-		"in",
-		loc.procedure,
-		"(",
-		loc.file_path,
-		")",
-	)
-}
 dynamicArenaAllocatorDebugProc_Level :: proc(
 	allocator_data: rawptr,
 	mode: mem.Allocator_Mode,
@@ -273,9 +207,9 @@ dynamicArenaAllocatorDebugProc_Game :: proc(
 }
 
 audioProcessEffectLPF :: proc "c" (buffer: rawptr, frames: c.uint) {
-	low: [2]f32 = {0.0, 0.0}
-	cutoff: f32 = 70.0 / 44100.0
-	k := cutoff / (cutoff + 0.159154931)
+	@(static) low: [2]f32 = {0.0, 0.0}
+	cutoff: f32 = global.musicLPFFrequency / 44100.0
+	k: f32 = cutoff / (cutoff + 0.159154931)
 
 	bufferData := cast([^]c.float)buffer
 	for i: c.uint = 0; i < frames * 2; i += 2 {
@@ -320,6 +254,15 @@ setGameGlobals :: proc() {
 }
 
 gameStep :: proc() {
+	@(static) lpf := false
+	if rl.IsKeyPressed(.A) {
+		if !lpf {
+			rl.AttachAudioStreamProcessor(global.music.stream, audioProcessEffectLPF)
+		} else {
+			rl.DetachAudioStreamProcessor(global.music.stream, audioProcessEffectLPF)
+		}
+		lpf = !lpf
+	}
 	player := getFirstGameObjectOfType(Player)
 	elevator := getFirstGameObjectOfType(Elevator)
 
@@ -366,14 +309,6 @@ gameStep :: proc() {
 	if global.cameraFollowPlayer && player != nil {
 		global.camera.offset =
 			getObjectCenterAbsolute(player.object^) * -1.0 + {WINDOW_WIDTH, WINDOW_HEIGHT} / 2.0
-	}
-
-	if rl.IsKeyPressed(.A) {
-		if stars := getFirstGameObjectOfType(StarBackground); stars != nil {
-			destroyGameObject(stars.object.id)
-		} else {
-			_ = createStarBackground(engine.levelAlloc)
-		}
 	}
 
 	rl.ClearBackground(rl.BLACK)

@@ -1,6 +1,9 @@
 package game
+import "base:runtime"
+import "core:fmt"
 import "core:math"
 import "core:math/rand"
+import "core:mem"
 import rl "lib/raylib"
 
 web10CreateTexture :: proc(size: iVector2, spr_def: SpriteDef, num: i32) -> rl.Texture {
@@ -39,4 +42,73 @@ web10CreateTexture :: proc(size: iVector2, spr_def: SpriteDef, num: i32) -> rl.T
 	endModeStacked()
 	img := rl.LoadImageFromTexture(rtex.texture)
 	return rl.LoadTextureFromImage(img)
+}
+
+DEBUG_FONT_SIZE :: 12
+getDebugFontSize :: proc() -> i32 {
+	return i32(getScreenScale().x * DEBUG_FONT_SIZE)
+}
+debugDrawFrameTime :: proc(x: i32, y: i32) {
+	debugFontSize := getDebugFontSize()
+	frameTimeText := rl.TextFormat("Frame time: %fms", rl.GetFrameTime() * 1000.0)
+	stringSize := rl.MeasureText(frameTimeText, debugFontSize)
+	debugDrawTextOutline(frameTimeText, x - stringSize, y, debugFontSize, rl.WHITE, rl.BLACK)
+}
+debugDrawPlayerInfo :: proc(player: Player, x: i32, y: i32) {
+	debugFontSize := getDebugFontSize()
+	positionText := rl.TextFormat("Position: %s", vector2ToStringTemp(player.object.pos))
+	dy := y
+	debugDrawTextOutline(positionText, x, dy, debugFontSize, rl.WHITE, rl.BLACK)
+	dy += debugFontSize
+}
+debugDrawGlobalCamera3DInfo :: proc(cam: rl.Camera3D, x: i32, y: i32) {
+	dy := y
+	debugFontSize := getDebugFontSize()
+	debugDrawTextOutline(
+		rl.TextFormat("pos: %s", vector3ToStringTemp(cam.position)),
+		x,
+		dy,
+		debugFontSize,
+		rl.WHITE,
+		rl.BLACK,
+	)
+	dy += debugFontSize
+	debugDrawTextOutline(
+		rl.TextFormat("target: %s", vector3ToStringTemp(cam.target)),
+		x,
+		dy,
+		debugFontSize,
+		rl.WHITE,
+		rl.BLACK,
+	)
+	dy += debugFontSize
+	debugDrawTextOutline(
+		rl.TextFormat("look: %s", vector3ToStringTemp(cam.target - cam.position)),
+		x,
+		dy,
+		debugFontSize,
+		rl.WHITE,
+		rl.BLACK,
+	)
+}
+debugPrintDynamicArenaAllocMessage :: proc(
+	allocatorType: string,
+	mode: mem.Allocator_Mode,
+	loc: runtime.Source_Code_Location,
+) {
+	fmt.println(
+		"(",
+		allocatorType,
+		")",
+		mode,
+		"at L:",
+		loc.line,
+		"C:",
+		loc.column,
+		"in",
+		loc.procedure,
+		"(",
+		loc.file_path,
+		")",
+	)
 }

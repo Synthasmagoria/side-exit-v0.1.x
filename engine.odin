@@ -232,6 +232,7 @@ ShaderNames :: enum {
 	AnimatedTextureRepeatPosition,
 	FlipY,
 	InsetOutline,
+	NoiseAndCRT,
 	TitleMenuFog,
 	AnimatedTexture3D,
 	Passthrough3D,

@@ -531,7 +531,9 @@ destroyStarBackground :: proc(self: ^StarBackground) {
 }
 
 HubGraphics :: struct {
-	object: ^GameObject,
+	object:                      ^GameObject,
+	postProcessingRenderTexture: rl.RenderTexture,
+	shaderTime:                  f32,
 }
 createHubGraphics :: proc(levelAlloc: mem.Allocator) -> ^HubGraphics {
 	self := new(HubGraphics, levelAlloc)
@@ -540,12 +542,39 @@ createHubGraphics :: proc(levelAlloc: mem.Allocator) -> ^HubGraphics {
 		self,
 		0,
 		drawProc = cast(proc(_: rawptr))drawHubGraphics,
+		drawEndProc = cast(proc(_: rawptr))drawHubGraphicsEnd,
+		destroyProc = cast(proc(_: rawptr))destroyHubGraphics,
 	)
+	self.postProcessingRenderTexture = rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
 	return self
+}
+destroyHubGraphics :: proc(self: ^HubGraphics) {
+	rl.UnloadRenderTexture(self.postProcessingRenderTexture)
 }
 drawHubGraphics :: proc(self: ^HubGraphics) {
 	rl.DrawTextureV(getTexture(.HubBackground), {0.0, 0.0}, rl.WHITE)
 	rl.DrawTextureV(getTexture(.HubBuilding), {0.0, 0.0}, rl.WHITE)
+}
+drawHubGraphicsEnd :: proc(self: ^HubGraphics) {
+	// TODO: This shit could be done a lot more optimally
+	beginModeStacked(getZeroCamera2D(), self.postProcessingRenderTexture)
+	shader := getShader(.NoiseAndCRT)
+	rl.BeginShaderMode(shader)
+	self.shaderTime += TARGET_TIME_STEP
+	setShaderValue(shader, "time", &self.shaderTime)
+	noiseFactor: f32 = 0.3
+	setShaderValue(shader, "noiseFactor", &noiseFactor)
+	crtWidth: f32 = 96.0
+	setShaderValue(shader, "crtWidth", &crtWidth)
+	crtFactor: f32 = 0.3
+	setShaderValue(shader, "crtFactor", &crtFactor)
+	crtSpeed: f32 = 40.0
+	setShaderValue(shader, "crtSpeed", &crtSpeed)
+	rl.DrawTexture(engine.renderTexture.texture, 0, 0, rl.WHITE)
+	rl.EndShaderMode()
+	endModeStacked()
+	worldPosition := global.camera.target - global.camera.offset
+	rl.DrawTextureV(self.postProcessingRenderTexture.texture, worldPosition, rl.WHITE)
 }
 
 UnrulyLandGraphics :: struct {
@@ -980,6 +1009,7 @@ Elevator3D :: struct {
 	panelData:          ElevatorPanelData,
 	lightFrameIndex:    f32,
 	doorsTween:         Tween,
+	doorOpenness:       f32,
 	transitStateData:   Elevator3DTransitStateData,
 }
 setElevator3DDoorState :: proc(e: ^Elevator3D, open: bool, instant: bool, delay: f32) {
@@ -1048,6 +1078,7 @@ createElevator3D :: proc() -> Elevator3D {
 		},
 		lightFrameIndex = 1.0,
 		doorsTween = createFinishedTween(f32(1.0)),
+		doorOpenness = 0.0,
 	}
 	return self
 }
@@ -1079,9 +1110,11 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 		}
 	}
 	tweenWasWaiting := tweenIsWaiting(e.doorsTween)
-	doorOpenProgress := updateAndStepTween(&e.doorsTween).(f32)
-	e.leftDoorModel.transform = rl.MatrixTranslate(0.0, 0.0, doorOpenProgress * 2.0)
-	e.rightDoorModel.transform = rl.MatrixTranslate(0.0, 0.0, -doorOpenProgress * 2.0)
+	e.doorOpenness = updateAndStepTween(&e.doorsTween).(f32)
+	e.leftDoorModel.transform = rl.MatrixTranslate(0.0, 0.0, e.doorOpenness * 2.0)
+	e.rightDoorModel.transform = rl.MatrixTranslate(0.0, 0.0, -e.doorOpenness * 2.0)
+	global.musicLPFFrequency = 90.0 + (44100.0 - 90.0) * e.doorOpenness
+
 	if tweenWasWaiting && !tweenIsWaiting(e.doorsTween) {
 		sounds := [?]rl.Sound {
 			getSound(.ElevatorDoor1),
