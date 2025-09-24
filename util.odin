@@ -297,6 +297,13 @@ iRectangleGetInd :: proc(irec: iRectangle, maxWidth: i32) -> i32 {
 	return irec.x + irec.height * maxWidth
 }
 
+getRlRectangleCenter :: proc(rectangle: rl.Rectangle) -> rl.Vector2 {
+	return {rectangle.x + rectangle.width / 2.0, rectangle.y + rectangle.height / 2.0}
+}
+getIRectangleCenter :: proc(rectangle: iRectangle) -> iVector2 {
+	return {rectangle.x + rectangle.width >> 1, rectangle.y + rectangle.height >> 1}
+}
+
 getScreenScale :: proc() -> rl.Vector2 {
 	screenSize := rl.Vector2{f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
 	return screenSize / rl.Vector2{WINDOW_WIDTH, WINDOW_HEIGHT}

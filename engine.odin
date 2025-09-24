@@ -187,6 +187,7 @@ TextureName :: enum {
 	SynthWalkBack,
 	White32,
 	Elevator,
+	ElevatorPanelSymbols,
 	ElevatorPanelButton,
 	ElevatorPanelKnob,
 	ElevatorPanelSlider,
@@ -238,6 +239,7 @@ initSpriteDefs :: proc() {
 	_setSpriteDef(.SynthWalkBack, 24, 8.0)
 	_setSpriteDef(.InteractionIndicationArrow, 14, 8.0, {7.0, 7.0})
 	_setSpriteDef(.ElevatorPanelButton, 21, 1.0)
+	_setSpriteDef(.ElevatorPanelSymbols, 21, 0.0)
 }
 
 ShaderNames :: enum {

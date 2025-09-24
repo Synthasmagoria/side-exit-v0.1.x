@@ -884,6 +884,8 @@ ElevatorPanelData :: struct {
 	bigButtonArea:       rl.Rectangle,
 	bigButtonSize:       rl.Vector2,
 	screenArea:          rl.Rectangle,
+	depthIndicatorArea:  rl.Rectangle,
+	depth:               i32,
 }
 elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 	if pointInRectangle(position, panel.buttonArea) {
@@ -1076,7 +1078,8 @@ createElevator3D :: proc() -> Elevator3D {
 			bigButtonArea = {14.0, 263.0, 39.0 * 3.0, 30.0},
 			bigButtonSeparation = {39.0, 0.0},
 			bigButtonSize = {30.0, 30.0},
-			screenArea = {16.0, 12.0, 148.0, 38.0},
+			screenArea = {16.0, 12.0, 102.0, 38.0},
+			depthIndicatorArea = {16.0 + 102.0 + 8.0, 12.0, 38.0, 38.0},
 		},
 		transitStateData = {timer = {}, duration = 5.0},
 		lightFrameIndex = 1.0,
@@ -1224,6 +1227,18 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 		}
 	}
 
+	buttonSymbolSprite := createSprite(getSpriteDef(.ElevatorPanelSymbols))
+	buttonSizeHalved := cast(f32)getSpriteDef(.ElevatorPanelButton).frame_width / 2.0
+	for x in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.x {
+		for y in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.y {
+			position :=
+				rl.Vector2{f32(x), f32(y)} * data.buttonSeparation +
+				{data.buttonArea.x, data.buttonArea.y}
+			setSpriteFrame(&buttonSymbolSprite, y + x * ELEVATOR_PANEL_BUTTON_COUNT.y)
+			drawSpriteEx(buttonSymbolSprite, position, {1.0, 1.0})
+		}
+	}
+
 	knobTexture := getTexture(.ElevatorPanelKnob)
 	knobTextureSize := getTextureSize(knobTexture)
 	knobTextureOrigin := knobTextureSize / 2.0
@@ -1276,7 +1291,20 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 
 	bigButtonTexture := getTexture(.ElevatorPanelBigButtons)
 	rl.DrawTextureV(bigButtonTexture, {data.bigButtonArea.x, data.bigButtonArea.y}, rl.WHITE)
+
 	rl.DrawRectangleRec(data.screenArea, rl.BLACK)
+
+	rl.DrawRectangleRec(data.depthIndicatorArea, rl.BLACK)
+	depthTextPosition := getRlRectangleCenter(data.depthIndicatorArea)
+	drawTextAligned(
+		rl.TextFormat("%i", data.depth),
+		depthTextPosition,
+		rl.GetFontDefault(),
+		32.0,
+		rl.GREEN,
+		.Center,
+		.Middle,
+	)
 	endModeStacked()
 }
 destroyElevator3D :: proc(e: ^Elevator3D) {
