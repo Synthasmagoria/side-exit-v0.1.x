@@ -711,7 +711,7 @@ debugDrawGameObjectCollisions :: proc() {
 	}
 }
 
-getZeroCamera2D :: proc() -> rl.Camera2D {
+getZeroCamera2D :: proc "contextless" () -> rl.Camera2D {
 	return {
 		offset = {RENDER_TEXTURE_WIDTH_2D / 2, RENDER_TEXTURE_HEIGHT_2D / 2},
 		target = {RENDER_TEXTURE_WIDTH_2D / 2, RENDER_TEXTURE_HEIGHT_2D / 2},
@@ -720,8 +720,17 @@ getZeroCamera2D :: proc() -> rl.Camera2D {
 	}
 }
 
-getZeroCamera3D :: proc() -> rl.Camera3D {
-	return {position = {0.0, 0.0, 0.0}, target = FORWARD_3D, up = UP_3D, projection = .PERSPECTIVE, fovy = 90.0}
+getZeroCamera3D :: proc "contextless" () -> Camera3D {
+	return {
+		_camera = {
+			position = {0.0, 0.0, 0.0},
+			target = FORWARD_3D,
+			up = UP_3D,
+			projection = .PERSPECTIVE,
+			fovy = 90.0,
+		},
+		shakeOffset = {0.0, 0.0, 0.0},
+	}
 }
 
 /*
@@ -731,7 +740,7 @@ getZeroCamera3D :: proc() -> rl.Camera3D {
 */
 RenderTextureStackCamera :: union {
 	rl.Camera2D,
-	rl.Camera3D,
+	^Camera3D,
 }
 ENGINE_RENDER_TEXTURE_STACK_CAPACITY :: 5
 RenderTextureStack :: struct {
@@ -758,7 +767,7 @@ beginModeStacked :: proc(camera: RenderTextureStackCamera, renderTexture: Maybe(
 		switch c in rts.renderCameraStack[rts.count - 1] {
 		case rl.Camera2D:
 			rl.EndMode2D()
-		case rl.Camera3D:
+		case ^Camera3D:
 			rl.EndMode3D()
 		case nil:
 			unreachable()
@@ -774,16 +783,16 @@ beginModeStacked :: proc(camera: RenderTextureStackCamera, renderTexture: Maybe(
 	switch c in camera {
 	case rl.Camera2D:
 		rl.BeginMode2D(c)
-	case rl.Camera3D:
-		rl.BeginMode3D(c)
+	case ^Camera3D:
+		BeginMode3D(c)
 	case nil:
 		assert(rts.count > 0)
 		usingCamera = rts.renderCameraStack[rts.count - 1]
 		switch cc in usingCamera {
 		case rl.Camera2D:
 			rl.BeginMode2D(cc)
-		case rl.Camera3D:
-			rl.BeginMode3D(cc)
+		case ^Camera3D:
+			BeginMode3D(cc)
 		case nil:
 			unreachable()
 		}
@@ -799,7 +808,7 @@ endModeStacked :: proc() {
 	switch c in rts.renderCameraStack[rts.count] {
 	case rl.Camera2D:
 		rl.EndMode2D()
-	case rl.Camera3D:
+	case ^Camera3D:
 		rl.EndMode3D()
 	case nil:
 		unreachable()
@@ -814,12 +823,17 @@ endModeStacked :: proc() {
 		switch c in rts.renderCameraStack[rts.count - 1] {
 		case rl.Camera2D:
 			rl.BeginMode2D(c)
-		case rl.Camera3D:
-			rl.BeginMode3D(c)
+		case ^Camera3D:
+			BeginMode3D(c)
 		case nil:
 			unreachable()
 		}
 	}
+}
+BeginMode3D :: proc(camera: ^Camera3D) {
+	camera._camera.position = camera.position + camera.shakeOffset
+	camera._camera.target = camera.target + camera.shakeOffset
+	rl.BeginMode3D(camera._camera)
 }
 
 SpriteDef :: struct {
@@ -1026,6 +1040,9 @@ Timer :: struct {
 createTimer :: proc(duration: f32) -> Timer {
 	assert(duration > 0.0)
 	return {time = 0.0, duration = duration}
+}
+createFinishedTimer :: proc() -> Timer {
+	return {time = 1.0, duration = 1.0}
 }
 updateTimer :: proc(timer: ^Timer) {
 	timer.time = math.min(timer.time + TARGET_TIME_STEP, timer.duration)

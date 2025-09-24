@@ -127,38 +127,33 @@ loadLevel_UnrulyLand :: proc(levelAlloc: mem.Allocator) {
 	_ = createUnrulyLandGraphics(levelAlloc)
 }
 
+Camera3D :: struct {
+	shakeOffset: rl.Vector3,
+	position:    rl.Vector3,
+	target:      rl.Vector3,
+	_camera:     rl.Camera3D,
+}
+
 Global :: struct {
 	levelIndex:         Level,
 	changeLevel:        bool,
 	camera:             rl.Camera2D,
 	cameraFollowPlayer: bool,
-	camera3D:           rl.Camera3D,
+	camera3D:           Camera3D,
 	player3D:           Player3D,
 	elevator3D:         Elevator3D,
 	debugCamera:        rl.Camera2D,
-	debugCamera3D:      rl.Camera3D,
+	debugCamera3D:      Camera3D,
 	debugMode:          bool,
 	music:              rl.Music,
 	musicLPFFrequency:  f32,
 	windowCloseRequest: bool,
 }
 global := Global {
-	camera = {zoom = 1.0},
-	debugCamera = {zoom = 1.0},
-	camera3D = {
-		position = {0.0, 0.0, 0.0},
-		target = {1.0, 0.0, 0.0},
-		up = {0.0, 1.0, 0.0},
-		fovy = 90.0,
-		projection = .PERSPECTIVE,
-	},
-	debugCamera3D = {
-		position = {0.0, 2.0, 0.0},
-		target = {1.0, 2.0, 0.0},
-		up = {0.0, 1.0, 0.0},
-		fovy = 90.0,
-		projection = .PERSPECTIVE,
-	},
+	camera        = getZeroCamera2D(),
+	debugCamera   = getZeroCamera2D(),
+	camera3D      = getZeroCamera3D(),
+	debugCamera3D = getZeroCamera3D(),
 }
 
 dynamicArenaAllocatorDebugProc_Level :: proc(
@@ -253,11 +248,11 @@ gameStep :: proc() {
 	currentCamera3D := &global.camera3D
 	if global.debugMode {
 		if global.player3D.state != .Inactive && global.player3D.state != .Uninitialized {
-			rl.UpdateCamera(&global.debugCamera3D, .FIRST_PERSON)
+			rl.UpdateCamera(&global.debugCamera3D._camera, .FIRST_PERSON)
 			if rl.IsKeyDown(.SPACE) {
-				rl.CameraMoveUp(&global.debugCamera3D, 5.4 * TARGET_TIME_STEP)
+				rl.CameraMoveUp(&global.debugCamera3D._camera, 5.4 * TARGET_TIME_STEP)
 			} else if rl.IsKeyDown(.LEFT_SHIFT) {
-				rl.CameraMoveUp(&global.debugCamera3D, -5.4 * TARGET_TIME_STEP)
+				rl.CameraMoveUp(&global.debugCamera3D._camera, -5.4 * TARGET_TIME_STEP)
 			}
 			rl.DisableCursor()
 			currentCamera3D = &global.debugCamera3D
@@ -296,7 +291,7 @@ gameStep :: proc() {
 
 	drawRenderTextureScaledToScreenBuffer(engine.renderTexture2D)
 
-	beginModeStacked(currentCamera3D^, engine.renderTexture3D)
+	beginModeStacked(currentCamera3D, engine.renderTexture3D)
 	rl.ClearBackground({0.0, 0.0, 0.0, 0.0})
 	if global.debugMode {
 		rl.DrawGrid(10, 1.0)
@@ -313,7 +308,7 @@ gameStep :: proc() {
 
 	if player != nil {
 		if global.player3D.state != .Inactive {
-			debugDrawGlobalCamera3DInfo(currentCamera3D^, 4, 4)
+			debugDrawGlobalCamera3DInfo(currentCamera3D._camera, 4, 4)
 		} else {
 			debugDrawPlayerInfo(player^, 4, 4)
 		}

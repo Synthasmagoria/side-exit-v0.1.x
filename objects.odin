@@ -832,13 +832,13 @@ updatePlayer3D :: proc(self: ^Player3D) {
 		}
 		panelMesh := global.elevator3D.mainModel.meshes[Elevator3DModelMeshes.Panel]
 		panelBbox := rl.GetMeshBoundingBox(panelMesh)
-		ray := rl.GetScreenToWorldRay(rl.GetMousePosition(), global.camera3D)
+		ray := rl.GetScreenToWorldRay(rl.GetMousePosition(), global.camera3D._camera)
 		rayCollision := rl.GetRayCollisionBox(ray, panelBbox)
 		if rayCollision.hit {
-			panelScreenRectStart := rl.GetWorldToScreen(panelBbox.min, global.camera3D)
-			panelScreenRectEnd := rl.GetWorldToScreen(panelBbox.max, global.camera3D)
+			panelScreenRectStart := rl.GetWorldToScreen(panelBbox.min, global.camera3D._camera)
+			panelScreenRectEnd := rl.GetWorldToScreen(panelBbox.max, global.camera3D._camera)
 			panelScreenRectSize := panelScreenRectEnd - panelScreenRectStart
-			screenPosition := rl.GetWorldToScreen(rayCollision.point, global.camera3D)
+			screenPosition := rl.GetWorldToScreen(rayCollision.point, global.camera3D._camera)
 			panelPositionNormalized := (screenPosition - panelScreenRectStart) / panelScreenRectSize
 			panelPositionNormalized.y = 1.0 - panelPositionNormalized.y
 			panelPosition := panelPositionNormalized * getTextureSize(global.elevator3D.panelRenderTexture.texture)
@@ -1002,8 +1002,11 @@ Elevator3DState :: enum {
 	Transit,
 }
 Elevator3DTransitStateData :: struct {
-	timer:    Timer,
-	duration: f32,
+	timer:         Timer,
+	duration:      f32,
+	shakeTimer:    Timer,
+	shakeInterval: f32,
+	shakeSeverity: f32,
 }
 Elevator3D :: struct {
 	state:              Elevator3DState,
@@ -1082,7 +1085,13 @@ createElevator3D :: proc() -> Elevator3D {
 			screenArea = {16.0, 12.0, 102.0, 38.0},
 			depthIndicatorArea = {16.0 + 102.0 + 8.0, 12.0, 38.0, 38.0},
 		},
-		transitStateData = {timer = {}, duration = 5.0},
+		transitStateData = {
+			timer = createFinishedTimer(),
+			duration = 5.0,
+			shakeTimer = createFinishedTimer(),
+			shakeInterval = TARGET_TIME_STEP * 3,
+			shakeSeverity = 0.01,
+		},
 		lightFrameIndex = 1.0,
 		doorsTween = createFinishedTween(f32(1.0)),
 		doorOpenness = 0.0,
@@ -1113,6 +1122,14 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 		rl.SetSoundVolume(getSound(.ElevatorMovingLoop), elevatorSoundVolume)
 		if isTimerProgressTimestamp(stateData.timer, 0.5) {
 			loadLevel(.UnrulyLand)
+		}
+		updateTimer(&stateData.shakeTimer)
+		if isTimerFinished(stateData.shakeTimer) {
+			global.camera3D.shakeOffset = {
+				rand.float32() * stateData.shakeSeverity - stateData.shakeSeverity / 2.0,
+				0.0,
+				rand.float32() * stateData.shakeSeverity - stateData.shakeSeverity / 2.0,
+			}
 		}
 		if isTimerFinished(e.transitStateData.timer) {
 			setElevator3DState(e, .Idle)
@@ -1201,6 +1218,7 @@ setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 		}
 	case .Transit:
 		e.transitStateData.timer = createTimer(5.0)
+		e.transitStateData.shakeTimer = createTimer(TARGET_TIME_STEP * 3.0)
 		rl.PlaySound(getSound(.ElevatorMovingStart))
 		rl.PlaySound(getSound(.ElevatorMovingLoop))
 		rl.SetSoundVolume(getSound(.ElevatorMovingLoop), 0.0)
