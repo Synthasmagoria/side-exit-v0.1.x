@@ -1633,6 +1633,7 @@ foreign lib {
 	LoadWaveFromMemory :: proc(fileType: cstring, fileData: rawptr, dataSize: c.int) -> Wave --- // Load wave from memory buffer, fileType refers to extension: i.e. '.wav'
 	IsWaveValid :: proc(wave: Wave) -> bool --- // Checks if wave data is // Checks if wave data is valid (data loaded and parameters)
 	LoadSound :: proc(fileName: cstring) -> Sound --- // Load sound from file
+	LoadSoundLooping :: proc(fileName: cstring) -> Sound --- // Load sound from file and set buffer to looping
 	LoadSoundFromWave :: proc(wave: Wave) -> Sound --- // Load sound from wave data
 	LoadSoundAlias :: proc(source: Sound) -> Sound --- // Create a new sound that shares the same sample data as the source sound, does not own the sound data
 	IsSoundValid :: proc(sound: Sound) -> bool --- // Checks if a sound is valid (data loaded and buffers initialized)

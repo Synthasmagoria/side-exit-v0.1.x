@@ -716,6 +716,7 @@ setPlayer3DState :: proc(player: ^Player3D, nextState: Player3DState) {
 			} else {
 				panic("Couldn't make elevator interactable because there was no elevator")
 			}
+			setElevator3DState(&global.elevator3D, .Invisible)
 		}
 	case .Looking:
 		player.lookingStateData.yawTween = createFinishedTween(player.yaw)
@@ -993,7 +994,8 @@ Elevator3DState :: enum {
 	Transit,
 }
 Elevator3DTransitStateData :: struct {
-	timer: Timer,
+	timer:    Timer,
+	duration: f32,
 }
 Elevator3D :: struct {
 	state:              Elevator3DState,
@@ -1050,7 +1052,7 @@ createElevator3D :: proc() -> Elevator3D {
 		panelRenderTextureHeight,
 	)
 	self := Elevator3D {
-		state = .Idle,
+		state = .Invisible,
 		mainModel = getModel(.Elevator),
 		leftDoorModel = getModel(.ElevatorSlidingDoorLeft),
 		rightDoorModel = getModel(.ElevatorSlidingDoorRight),
@@ -1076,10 +1078,12 @@ createElevator3D :: proc() -> Elevator3D {
 			bigButtonSize = {30.0, 30.0},
 			screenArea = {16.0, 12.0, 148.0, 38.0},
 		},
+		transitStateData = {timer = {}, duration = 5.0},
 		lightFrameIndex = 1.0,
 		doorsTween = createFinishedTween(f32(1.0)),
 		doorOpenness = 0.0,
 	}
+	setElevator3DState(&self, .Invisible)
 	return self
 }
 toggleElevatorLights :: proc(e: ^Elevator3D) {
@@ -1099,10 +1103,11 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 			setElevator3DState(e, .Transit)
 		}
 	case .Transit:
-		previousTimerProgress := getTimerProgress(e.transitStateData.timer)
-		updateTimer(&e.transitStateData.timer)
-		currentTimerProgress := getTimerProgress(e.transitStateData.timer)
-		if previousTimerProgress < 0.5 && currentTimerProgress >= 0.5 {
+		stateData := &e.transitStateData
+		updateTimer(&stateData.timer)
+		elevatorSoundVolume := math.smoothstep(cast(f32)0.05, cast(f32)0.2, stateData.timer.time)
+		rl.SetSoundVolume(getSound(.ElevatorMovingLoop), elevatorSoundVolume)
+		if isTimerProgressTimestamp(stateData.timer, 0.5) {
 			loadLevel(.UnrulyLand)
 		}
 		if isTimerFinished(e.transitStateData.timer) {
@@ -1167,11 +1172,26 @@ setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 	if e.state == newState {
 		return
 	}
-	e.state = newState
-	fmt.println(e.state)
 	switch e.state {
 	case .Invisible:
 	case .Idle:
+	case .Leaving:
+	case .Transit:
+		rl.PlaySound(getSound(.ElevatorMovingEnd))
+		rl.StopSound(getSound(.ElevatorMovingLoop))
+	}
+
+	previousState := e.state
+	e.state = newState
+	fmt.println(e.state)
+
+	switch e.state {
+	case .Invisible:
+		rl.StopSound(getSound(.ElevatorIdleLoop))
+	case .Idle:
+		if previousState == .Invisible {
+			rl.PlaySound(getSound(.ElevatorIdleLoop))
+		}
 		for x in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.x {
 			for y in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.y {
 				e.panelData.buttonState[x][y] = 0
@@ -1184,6 +1204,9 @@ setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 		}
 	case .Transit:
 		e.transitStateData.timer = createTimer(5.0)
+		rl.PlaySound(getSound(.ElevatorMovingStart))
+		rl.PlaySound(getSound(.ElevatorMovingLoop))
+		rl.SetSoundVolume(getSound(.ElevatorMovingLoop), 0.0)
 	}
 }
 renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^ElevatorPanelData) {

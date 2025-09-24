@@ -444,3 +444,10 @@ isEnumLast :: proc(value: $T) -> bool {
 	values := reflect.enum_field_values(T)
 	return values[len(values) - 1] == reflect.Type_Info_Enum_Value(value)
 }
+
+smoothplot :: proc(x: f32, threshold: f32, thickness: f32, smoothing: f32) -> f32 {
+	return(
+		math.smoothstep(threshold - thickness - smoothing, threshold - thickness, x) -
+		math.smoothstep(threshold + thickness, threshold + thickness + smoothing, x) \
+	)
+}

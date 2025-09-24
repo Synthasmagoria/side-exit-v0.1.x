@@ -97,6 +97,10 @@ SoundName :: enum {
 	ElevatorDoor1,
 	ElevatorDoor2,
 	ElevatorDoor3,
+	ElevatorIdleLoop,
+	ElevatorMovingStart,
+	ElevatorMovingLoop,
+	ElevatorMovingEnd,
 	ElevatorPanelButton,
 	ElevatorPanelKnob1,
 	ElevatorPanelKnob2,
@@ -108,13 +112,21 @@ getSound :: proc(ind: SoundName) -> rl.Sound {
 	return resources.sounds[ind]
 }
 loadSounds :: proc() {
+	looping: [SoundName._Count]bool
+	looping[SoundName.ElevatorIdleLoop] = true
+	looping[SoundName.ElevatorMovingLoop] = true
+
 	context.allocator = context.temp_allocator
 	soundNames := reflect.enum_field_names(SoundName)
 	for name, i in soundNames[0:int(SoundName._Count) - 1] {
 		n := transmute([]u8)strings.clone(name)
 		n[0] = charLower(n[0])
 		path := strings.join({"sfx/", cast(string)n, ".wav"}, "", context.temp_allocator)
-		resources.sounds[i] = rl.LoadSound(strings.clone_to_cstring(path))
+		if looping[i] {
+			resources.sounds[i] = rl.LoadSoundLooping(strings.clone_to_cstring(path))
+		} else {
+			resources.sounds[i] = rl.LoadSound(strings.clone_to_cstring(path))
+		}
 	}
 }
 unloadSounds :: proc() {
@@ -1063,4 +1075,12 @@ isTimerFinished :: proc(timer: Timer) -> bool {
 }
 getTimerProgress :: proc(timer: Timer) -> f32 {
 	return timer.time / timer.duration
+}
+isTimerTimestamp :: proc(timer: Timer, timestamp: f32) -> bool {
+	return timer.time - TARGET_TIME_STEP < timestamp && timer.time >= timestamp
+}
+isTimerProgressTimestamp :: proc(timer: Timer, timestampFraction: f32) -> bool {
+	progress := getTimerProgress(timer)
+	previousProgress := (timer.time - TARGET_TIME_STEP) / timer.duration
+	return previousProgress < timestampFraction && progress >= timestampFraction
 }

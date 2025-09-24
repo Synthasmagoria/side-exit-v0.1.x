@@ -94,7 +94,6 @@ loadLevel_TitleMenu :: proc(levelAlloc: mem.Allocator) {
 	global.cameraFollowPlayer = false
 	global.camera = getZeroCamera2D()
 	global.camera3D = getZeroCamera3D()
-	setElevator3DState(&global.elevator3D, .Invisible)
 	_ = createTitleMenu(levelAlloc)
 	_ = createTitleMenuBackground(levelAlloc)
 }
@@ -246,23 +245,11 @@ deinitRaylib :: proc() {
 }
 
 setGameGlobals :: proc() {
-	global.music = loadMusicStream(.KowloonSmokeBreak)
-	rl.PlayMusicStream(global.music)
-
 	global.player3D = createPlayer3D()
 	global.elevator3D = createElevator3D()
 }
 
 gameStep :: proc() {
-	@(static) lpf := false
-	if rl.IsKeyPressed(.A) {
-		if !lpf {
-			rl.AttachAudioStreamProcessor(global.music.stream, audioProcessEffectLPF)
-		} else {
-			rl.DetachAudioStreamProcessor(global.music.stream, audioProcessEffectLPF)
-		}
-		lpf = !lpf
-	}
 	player := getFirstGameObjectOfType(Player)
 	elevator := getFirstGameObjectOfType(Elevator)
 
