@@ -173,14 +173,7 @@ dynamicArenaAllocatorDebugProc_Level :: proc(
 	mem.Allocator_Error,
 ) {
 	debugPrintDynamicArenaAllocMessage("level", mode, loc)
-	return mem.dynamic_arena_allocator_proc(
-		allocator_data,
-		mode,
-		size,
-		alignment,
-		old_memory,
-		old_size,
-	)
+	return mem.dynamic_arena_allocator_proc(allocator_data, mode, size, alignment, old_memory, old_size)
 }
 dynamicArenaAllocatorDebugProc_Game :: proc(
 	allocator_data: rawptr,
@@ -195,14 +188,7 @@ dynamicArenaAllocatorDebugProc_Game :: proc(
 	mem.Allocator_Error,
 ) {
 	debugPrintDynamicArenaAllocMessage("game", mode, loc)
-	return mem.dynamic_arena_allocator_proc(
-		allocator_data,
-		mode,
-		size,
-		alignment,
-		old_memory,
-		old_size,
-	)
+	return mem.dynamic_arena_allocator_proc(allocator_data, mode, size, alignment, old_memory, old_size)
 }
 
 audioProcessEffectLPF :: proc "c" (buffer: rawptr, frames: c.uint) {
@@ -289,8 +275,7 @@ gameStep :: proc() {
 	}
 	if global.cameraFollowPlayer && player != nil {
 		global.camera.offset =
-			getObjectCenterAbsolute(player.object^) * -1.0 +
-			{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D} / 2.0
+			getObjectCenterAbsolute(player.object^) * -1.0 + {RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D} / 2.0
 	}
 
 	rl.ClearBackground(rl.BLACK)

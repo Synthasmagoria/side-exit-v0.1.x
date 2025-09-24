@@ -110,10 +110,7 @@ when ODIN_ARCH == .wasm32 || ODIN_ARCH == .wasm64p32 {
 			return
 		}
 
-		file := fopen(
-			strings.clone_to_cstring(name, context.temp_allocator),
-			truncate ? "wb" : "ab",
-		)
+		file := fopen(strings.clone_to_cstring(name, context.temp_allocator), truncate ? "wb" : "ab")
 		defer fclose(file)
 
 		if file == nil {
@@ -127,11 +124,7 @@ when ODIN_ARCH == .wasm32 || ODIN_ARCH == .wasm64p32 {
 			log.errorf("Failed to write file %v", name)
 			return
 		} else if bytes_written != len(data) {
-			log.errorf(
-				"File partially written, wrote %v out of %v bytes",
-				bytes_written,
-				len(data),
-			)
+			log.errorf("File partially written, wrote %v out of %v bytes", bytes_written, len(data))
 			return
 		}
 
@@ -185,22 +178,13 @@ getTextureSize :: proc(tex: rl.Texture) -> rl.Vector2 {
 }
 getTextureDestRecCentered :: proc(tex: rl.Texture, areaSize: rl.Vector2) -> rl.Rectangle {
 	texSize := getTextureSize(tex)
-	return {
-		areaSize.x / 2.0 - texSize.x / 2.0,
-		areaSize.y / 2.0 - texSize.y / 2.0,
-		texSize.x,
-		texSize.y,
-	}
+	return {areaSize.x / 2.0 - texSize.x / 2.0, areaSize.y / 2.0 - texSize.y / 2.0, texSize.x, texSize.y}
 }
 getTextureDestinationRectangle :: proc(texture: rl.Texture, offset: rl.Vector2) -> rl.Rectangle {
 	textureSize := getTextureSize(texture)
 	return {offset.x, offset.y, textureSize.x, textureSize.y}
 }
-getTextureDestRecCenteredFit :: proc(
-	tex: rl.Texture,
-	areaSize: rl.Vector2,
-	inset: f32,
-) -> rl.Rectangle {
+getTextureDestRecCenteredFit :: proc(tex: rl.Texture, areaSize: rl.Vector2, inset: f32) -> rl.Rectangle {
 	texSize := getTextureSize(tex)
 	maxTexLength := max(texSize.x, texSize.y)
 	maxAreaLength := max(areaSize.x, areaSize.y)
@@ -234,20 +218,10 @@ rectangleInRectangle :: proc {
 	rectangleInRectangleI32,
 }
 rectangleInRectangleF32 :: proc(a: rl.Rectangle, b: rl.Rectangle) -> bool {
-	return(
-		a.x + a.width >= b.x &&
-		a.x < b.x + b.width &&
-		a.y + a.height >= b.y &&
-		a.y < b.y + b.height \
-	)
+	return a.x + a.width >= b.x && a.x < b.x + b.width && a.y + a.height >= b.y && a.y < b.y + b.height
 }
 rectangleInRectangleI32 :: proc(a: iRectangle, b: iRectangle) -> bool {
-	return(
-		a.x + a.width >= b.x &&
-		a.x < b.x + b.width &&
-		a.y + a.height >= b.y &&
-		a.y < b.y + b.height \
-	)
+	return a.x + a.width >= b.x && a.x < b.x + b.width && a.y + a.height >= b.y && a.y < b.y + b.height
 }
 pointInRectangle :: proc {
 	pointInRectangleF32,
@@ -376,14 +350,7 @@ drawRenderTextureScaledToScreenBuffer :: proc(rtex: rl.RenderTexture) {
 drawTextureRecDest :: proc(tex: rl.Texture, dest: rl.Rectangle) {
 	rl.DrawTexturePro(tex, getTextureRec(tex), dest, rl.Vector2{0.0, 0.0}, 0.0, rl.WHITE)
 }
-debugDrawTextOutline :: proc(
-	text: cstring,
-	x: i32,
-	y: i32,
-	fontSize: i32,
-	color: rl.Color,
-	outlineColor: rl.Color,
-) {
+debugDrawTextOutline :: proc(text: cstring, x: i32, y: i32, fontSize: i32, color: rl.Color, outlineColor: rl.Color) {
 	rl.DrawText(text, x - 1, y - 1, fontSize, outlineColor)
 	rl.DrawText(text, x + 1, y - 1, fontSize, outlineColor)
 	rl.DrawText(text, x + 1, y + 1, fontSize, outlineColor)

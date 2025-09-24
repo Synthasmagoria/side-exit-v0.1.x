@@ -10,9 +10,9 @@ package game
 
 import "base:intrinsics"
 import "core:c"
-import "core:mem"
 import "core:fmt"
 import "core:log"
+import "core:mem"
 import "core:strings"
 
 // This will create bindings to emscripten's implementation of libc
@@ -158,24 +158,24 @@ https://github.com/Aronicu/Raylib-WASM/tree/main
 */
 Emscripten_Logger_Opts :: log.Options{.Level, .Short_File_Path, .Line}
 
-create_emscripten_logger :: proc (lowest := log.Level.Debug, opt := Emscripten_Logger_Opts) -> log.Logger {
+create_emscripten_logger :: proc(lowest := log.Level.Debug, opt := Emscripten_Logger_Opts) -> log.Logger {
 	return log.Logger{data = nil, procedure = logger_proc, lowest_level = lowest, options = opt}
 }
 
 // This create's a binding to `puts` which will be linked in as part of the
 // emscripten runtime.
 @(default_calling_convention = "c")
-foreign {
+foreign _ {
 	puts :: proc(buffer: cstring) -> c.int ---
 }
 
-@(private="file")
+@(private = "file")
 logger_proc :: proc(
 	logger_data: rawptr,
 	level: log.Level,
 	text: string,
 	options: log.Options,
-	location := #caller_location
+	location := #caller_location,
 ) {
 	b := strings.builder_make(context.temp_allocator)
 	strings.write_string(&b, Level_Headers[level])
@@ -187,7 +187,7 @@ logger_proc :: proc(
 	}
 }
 
-@(private="file")
+@(private = "file")
 Level_Headers := [?]string {
 	0 ..< 10 = "[DEBUG] --- ",
 	10 ..< 20 = "[INFO ] --- ",
@@ -196,7 +196,7 @@ Level_Headers := [?]string {
 	40 ..< 50 = "[FATAL] --- ",
 }
 
-@(private="file")
+@(private = "file")
 do_location_header :: proc(opts: log.Options, buf: ^strings.Builder, location := #caller_location) {
 	if log.Location_Header_Opts & opts == nil {
 		return

@@ -22,14 +22,8 @@ RENDER_TEXTURE_HEIGHT_3D :: RENDER_TEXTURE_HEIGHT_2D * 2
 initEngine :: proc() {
 	initEngineMemory()
 	engine.renderTextureStack = createRenderTextureStack()
-	engine.renderTexture2D = rl.LoadRenderTexture(
-		RENDER_TEXTURE_WIDTH_2D,
-		RENDER_TEXTURE_HEIGHT_2D,
-	)
-	engine.renderTexture3D = rl.LoadRenderTexture(
-		RENDER_TEXTURE_WIDTH_3D,
-		RENDER_TEXTURE_HEIGHT_3D,
-	)
+	engine.renderTexture2D = rl.LoadRenderTexture(RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D)
+	engine.renderTexture3D = rl.LoadRenderTexture(RENDER_TEXTURE_WIDTH_3D, RENDER_TEXTURE_HEIGHT_3D)
 	engine.collisionRectangles = make([dynamic]iRectangle, 0, 1000, engine.gameAlloc)
 	engine.gameObjects = make([dynamic]GameObject, 0, 100, engine.gameAlloc)
 	engine.gameObjectsDepthOrdered = make([dynamic]^GameObject, 0, 100, engine.gameAlloc)
@@ -227,9 +221,7 @@ loadTextures :: proc() {
 		n := transmute([]u8)strings.clone(name, context.temp_allocator)
 		n[0] = charLower(n[0])
 		path := strings.join({"tex/", cast(string)n, ".png"}, "", context.temp_allocator)
-		resources.textures[i] = rl.LoadTexture(
-			strings.clone_to_cstring(path, context.temp_allocator),
-		)
+		resources.textures[i] = rl.LoadTexture(strings.clone_to_cstring(path, context.temp_allocator))
 	}
 }
 unloadTextures :: proc() {
@@ -241,12 +233,7 @@ unloadTextures :: proc() {
 getSpriteDef :: proc(ind: TextureName) -> SpriteDef {
 	return resources.spriteDefs[ind]
 }
-_setSpriteDef :: proc(
-	ind: TextureName,
-	frame_width: i32,
-	frame_spd: f32,
-	origin: rl.Vector2 = {0.0, 0.0},
-) {
+_setSpriteDef :: proc(ind: TextureName, frame_width: i32, frame_spd: f32, origin: rl.Vector2 = {0.0, 0.0}) {
 	resources.spriteDefs[ind] = createSpriteDef(getTexture(ind), frame_width, frame_spd, origin)
 }
 initSpriteDefs :: proc() {
@@ -322,18 +309,12 @@ loadAndResolveShader :: proc(name: string) -> Maybe(rl.Shader) {
 		return nil
 	}
 
-	vertCodeResolved, vertResolveError := resolveShaderIncludes(
-		strings.clone_from(vertCodeBytes),
-		dir,
-	)
+	vertCodeResolved, vertResolveError := resolveShaderIncludes(strings.clone_from(vertCodeBytes), dir)
 	if vertResolveError != .None {
 		traceLogShaderIncludeError(vertResolveError)
 		return nil
 	}
-	fragCodeResolved, fragResolveError := resolveShaderIncludes(
-		strings.clone_from(fragCodeBytes),
-		dir,
-	)
+	fragCodeResolved, fragResolveError := resolveShaderIncludes(strings.clone_from(fragCodeBytes), dir)
 	if fragResolveError != .None {
 		traceLogShaderIncludeError(fragResolveError)
 		return nil
@@ -351,13 +332,7 @@ ResolveShaderIncludesError :: enum {
 	CouldntReadIncludeFile,
 	DoesntSupportNestedInclude,
 }
-resolveShaderIncludes :: proc(
-	shdStr: string,
-	dir: string,
-) -> (
-	string,
-	ResolveShaderIncludesError,
-) {
+resolveShaderIncludes :: proc(shdStr: string, dir: string) -> (string, ResolveShaderIncludesError) {
 	includelessCodeSlices := make([dynamic]string, 0, 10)
 	if strings.contains(shdStr, "#include") {
 		vertCodeLoopSlice := shdStr[:]
@@ -378,14 +353,9 @@ resolveShaderIncludes :: proc(
 			if closingQuote + 1 >= len(vertCodeLoopSlice) {
 				return shdStr, .FileEndsAfterClosingIncludeQuote
 			}
-			includePathParts := [?]string {
-				dir,
-				vertCodeLoopSlice[openingQuote + 1:closingQuote + 1],
-			}
+			includePathParts := [?]string{dir, vertCodeLoopSlice[openingQuote + 1:closingQuote + 1]}
 
-			includeCodeBytes, includeCodeReadSuccess := readEntireFile(
-				strings.join(includePathParts[:], ""),
-			)
+			includeCodeBytes, includeCodeReadSuccess := readEntireFile(strings.join(includePathParts[:], ""))
 			if !includeCodeReadSuccess {
 				return shdStr, .CouldntReadIncludeFile
 			}
@@ -493,13 +463,7 @@ generateCircleMask2D :: proc(radius: i32) -> [dynamic]byte {
 	}
 	return mask
 }
-andMask2D :: proc(
-	dest: ^[dynamic]byte,
-	destWidth: i32,
-	mask: [dynamic]byte,
-	maskWidth: i32,
-	maskPosition: iVector2,
-) {
+andMask2D :: proc(dest: ^[dynamic]byte, destWidth: i32, mask: [dynamic]byte, maskWidth: i32, maskPosition: iVector2) {
 	assert(linalg.fract(f32(len(dest)) / f32(destWidth)) == 0.0)
 	assert(linalg.fract(f32(len(mask)) / f32(maskWidth)) == 0.0)
 	destArea := iRectangle{0, 0, destWidth, i32(len(dest)) / destWidth}
@@ -522,10 +486,7 @@ generateWorld :: proc(area: iRectangle, threshold: f32, seed: i64, frequency: f6
 	areaHeight := f64(area.height)
 	for x in 0 ..< area.width {
 		for y in 0 ..< area.height {
-			samplePosition := [2]f64 {
-				f64(x) / areaWidth * frequency,
-				f64(y) / areaHeight * frequency,
-			}
+			samplePosition := [2]f64{f64(x) / areaWidth * frequency, f64(y) / areaHeight * frequency}
 			noiseValue := math.step(threshold, noise.noise_2d(seed, samplePosition))
 			blocks[x + y * area.width] = cast(byte)noiseValue
 		}
@@ -700,10 +661,7 @@ objectCollision :: proc(object: ^GameObject, offset: rl.Vector2) -> ^GameObject 
 	for i in 0 ..< len(engine.gameObjects) {
 		otherObject := &engine.gameObjects[i]
 		if object.id != otherObject.id &&
-		   rectangleInRectangle(
-			   rec,
-			   getObjectAbsoluteCollisionRectangle(otherObject, {0.0, 0.0}),
-		   ) {
+		   rectangleInRectangle(rec, getObjectAbsoluteCollisionRectangle(otherObject, {0.0, 0.0})) {
 			return &engine.gameObjects[i]
 		}
 	}
@@ -715,20 +673,14 @@ objectCollisionType :: proc(object: ^GameObject, type: typeid, offset: rl.Vector
 		otherObject := &engine.gameObjects[i]
 		if object.id != otherObject.id &&
 		   otherObject.type == type &&
-		   rectangleInRectangle(
-			   rec,
-			   getObjectAbsoluteCollisionRectangle(otherObject, {0.0, 0.0}),
-		   ) {
+		   rectangleInRectangle(rec, getObjectAbsoluteCollisionRectangle(otherObject, {0.0, 0.0})) {
 			return &engine.gameObjects[i]
 		}
 	}
 	return nil
 }
 getObjectCenter :: proc(object: GameObject) -> rl.Vector2 {
-	return {
-		object.colRec.x + object.colRec.width / 2.0,
-		object.colRec.y + object.colRec.height / 2.0,
-	}
+	return {object.colRec.x + object.colRec.width / 2.0, object.colRec.y + object.colRec.height / 2.0}
 }
 getObjectCenterAbsolute :: proc(object: GameObject) -> rl.Vector2 {
 	return {
@@ -736,10 +688,7 @@ getObjectCenterAbsolute :: proc(object: GameObject) -> rl.Vector2 {
 		object.colRec.y + object.colRec.height / 2.0 + object.pos.y,
 	}
 }
-getObjectAbsoluteCollisionRectangle :: proc(
-	object: ^GameObject,
-	offset: rl.Vector2,
-) -> rl.Rectangle {
+getObjectAbsoluteCollisionRectangle :: proc(object: ^GameObject, offset: rl.Vector2) -> rl.Rectangle {
 	return {
 		object.pos.x + object.colRec.x + offset.x,
 		object.pos.y + object.colRec.y + offset.y,
@@ -772,13 +721,7 @@ getZeroCamera2D :: proc() -> rl.Camera2D {
 }
 
 getZeroCamera3D :: proc() -> rl.Camera3D {
-	return {
-		position = {0.0, 0.0, 0.0},
-		target = FORWARD_3D,
-		up = UP_3D,
-		projection = .PERSPECTIVE,
-		fovy = 90.0,
-	}
+	return {position = {0.0, 0.0, 0.0}, target = FORWARD_3D, up = UP_3D, projection = .PERSPECTIVE, fovy = 90.0}
 }
 
 /*
@@ -808,10 +751,7 @@ createRenderTextureStack :: proc() -> RenderTextureStack {
 	}
 	return rts
 }
-beginModeStacked :: proc(
-	camera: RenderTextureStackCamera,
-	renderTexture: Maybe(rl.RenderTexture),
-) {
+beginModeStacked :: proc(camera: RenderTextureStackCamera, renderTexture: Maybe(rl.RenderTexture)) {
 	rts := &engine.renderTextureStack
 	assert(rts.count + 1 < ENGINE_RENDER_TEXTURE_STACK_CAPACITY)
 	if rts.count > 0 {

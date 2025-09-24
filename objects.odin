@@ -59,8 +59,7 @@ updatePlayer :: proc(self: ^Player) {
 	walkInput := f32(int(rightInput)) - f32(int(leftInput))
 
 	onFloor :=
-		doSolidCollision(getObjectAbsoluteCollisionRectangle(self.object, {0.0, 1.0})) != nil &&
-		self.velocity.y >= 0.0
+		doSolidCollision(getObjectAbsoluteCollisionRectangle(self.object, {0.0, 1.0})) != nil && self.velocity.y >= 0.0
 	if onFloor {
 		self.airjumpIndex = 0
 	} else {
@@ -131,25 +130,14 @@ moveAndCollidePlayer :: proc(
 		i32(collisionRectangle.width),
 		i32(collisionRectangle.height),
 	}
-	absoluteHitboxDiagonal := shiftRectangle(
-		collisionRectangle,
-		result.newPosition + result.newVelocity,
-	)
-	if collisionRectangleDiagonal := doSolidCollision(absoluteHitboxDiagonal);
-	   collisionRectangleDiagonal != nil {
-		absoluteHitboxVertical := shiftRectangle(
-			collisionRectangle,
-			result.newPosition + {0.0, result.newVelocity.y},
-		)
-		if collisionRectangleVertical := doSolidCollision(absoluteHitboxVertical);
-		   collisionRectangleVertical != nil {
+	absoluteHitboxDiagonal := shiftRectangle(collisionRectangle, result.newPosition + result.newVelocity)
+	if collisionRectangleDiagonal := doSolidCollision(absoluteHitboxDiagonal); collisionRectangleDiagonal != nil {
+		absoluteHitboxVertical := shiftRectangle(collisionRectangle, result.newPosition + {0.0, result.newVelocity.y})
+		if collisionRectangleVertical := doSolidCollision(absoluteHitboxVertical); collisionRectangleVertical != nil {
 			verticalDirection := math.sign(result.newVelocity.y)
 			if (verticalDirection == 1.0) {
 				result.newPosition.y = f32(
-					collisionRectangleVertical.?.y -
-					collisionRectangleI32.y -
-					collisionRectangleI32.height -
-					1.0,
+					collisionRectangleVertical.?.y - collisionRectangleI32.y - collisionRectangleI32.height - 1.0,
 				)
 			} else {
 				result.newPosition.y = f32(
@@ -172,10 +160,7 @@ moveAndCollidePlayer :: proc(
 		   collisionRectangleHorizontal != nil {
 			if (facing == 1.0) {
 				result.newPosition.x = f32(
-					collisionRectangleHorizontal.?.x -
-					collisionRectangleI32.x -
-					collisionRectangleI32.width -
-					1.0,
+					collisionRectangleHorizontal.?.x - collisionRectangleI32.x - collisionRectangleI32.width - 1.0,
 				)
 			} else {
 				result.newPosition.x = f32(
@@ -291,8 +276,7 @@ updateElevator :: proc(self: ^Elevator) {
 	case .Leaving:
 		self.drawOffset = updateAndStepTween(&self.leavingStateData.movementTween).(rl.Vector2)
 		self.blend.a = updateAndStepTween(&self.leavingStateData.alphaTween).(u8)
-		if tweenIsFinished(self.leavingStateData.alphaTween) &&
-		   tweenIsFinished(self.leavingStateData.alphaTween) {
+		if tweenIsFinished(self.leavingStateData.alphaTween) && tweenIsFinished(self.leavingStateData.alphaTween) {
 			setElevatorState(self, .Gone)
 		}
 	}
@@ -305,8 +289,7 @@ drawElevator :: proc(self: ^Elevator) {
 drawElevatorEnd :: proc(self: ^Elevator) {
 	if self.drawInteractionArrow {
 		if player := getFirstGameObjectOfType(Player); player != nil {
-			abovePlayerCenter :=
-				getObjectCenterAbsolute(player.object^) - {0.0, player.object.colRec.height}
+			abovePlayerCenter := getObjectCenterAbsolute(player.object^) - {0.0, player.object.colRec.height}
 			drawSpriteEx(self.interactionArrowSpr, abovePlayerCenter, {1.0, 1.0})
 			updateSprite(&self.interactionArrowSpr)
 		}
@@ -345,19 +328,10 @@ setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
 		if player := getFirstGameObjectOfType(Player); player != nil {
 			player.frozen = 1
 		}
-		movePlayer3D(
-			&global.player3D,
-			PLAYER_3D_OUTSIDE_POSITION,
-			PLAYER_3D_INSIDE_POSITION,
-			.Looking,
-		)
+		movePlayer3D(&global.player3D, PLAYER_3D_OUTSIDE_POSITION, PLAYER_3D_INSIDE_POSITION, .Looking)
 	case .Leaving:
 		self.blend = rl.WHITE
-		self.leavingStateData.movementTween = createTween(
-			TweenVector2Range{{0.0, 0.0}, {0.0, -224.0}},
-			.Exp,
-			2.0,
-		)
+		self.leavingStateData.movementTween = createTween(TweenVector2Range{{0.0, 0.0}, {0.0, -224.0}}, .Exp, 2.0)
 		self.leavingStateData.alphaTween = createTween(TweenU8Range{255, 0}, .Linear, 0.7, 1.3)
 	}
 }
@@ -380,10 +354,7 @@ createTitleMenu :: proc(levelAlloc: mem.Allocator) -> ^TitleMenu {
 		updateProc = cast(proc(_: rawptr))updateTitleMenu,
 		drawProc = cast(proc(_: rawptr))drawTitleMenu,
 	)
-	self.object.pos = {
-		RENDER_TEXTURE_WIDTH_2D / 2,
-		RENDER_TEXTURE_HEIGHT_2D / 2 + RENDER_TEXTURE_HEIGHT_2D / 4,
-	}
+	self.object.pos = {RENDER_TEXTURE_WIDTH_2D / 2, RENDER_TEXTURE_HEIGHT_2D / 2 + RENDER_TEXTURE_HEIGHT_2D / 4}
 	return self
 }
 updateTitleMenu :: proc(self: ^TitleMenu) {
@@ -453,12 +424,7 @@ updateTitleMenuBackground :: proc(self: ^TitleMenuBackground) {
 drawTitleMenuBackground :: proc(self: ^TitleMenuBackground) {
 	backgroundShaderTexture := getTexture(.White32)
 	backgroundShaderSource := getTextureRec(backgroundShaderTexture)
-	backgroundShaderDest := rl.Rectangle {
-		0.0,
-		0.0,
-		RENDER_TEXTURE_WIDTH_2D,
-		RENDER_TEXTURE_HEIGHT_2D,
-	}
+	backgroundShaderDest := rl.Rectangle{0.0, 0.0, RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D}
 	backgroundShader := getShader(.TitleMenuFog)
 	rl.BeginShaderMode(backgroundShader)
 	setShaderValue(backgroundShader, "time", &self.backgroundShaderTime)
@@ -553,10 +519,7 @@ createHubGraphics :: proc(levelAlloc: mem.Allocator) -> ^HubGraphics {
 		drawEndProc = cast(proc(_: rawptr))drawHubGraphicsEnd,
 		destroyProc = cast(proc(_: rawptr))destroyHubGraphics,
 	)
-	self.postProcessingRenderTexture = rl.LoadRenderTexture(
-		RENDER_TEXTURE_WIDTH_2D,
-		RENDER_TEXTURE_HEIGHT_2D,
-	)
+	self.postProcessingRenderTexture = rl.LoadRenderTexture(RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D)
 	return self
 }
 destroyHubGraphics :: proc(self: ^HubGraphics) {
@@ -594,10 +557,7 @@ UnrulyLandGraphics :: struct {
 }
 createUnrulyLandGraphics :: proc(levelAlloc: mem.Allocator) -> ^UnrulyLandGraphics {
 	self := new(UnrulyLandGraphics, levelAlloc)
-	self.blockRenderTexture = rl.LoadRenderTexture(
-		RENDER_TEXTURE_WIDTH_2D,
-		RENDER_TEXTURE_HEIGHT_2D,
-	)
+	self.blockRenderTexture = rl.LoadRenderTexture(RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D)
 	self.object = createGameObject(
 		UnrulyLandGraphics,
 		self,
@@ -611,12 +571,7 @@ drawUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
 	beginModeStacked(nil, self.blockRenderTexture)
 	rl.ClearBackground({0, 0, 0, 0})
 	for rectangle in engine.collisionRectangles {
-		rectangleF32 := rl.Rectangle {
-			f32(rectangle.x),
-			f32(rectangle.y),
-			f32(rectangle.width),
-			f32(rectangle.height),
-		}
+		rectangleF32 := rl.Rectangle{f32(rectangle.x), f32(rectangle.y), f32(rectangle.width), f32(rectangle.height)}
 		rl.DrawRectangleRec(rectangleF32, rl.WHITE)
 	}
 	endModeStacked()
@@ -629,11 +584,7 @@ drawUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
 	setShaderValue(outlineShader, "texelSize", &outlineShaderTexelSize)
 	outlineShaderFlipY: i32 = 1
 	setShaderValue(outlineShader, "flipY", &outlineShaderFlipY)
-	rl.DrawTextureV(
-		self.blockRenderTexture.texture,
-		global.camera.target - global.camera.offset,
-		rl.WHITE,
-	)
+	rl.DrawTextureV(self.blockRenderTexture.texture, global.camera.target - global.camera.offset, rl.WHITE)
 	rl.EndShaderMode()
 }
 destroyUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
@@ -749,10 +700,7 @@ setPlayer3DState :: proc(player: ^Player3D, nextState: Player3DState) {
 player3DApplyCameraRotation :: proc(player: ^Player3D) {
 	global.camera3D.target =
 		global.camera3D.position +
-		rl.Vector3Transform(
-			FORWARD_3D,
-			MatrixRotateYaw(player.yaw) * MatrixRotatePitch(player.pitch),
-		)
+		rl.Vector3Transform(FORWARD_3D, MatrixRotateYaw(player.yaw) * MatrixRotatePitch(player.pitch))
 }
 updatePlayer3D :: proc(self: ^Player3D) {
 	switch self.state {
@@ -783,10 +731,7 @@ updatePlayer3D :: proc(self: ^Player3D) {
 			data.verticalState = enumNext(data.verticalState)
 			angleIncrement := PLAYER_3D_LOOKING_VERTICAL_ANGLE_INCREMENT
 			data.pitchTween = createTween(
-				TweenF32Range {
-					self.pitch,
-					-angleIncrement + angleIncrement * f32(data.verticalState),
-				},
+				TweenF32Range{self.pitch, -angleIncrement + angleIncrement * f32(data.verticalState)},
 				.InvExp,
 				PLAYER_3D_LOOKING_VERTICAL_DURATION,
 			)
@@ -794,10 +739,7 @@ updatePlayer3D :: proc(self: ^Player3D) {
 			data.verticalState = enumPrev(data.verticalState)
 			angleIncrement := PLAYER_3D_LOOKING_VERTICAL_ANGLE_INCREMENT
 			data.pitchTween = createTween(
-				TweenF32Range {
-					self.pitch,
-					-angleIncrement + angleIncrement * f32(data.verticalState),
-				},
+				TweenF32Range{self.pitch, -angleIncrement + angleIncrement * f32(data.verticalState)},
 				.InvExp,
 				PLAYER_3D_LOOKING_VERTICAL_DURATION,
 			)
@@ -810,18 +752,12 @@ updatePlayer3D :: proc(self: ^Player3D) {
 				if rl.IsKeyPressed(.LEFT_SHIFT) {
 					movePlayer3D(self, global.camera3D.position, PLAYER_3D_PANEL_POSITION, .Panel)
 				} else if rl.IsKeyPressed(.Z) && isElevator3DDoorOpen(&global.elevator3D) {
-					movePlayer3D(
-						self,
-						global.camera3D.position,
-						PLAYER_3D_OUTSIDE_POSITION,
-						.Inactive,
-					)
+					movePlayer3D(self, global.camera3D.position, PLAYER_3D_OUTSIDE_POSITION, .Inactive)
 				}
 			}
 		}
 	case .Moving:
-		global.camera3D.position =
-		updateAndStepTween(&self.movingStateData.movementTween).(rl.Vector3)
+		global.camera3D.position = updateAndStepTween(&self.movingStateData.movementTween).(rl.Vector3)
 		global.camera3D.target = global.camera3D.position + self.movingStateData.look
 		if tweenIsFinished(self.movingStateData.movementTween) {
 			setPlayer3DState(self, self.movingStateData.nextState)
@@ -844,12 +780,9 @@ updatePlayer3D :: proc(self: ^Player3D) {
 			panelScreenRectEnd := rl.GetWorldToScreen(panelBbox.max, global.camera3D)
 			panelScreenRectSize := panelScreenRectEnd - panelScreenRectStart
 			screenPosition := rl.GetWorldToScreen(rayCollision.point, global.camera3D)
-			panelPositionNormalized :=
-				(screenPosition - panelScreenRectStart) / panelScreenRectSize
+			panelPositionNormalized := (screenPosition - panelScreenRectStart) / panelScreenRectSize
 			panelPositionNormalized.y = 1.0 - panelPositionNormalized.y
-			panelPosition :=
-				panelPositionNormalized *
-				getTextureSize(global.elevator3D.panelRenderTexture.texture)
+			panelPosition := panelPositionNormalized * getTextureSize(global.elevator3D.panelRenderTexture.texture)
 			elevatorPanel3DInput(&global.elevator3D.panelData, panelPosition)
 		} else {
 			fmt.println("No collision")
@@ -905,8 +838,7 @@ ElevatorPanelData :: struct {
 }
 elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 	if pointInRectangle(position, panel.buttonArea) {
-		relativeButtonPosition :=
-			(position - {panel.buttonArea.x, panel.buttonArea.y}) / panel.buttonSeparation
+		relativeButtonPosition := (position - {panel.buttonArea.x, panel.buttonArea.y}) / panel.buttonSeparation
 		relativeButtonPositionFloored := rl.Vector2 {
 			math.floor(relativeButtonPosition.x),
 			math.floor(relativeButtonPosition.y),
@@ -919,18 +851,14 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 			{panel.buttonArea.x, panel.buttonArea.y}
 		buttonRadius := buttonTextureSize / 2.0
 		if pointInCircle(position, buttonPosition, buttonRadius) {
-			relativeButtonIndex := iVector2 {
-				i32(relativeButtonPositionFloored.x),
-				i32(relativeButtonPositionFloored.y),
-			}
+			relativeButtonIndex := iVector2{i32(relativeButtonPositionFloored.x), i32(relativeButtonPositionFloored.y)}
 			rl.PlaySound(getSound(.ElevatorPanelButton))
 			if global.elevator3D.state == .Idle {
 				if panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] == 1 {
 					buttonStackIndex: i32 = 0
 					for i in 0 ..< panel.buttonPressCount {
 						if panel.buttonPressStack[i] ==
-						   relativeButtonIndex.y +
-							   relativeButtonIndex.x * ELEVATOR_PANEL_BUTTON_COUNT.y {
+						   relativeButtonIndex.y + relativeButtonIndex.x * ELEVATOR_PANEL_BUTTON_COUNT.y {
 							for j := i + 1; j < panel.buttonPressCount; j += 1 {
 								panel.buttonPressStack[j - 1] = panel.buttonPressStack[j]
 							}
@@ -941,8 +869,7 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 					panel.buttonPressCount -= 1
 				} else {
 					panel.buttonPressStack[panel.buttonPressCount] =
-						relativeButtonIndex.y +
-						relativeButtonIndex.x * ELEVATOR_PANEL_BUTTON_COUNT.y
+						relativeButtonIndex.y + relativeButtonIndex.x * ELEVATOR_PANEL_BUTTON_COUNT.y
 					panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] = 1
 					panel.buttonPressCount += 1
 				}
@@ -953,20 +880,14 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 		}
 	} else if pointInRectangle(position, panel.knobArea) {
 		knobAreaPosition := rl.Vector2{panel.knobArea.x, panel.knobArea.y}
-		relativeKnobPosition := rl.Vector2 {
-			0.0,
-			(position.y - knobAreaPosition.y) / panel.knobSeparation.y,
-		}
+		relativeKnobPosition := rl.Vector2{0.0, (position.y - knobAreaPosition.y) / panel.knobSeparation.y}
 		relativeKnobPositionFloored := rl.Vector2 {
 			math.floor(relativeKnobPosition.x),
 			math.floor(relativeKnobPosition.y),
 		}
 		knobTexture := getTexture(.ElevatorPanelKnob)
 		knobTextureSize := getTextureSize(knobTexture)
-		knobPosition :=
-			knobAreaPosition +
-			relativeKnobPositionFloored * panel.knobSeparation +
-			knobTextureSize / 2.0
+		knobPosition := knobAreaPosition + relativeKnobPositionFloored * panel.knobSeparation + knobTextureSize / 2.0
 		knobRadius := knobTextureSize.x / 2.0
 		if pointInCircle(position, knobPosition, knobRadius) {
 			knobIndex := int(relativeKnobPositionFloored.y)
@@ -987,12 +908,8 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 	} else if pointInRectangle(position, panel.bigButtonArea) {
 		bigButtonAreaStart := rl.Vector2{panel.bigButtonArea.x, panel.bigButtonArea.y}
 		relativePosition := (position - bigButtonAreaStart) / panel.bigButtonSeparation
-		relativePositionFloored := rl.Vector2 {
-			math.floor(relativePosition.x),
-			math.floor(relativePosition.y),
-		}
-		bigButtonPosition :=
-			bigButtonAreaStart + panel.bigButtonSeparation * relativePositionFloored
+		relativePositionFloored := rl.Vector2{math.floor(relativePosition.x), math.floor(relativePosition.y)}
+		bigButtonPosition := bigButtonAreaStart + panel.bigButtonSeparation * relativePositionFloored
 		bigButtonRectangle := rl.Rectangle {
 			bigButtonAreaStart.x,
 			bigButtonAreaStart.y,
@@ -1063,10 +980,8 @@ setElevator3DDoorState :: proc(e: ^Elevator3D, open: bool, instant: bool, delay:
 }
 isElevator3DDoorOpen :: proc(e: ^Elevator3D) -> bool {
 	return(
-		(e.doorsTween.range.(TweenF32Range).to == 1.0 &&
-			getTweenProgressDurationOnly(e.doorsTween) > 0.5) ||
-		(e.doorsTween.range.(TweenF32Range).to == 0.0 &&
-				getTweenProgressDurationOnly(e.doorsTween) < 0.5) \
+		(e.doorsTween.range.(TweenF32Range).to == 1.0 && getTweenProgressDurationOnly(e.doorsTween) > 0.5) ||
+		(e.doorsTween.range.(TweenF32Range).to == 0.0 && getTweenProgressDurationOnly(e.doorsTween) < 0.5) \
 	)
 }
 createElevator3D :: proc() -> Elevator3D {
@@ -1079,10 +994,7 @@ createElevator3D :: proc() -> Elevator3D {
 	panelMeshSize := panelMeshBbox.max.yz - panelMeshBbox.min.yz
 	panelMeshRatio := panelMeshSize.x / panelMeshSize.y
 	panelRenderTextureHeight := i32(f32(ELEVATOR_3D_PANEL_RENDER_TEXTURE_WIDTH) * panelMeshRatio)
-	panelRenderTexture := rl.LoadRenderTexture(
-		ELEVATOR_3D_PANEL_RENDER_TEXTURE_WIDTH,
-		panelRenderTextureHeight,
-	)
+	panelRenderTexture := rl.LoadRenderTexture(ELEVATOR_3D_PANEL_RENDER_TEXTURE_WIDTH, panelRenderTextureHeight)
 	self := Elevator3D {
 		state = .Invisible,
 		mainModel = getModel(.Elevator),
@@ -1154,11 +1066,7 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 	global.musicLPFFrequency = 90.0 + (44100.0 - 90.0) * e.doorOpenness
 
 	if tweenWasWaiting && !tweenIsWaiting(e.doorsTween) {
-		sounds := [?]rl.Sound {
-			getSound(.ElevatorDoor1),
-			getSound(.ElevatorDoor2),
-			getSound(.ElevatorDoor3),
-		}
+		sounds := [?]rl.Sound{getSound(.ElevatorDoor1), getSound(.ElevatorDoor2), getSound(.ElevatorDoor3)}
 		rl.PlaySound(rand.choice(sounds[:]))
 	}
 }
@@ -1183,11 +1091,7 @@ drawElevator3D :: proc(e: ^Elevator3D) {
 	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.Ceiling], e.lightMaterial, transform)
 
 	applyLightToShader(engine.defaultMaterial3D.shader)
-	rl.DrawMesh(
-		e.mainModel.meshes[Elevator3DModelMeshes.PanelBox],
-		engine.defaultMaterial3D,
-		transform,
-	)
+	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.PanelBox], engine.defaultMaterial3D, transform)
 
 	applyLightToShader(e.panelMaterial.shader)
 	panelFrameIndex: f32 = 0.0
@@ -1250,9 +1154,7 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 	buttonSprite := createSprite(getSpriteDef(.ElevatorPanelButton))
 	for x in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.x {
 		for y in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.y {
-			pos :=
-				rl.Vector2{f32(x), f32(y)} * data.buttonSeparation +
-				{data.buttonArea.x, data.buttonArea.y}
+			pos := rl.Vector2{f32(x), f32(y)} * data.buttonSeparation + {data.buttonArea.x, data.buttonArea.y}
 			setSpriteFrame(&buttonSprite, data.buttonState[x][y])
 			drawSpriteEx(buttonSprite, pos, {1.0, 1.0})
 		}
@@ -1262,9 +1164,7 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 	buttonSizeHalved := cast(f32)getSpriteDef(.ElevatorPanelButton).frame_width / 2.0
 	for x in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.x {
 		for y in 0 ..< ELEVATOR_PANEL_BUTTON_COUNT.y {
-			position :=
-				rl.Vector2{f32(x), f32(y)} * data.buttonSeparation +
-				{data.buttonArea.x, data.buttonArea.y}
+			position := rl.Vector2{f32(x), f32(y)} * data.buttonSeparation + {data.buttonArea.x, data.buttonArea.y}
 			setSpriteFrame(&buttonSymbolSprite, y + x * ELEVATOR_PANEL_BUTTON_COUNT.y)
 			drawSpriteEx(buttonSymbolSprite, position, {1.0, 1.0}, {0, 0, 0, 224})
 		}
@@ -1286,10 +1186,7 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 	rl.DrawTexturePro(
 		knobTexture,
 		knobTextureSource,
-		getTextureDestinationRectangle(
-			knobTexture,
-			knobFirstPosition + data.knobSeparation + knobTextureOrigin,
-		),
+		getTextureDestinationRectangle(knobTexture, knobFirstPosition + data.knobSeparation + knobTextureOrigin),
 		knobTextureOrigin,
 		data.knobState[1],
 		rl.WHITE,
@@ -1301,8 +1198,7 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 	sliderAreaPosition := rl.Vector2{data.sliderArea.x, data.sliderArea.y}
 	for i in 0 ..< 3 {
 		sliderRidgeWidth: f32 = 3.0
-		sliderRidgeStart :=
-			sliderAreaPosition + f32(i) * data.sliderSeparation + sliderTextureOrigin
+		sliderRidgeStart := sliderAreaPosition + f32(i) * data.sliderSeparation + sliderTextureOrigin
 		sliderRidgeStart.x -= math.floor(sliderRidgeWidth / 2.0)
 		sliderRidgeEnd := sliderRidgeStart + {sliderRidgeWidth, data.sliderArea.height}
 		sliderRidgeSize := sliderRidgeEnd - sliderRidgeStart
@@ -1315,8 +1211,7 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 		rl.DrawRectangleRec(sliderRidgeRectangle, rl.BLACK)
 	}
 	for i in 0 ..< 3 {
-		sliderPosition :=
-			sliderAreaPosition + f32(i) * data.sliderSeparation + {0.0, data.sliderState[i]}
+		sliderPosition := sliderAreaPosition + f32(i) * data.sliderSeparation + {0.0, data.sliderState[i]}
 		rl.DrawTextureV(sliderTexture, sliderPosition, rl.WHITE)
 	}
 
@@ -1328,12 +1223,7 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 	for i in 0 ..< data.buttonPressCount {
 		setSpriteFrame(&buttonSymbolSprite, data.buttonPressStack[i])
 		symbolOffset := rl.Vector2{cast(f32)((buttonSymbolSprite.def.frame_width - 7) * i), 0.0}
-		drawSpriteEx(
-			buttonSymbolSprite,
-			screenContentDrawStart + symbolOffset,
-			{1.0, 1.0},
-			rl.ORANGE,
-		)
+		drawSpriteEx(buttonSymbolSprite, screenContentDrawStart + symbolOffset, {1.0, 1.0}, rl.ORANGE)
 	}
 
 	rl.DrawRectangleRec(data.depthIndicatorArea, rl.BLACK)
