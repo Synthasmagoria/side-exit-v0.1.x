@@ -904,12 +904,12 @@ getSpriteSourceRect :: proc(spr: Sprite, scale: rl.Vector2) -> rl.Rectangle {
 		cast(f32)spr.def.tex.height,
 	}
 }
-drawSpriteEx :: proc(spr: Sprite, pos: rl.Vector2, scale: rl.Vector2) {
+drawSpriteEx :: proc(spr: Sprite, pos: rl.Vector2, scale: rl.Vector2, blend := rl.WHITE) {
 	src := getSpriteSourceRect(spr, scale)
 	frame_width := f32(spr.def.frame_width)
 	size := rl.Vector2{frame_width, frame_width} * scale
 	dest := rl.Rectangle{pos.x - spr.def.origin.x, pos.y - spr.def.origin.y, size.x, size.y}
-	rl.DrawTexturePro(spr.def.tex, src, dest, {0.0, 0.0}, 0.0, rl.WHITE)
+	rl.DrawTexturePro(spr.def.tex, src, dest, {0.0, 0.0}, 0.0, blend)
 }
 drawSpriteRect :: proc(spr: Sprite, dest: rl.Rectangle) {
 	src := getSpriteSourceRect(spr, {1.0, 1.0})

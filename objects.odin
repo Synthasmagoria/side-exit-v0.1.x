@@ -868,12 +868,14 @@ Elevator3DModelMeshes :: enum {
 	PanelBox,
 	Panel,
 }
+ELEVATOR_3D_PANEL_BUTTON_COUNT :: 6
 ELEVATOR_3D_PANEL_RENDER_TEXTURE_WIDTH :: 180
 ElevatorPanelData :: struct {
 	buttonState:         [ELEVATOR_PANEL_BUTTON_COUNT.x][ELEVATOR_PANEL_BUTTON_COUNT.y]i32,
 	buttonSeparation:    rl.Vector2,
 	buttonArea:          rl.Rectangle,
-	buttonPressedCount:  i32,
+	buttonPressStack:    [ELEVATOR_3D_PANEL_BUTTON_COUNT]i32,
+	buttonPressCount:    i32,
 	knobState:           [2]f32,
 	knobSeparation:      rl.Vector2,
 	knobArea:            rl.Rectangle,
@@ -910,13 +912,27 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 			rl.PlaySound(getSound(.ElevatorPanelButton))
 			if global.elevator3D.state == .Idle {
 				if panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] == 1 {
+					buttonStackIndex: i32 = 0
+					for i in 0 ..< panel.buttonPressCount {
+						if panel.buttonPressStack[i] ==
+						   relativeButtonIndex.y +
+							   relativeButtonIndex.x * ELEVATOR_PANEL_BUTTON_COUNT.y {
+							for j := i + 1; j < panel.buttonPressCount; j += 1 {
+								panel.buttonPressStack[j - 1] = panel.buttonPressStack[j]
+							}
+							break
+						}
+					}
 					panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] = 0
-					panel.buttonPressedCount -= 1
+					panel.buttonPressCount -= 1
 				} else {
+					panel.buttonPressStack[panel.buttonPressCount] =
+						relativeButtonIndex.y +
+						relativeButtonIndex.x * ELEVATOR_PANEL_BUTTON_COUNT.y
 					panel.buttonState[relativeButtonIndex.x][relativeButtonIndex.y] = 1
-					panel.buttonPressedCount += 1
+					panel.buttonPressCount += 1
 				}
-				if panel.buttonPressedCount >= 4 {
+				if panel.buttonPressCount >= ELEVATOR_3D_PANEL_BUTTON_COUNT {
 					setElevator3DState(&global.elevator3D, .Leaving)
 				}
 			}
@@ -1235,7 +1251,7 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 				rl.Vector2{f32(x), f32(y)} * data.buttonSeparation +
 				{data.buttonArea.x, data.buttonArea.y}
 			setSpriteFrame(&buttonSymbolSprite, y + x * ELEVATOR_PANEL_BUTTON_COUNT.y)
-			drawSpriteEx(buttonSymbolSprite, position, {1.0, 1.0})
+			drawSpriteEx(buttonSymbolSprite, position, {1.0, 1.0}, {0, 0, 0, 224})
 		}
 	}
 
@@ -1293,6 +1309,17 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 	rl.DrawTextureV(bigButtonTexture, {data.bigButtonArea.x, data.bigButtonArea.y}, rl.WHITE)
 
 	rl.DrawRectangleRec(data.screenArea, rl.BLACK)
+	screenContentDrawStart := rl.Vector2{data.screenArea.x, data.screenArea.y} + 4.0
+	for i in 0 ..< data.buttonPressCount {
+		setSpriteFrame(&buttonSymbolSprite, data.buttonPressStack[i])
+		symbolOffset := rl.Vector2{cast(f32)((buttonSymbolSprite.def.frame_width - 7) * i), 0.0}
+		drawSpriteEx(
+			buttonSymbolSprite,
+			screenContentDrawStart + symbolOffset,
+			{1.0, 1.0},
+			rl.ORANGE,
+		)
+	}
 
 	rl.DrawRectangleRec(data.depthIndicatorArea, rl.BLACK)
 	depthTextPosition := getRlRectangleCenter(data.depthIndicatorArea)
