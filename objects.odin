@@ -10,23 +10,33 @@ import "core:strings"
 import rl "lib/raylib"
 import rlgl "lib/raylib/rlgl"
 
+PlayerFrozenState :: enum {
+	Movable,
+	PuppetNoGravity,
+}
+PlayerFrozenPuppetNoGravityStateData :: struct {
+	moveIllusionTween:     Tween,
+	moveIllusionNextState: PlayerFrozenState,
+}
 Player :: struct {
-	object:         ^GameObject,
-	idleSpr:        Sprite,
-	walkSpr:        Sprite,
-	currentSpr:     ^Sprite,
-	scale:          rl.Vector2,
-	colRec:         rl.Rectangle,
-	velocity:       rl.Vector2,
-	maxVelocity:    rl.Vector2,
-	frozen:         i32,
-	walkSpd:        f32,
-	verticalGrav:   f32,
-	verticalDampen: f32,
-	jumpStr:        f32,
-	airjumpStr:     f32,
-	airjumpCount:   i32,
-	airjumpIndex:   i32,
+	object:                         ^GameObject,
+	idleSpr:                        Sprite,
+	walkSpr:                        Sprite,
+	currentSpr:                     ^Sprite,
+	scale:                          rl.Vector2,
+	colRec:                         rl.Rectangle,
+	velocity:                       rl.Vector2,
+	maxVelocity:                    rl.Vector2,
+	walkSpd:                        f32,
+	verticalGrav:                   f32,
+	verticalDampen:                 f32,
+	jumpStr:                        f32,
+	airjumpStr:                     f32,
+	airjumpCount:                   i32,
+	airjumpIndex:                   i32,
+	frozenState:                    PlayerFrozenState,
+	moveIllusionOffset:             rl.Vector2,
+	frozenPuppetNoGravityStateData: PlayerFrozenPuppetNoGravityStateData,
 }
 createPlayer :: proc(alloc: mem.Allocator) -> ^Player {
 	self := new(Player, alloc)
@@ -42,6 +52,10 @@ createPlayer :: proc(alloc: mem.Allocator) -> ^Player {
 	self.airjumpStr = 5.8
 	self.airjumpCount = 1
 	self.airjumpIndex = 0
+	self.frozenState = .Movable
+	self.frozenPuppetNoGravityStateData = {
+		moveIllusionTween = createFinishedTween(rl.Vector2{0.0, 0.0}),
+	}
 	self.object = createGameObject(
 		Player,
 		self,
@@ -54,65 +68,90 @@ createPlayer :: proc(alloc: mem.Allocator) -> ^Player {
 	return self
 }
 updatePlayer :: proc(self: ^Player) {
-	rightInput := rl.IsKeyDown(.RIGHT)
-	leftInput := rl.IsKeyDown(.LEFT)
-	walkInput := f32(int(rightInput)) - f32(int(leftInput))
+	switch self.frozenState {
+	case .Movable:
+		rightInput := rl.IsKeyDown(.RIGHT)
+		leftInput := rl.IsKeyDown(.LEFT)
+		walkInput := f32(int(rightInput)) - f32(int(leftInput))
 
-	onFloor :=
-		doSolidCollision(getObjectAbsoluteCollisionRectangle(self.object, {0.0, 1.0})) != nil && self.velocity.y >= 0.0
-	if onFloor {
-		self.airjumpIndex = 0
-	} else {
-		self.velocity.y += self.verticalGrav
-	}
-
-	self.velocity.x = walkInput * self.walkSpd * f32(self.frozen ~ 1)
-	if 0.0 < math.abs(self.velocity.x) {
-		self.scale.x = math.abs(self.scale.x) * math.sign(self.velocity.x)
-	}
-	jumpInput := rl.IsKeyPressed(.SPACE)
-	if jumpInput {
+		onFloor :=
+			doSolidCollision(getObjectAbsoluteCollisionRectangle(self.object, {0.0, 1.0})) != nil &&
+			self.velocity.y >= 0.0
 		if onFloor {
-			self.velocity.y = -self.jumpStr
-			onFloor = false
-			rl.PlaySound(getSound(.PlayerJump))
-		} else if self.airjumpIndex < self.airjumpCount {
-			self.velocity.y = -self.airjumpStr
-			self.airjumpIndex += 1
-			rl.PlaySound(getSound(.PlayerAirJump))
+			self.airjumpIndex = 0
+		} else {
+			self.velocity.y += self.verticalGrav
 		}
-	}
-	if !onFloor && self.velocity.y < 0.0 && rl.IsKeyReleased(.SPACE) {
-		self.velocity.y *= self.verticalDampen
-	}
 
-	self.velocity = rl.Vector2Clamp(self.velocity, -self.maxVelocity, self.maxVelocity)
+		self.velocity.x = walkInput * self.walkSpd
+		if 0.0 < math.abs(self.velocity.x) {
+			self.scale.x = math.abs(self.scale.x) * math.sign(self.velocity.x)
+		}
+		jumpInput := rl.IsKeyPressed(.SPACE)
+		if jumpInput {
+			if onFloor {
+				self.velocity.y = -self.jumpStr
+				onFloor = false
+				rl.PlaySound(getSound(.PlayerJump))
+			} else if self.airjumpIndex < self.airjumpCount {
+				self.velocity.y = -self.airjumpStr
+				self.airjumpIndex += 1
+				rl.PlaySound(getSound(.PlayerAirJump))
+			}
+		}
+		if !onFloor && self.velocity.y < 0.0 && rl.IsKeyReleased(.SPACE) {
+			self.velocity.y *= self.verticalDampen
+		}
 
-	moveAndCollideResult := moveAndCollidePlayer(
-		self.object.pos,
-		self.object.colRec,
-		self.velocity,
-		math.sign(self.scale.x),
-	)
-	self.object.pos = moveAndCollideResult.newPosition
-	self.velocity = moveAndCollideResult.newVelocity
-}
-drawPlayer :: proc(self: ^Player) {
-	if math.abs(self.velocity.x) > 0.0 {
-		if self.frozen == 0 {
+		self.velocity = rl.Vector2Clamp(self.velocity, -self.maxVelocity, self.maxVelocity)
+
+		moveAndCollideResult := moveAndCollidePlayer(
+			self.object.pos,
+			self.object.colRec,
+			self.velocity,
+			math.sign(self.scale.x),
+		)
+		self.object.pos = moveAndCollideResult.newPosition
+		self.velocity = moveAndCollideResult.newVelocity
+
+		if math.abs(self.velocity.x) > 0.0 {
+			if self.frozenState == .Movable {
+				setPlayerSprite(self, &self.walkSpr)
+			}
+		} else {
+			setPlayerSprite(self, &self.idleSpr)
+		}
+		updateSprite(self.currentSpr)
+	case .PuppetNoGravity:
+		stateData := &self.frozenPuppetNoGravityStateData
+		self.moveIllusionOffset = updateAndStepTween(&stateData.moveIllusionTween).(rl.Vector2)
+		if tweenIsFinished(stateData.moveIllusionTween) {
+			if stateData.moveIllusionNextState != self.frozenState {
+				self.frozenState = stateData.moveIllusionNextState
+			}
+			setPlayerSprite(self, &self.idleSpr)
+		} else {
 			setPlayerSprite(self, &self.walkSpr)
 		}
-	} else {
-		setPlayerSprite(self, &self.idleSpr)
-	}
-	drawSpriteEx(self.currentSpr^, self.object.pos, self.scale)
-	if self.frozen == 0 {
 		updateSprite(self.currentSpr)
+		drawSpriteEx(self.currentSpr^, self.object.pos + self.moveIllusionOffset, self.scale)
 	}
+}
+drawPlayer :: proc(self: ^Player) {
+	drawSpriteEx(self.currentSpr^, self.object.pos + self.moveIllusionOffset, self.scale)
 }
 MoveAndCollidePlayerResult :: struct {
 	newPosition: rl.Vector2,
 	newVelocity: rl.Vector2,
+}
+playerMoveIllusion :: proc(player: ^Player, toRelative: rl.Vector2, duration: f32, nextState: PlayerFrozenState) {
+	assert(player.frozenState != .Movable)
+	player.frozenPuppetNoGravityStateData.moveIllusionTween = createTween(
+		TweenVector2Range{player.moveIllusionOffset, toRelative},
+		.Linear,
+		duration,
+	)
+	player.frozenPuppetNoGravityStateData.moveIllusionNextState = nextState
 }
 moveAndCollidePlayer :: proc(
 	position: rl.Vector2,
@@ -201,18 +240,19 @@ ElevatorLeavingStateData :: struct {
 	alphaTween:    Tween,
 }
 Elevator :: struct {
-	visible:              bool,
-	instant:              bool,
-	interactionArrowSpr:  Sprite,
-	drawOffset:           rl.Vector2,
-	object:               ^GameObject,
-	state:                ElevatorState,
-	arrivingStateData:    ElevatorArrivingStateData,
-	leavingStateData:     ElevatorLeavingStateData,
-	drawInteractionArrow: bool,
-	blend:                rl.Color,
-	panelBlend:           rl.Color,
-	activationDist:       f32,
+	insidePositionRelative: rl.Vector2,
+	visible:                bool,
+	instant:                bool,
+	interactionArrowSpr:    Sprite,
+	drawOffset:             rl.Vector2,
+	object:                 ^GameObject,
+	state:                  ElevatorState,
+	arrivingStateData:      ElevatorArrivingStateData,
+	leavingStateData:       ElevatorLeavingStateData,
+	drawInteractionArrow:   bool,
+	blend:                  rl.Color,
+	panelBlend:             rl.Color,
+	activationDist:         f32,
 }
 createElevator :: proc(alloc: mem.Allocator) -> ^Elevator {
 	self := new(Elevator, alloc)
@@ -222,10 +262,11 @@ createElevator :: proc(alloc: mem.Allocator) -> ^Elevator {
 	self.blend = {255, 255, 255, 0}
 	self.panelBlend = rl.WHITE
 	self.activationDist = 128.0
+	self.insidePositionRelative = {32.0, 65.0}
 	self.object = createGameObject(
 		Elevator,
 		self,
-		0,
+		-50,
 		updateProc = cast(proc(_: rawptr))updateElevator,
 		drawProc = cast(proc(_: rawptr))drawElevator,
 		drawEndProc = cast(proc(_: rawptr))drawElevatorEnd,
@@ -262,7 +303,15 @@ updateElevator :: proc(self: ^Elevator) {
 				) {
 					self.drawInteractionArrow = true
 					if rl.IsKeyPressed(.UP) {
-						player.frozen = 1
+						playerPositionInsideRelative :=
+							self.insidePositionRelative -
+							(player.object.pos - self.object.pos) -
+							{
+									cast(f32)player.currentSpr.def.frame_width / 2.0,
+									cast(f32)player.currentSpr.def.tex.height,
+								}
+						player.frozenState = .PuppetNoGravity
+						playerMoveIllusion(player, playerPositionInsideRelative, 1.0, .PuppetNoGravity)
 						setElevatorState(self, .PlayerInside)
 						break
 					}
@@ -326,7 +375,7 @@ setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
 	case .Interactable:
 	case .PlayerInside:
 		if player := getFirstGameObjectOfType(Player); player != nil {
-			player.frozen = 1
+			player.frozenState = .PuppetNoGravity
 		}
 		movePlayer3D(&global.player3D, PLAYER_3D_OUTSIDE_POSITION, PLAYER_3D_INSIDE_POSITION, .Looking)
 	case .Leaving:
@@ -671,11 +720,6 @@ setPlayer3DState :: proc(player: ^Player3D, nextState: Player3DState) {
 		global.camera3D.position = PLAYER_3D_OUTSIDE_POSITION
 		player3DApplyCameraRotation(player)
 		if previousState != .Uninitialized {
-			if player := getFirstGameObjectOfType(Player); player != nil {
-				player.frozen = 0
-			} else {
-				panic("Couldn't make player frozen because there was no player")
-			}
 			if elevator := getFirstGameObjectOfType(Elevator); elevator != nil {
 				setElevatorState(elevator, .Interactable)
 			} else {
@@ -687,6 +731,21 @@ setPlayer3DState :: proc(player: ^Player3D, nextState: Player3DState) {
 		player.lookingStateData.yawTween = createFinishedTween(player.yaw)
 		player.lookingStateData.pitchTween = createFinishedTween(player.pitch)
 	case .Moving:
+		if player.movingStateData.nextState == .Inactive {
+			if player := getFirstGameObjectOfType(Player); player != nil {
+				if elevator := getFirstGameObjectOfType(Elevator); elevator != nil {
+					elevatorCenterToGround :=
+						cast(f32)elevator.object.colRec.height - elevator.insidePositionRelative.y
+					player.object.pos += player.moveIllusionOffset + {0.0, elevatorCenterToGround}
+					player.moveIllusionOffset = {0.0, -elevatorCenterToGround}
+					playerMoveIllusion(player, {0.0, 0.0}, 1.0, .Movable)
+				} else {
+					panic("Couldn't unfreeze player because there was no elevator")
+				}
+			} else {
+				panic("Couldn't unfreeze player because there was no player")
+			}
+		}
 		if global.elevator3D.state == .Invisible {
 			setElevator3DState(&global.elevator3D, .Idle)
 		}

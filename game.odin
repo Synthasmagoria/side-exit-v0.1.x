@@ -104,8 +104,9 @@ loadLevel_Hub :: proc(levelAlloc: mem.Allocator) {
 	generalObjects := loadLevelGeneral(levelAlloc)
 	_ = createHubGraphics(levelAlloc)
 	generalObjects.player.object.pos = {RENDER_TEXTURE_WIDTH_2D / 2, RENDER_TEXTURE_HEIGHT_2D / 2}
-	generalObjects.elevator.object.pos = {146.0, 181.0}
+	generalObjects.elevator.object.pos = {146.0, 151.0}
 	generalObjects.elevator.visible = false
+	generalObjects.elevator.object.colRec.height += 10.0
 	generalObjects.elevator.instant = true
 
 	append(&engine.collisionRectangles, iRectangle{47, 0, 10, 237})
