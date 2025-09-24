@@ -380,7 +380,10 @@ createTitleMenu :: proc(levelAlloc: mem.Allocator) -> ^TitleMenu {
 		updateProc = cast(proc(_: rawptr))updateTitleMenu,
 		drawProc = cast(proc(_: rawptr))drawTitleMenu,
 	)
-	self.object.pos = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 + WINDOW_HEIGHT / 4}
+	self.object.pos = {
+		RENDER_TEXTURE_WIDTH_2D / 2,
+		RENDER_TEXTURE_HEIGHT_2D / 2 + RENDER_TEXTURE_HEIGHT_2D / 4,
+	}
 	return self
 }
 updateTitleMenu :: proc(self: ^TitleMenu) {
@@ -450,7 +453,12 @@ updateTitleMenuBackground :: proc(self: ^TitleMenuBackground) {
 drawTitleMenuBackground :: proc(self: ^TitleMenuBackground) {
 	backgroundShaderTexture := getTexture(.White32)
 	backgroundShaderSource := getTextureRec(backgroundShaderTexture)
-	backgroundShaderDest := rl.Rectangle{0.0, 0.0, WINDOW_WIDTH, WINDOW_HEIGHT}
+	backgroundShaderDest := rl.Rectangle {
+		0.0,
+		0.0,
+		RENDER_TEXTURE_WIDTH_2D,
+		RENDER_TEXTURE_HEIGHT_2D,
+	}
 	backgroundShader := getShader(.TitleMenuFog)
 	rl.BeginShaderMode(backgroundShader)
 	setShaderValue(backgroundShader, "time", &self.backgroundShaderTime)
@@ -522,7 +530,7 @@ drawStarBackground :: proc(self: ^StarBackground) {
 	self.scroll += self.scrollSpd * TARGET_TIME_STEP
 	drawTextureRecDest(
 		self.genTex,
-		{self.object.pos.x, self.object.pos.y, WINDOW_WIDTH, WINDOW_HEIGHT},
+		{self.object.pos.x, self.object.pos.y, RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D},
 	)
 	rl.EndShaderMode()
 }
@@ -545,7 +553,10 @@ createHubGraphics :: proc(levelAlloc: mem.Allocator) -> ^HubGraphics {
 		drawEndProc = cast(proc(_: rawptr))drawHubGraphicsEnd,
 		destroyProc = cast(proc(_: rawptr))destroyHubGraphics,
 	)
-	self.postProcessingRenderTexture = rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
+	self.postProcessingRenderTexture = rl.LoadRenderTexture(
+		RENDER_TEXTURE_WIDTH_2D,
+		RENDER_TEXTURE_HEIGHT_2D,
+	)
 	return self
 }
 destroyHubGraphics :: proc(self: ^HubGraphics) {
@@ -570,7 +581,7 @@ drawHubGraphicsEnd :: proc(self: ^HubGraphics) {
 	setShaderValue(shader, "crtFactor", &crtFactor)
 	crtSpeed: f32 = 40.0
 	setShaderValue(shader, "crtSpeed", &crtSpeed)
-	rl.DrawTexture(engine.renderTexture.texture, 0, 0, rl.WHITE)
+	rl.DrawTexture(engine.renderTexture2D.texture, 0, 0, rl.WHITE)
 	rl.EndShaderMode()
 	endModeStacked()
 	worldPosition := global.camera.target - global.camera.offset
@@ -583,7 +594,10 @@ UnrulyLandGraphics :: struct {
 }
 createUnrulyLandGraphics :: proc(levelAlloc: mem.Allocator) -> ^UnrulyLandGraphics {
 	self := new(UnrulyLandGraphics, levelAlloc)
-	self.blockRenderTexture = rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
+	self.blockRenderTexture = rl.LoadRenderTexture(
+		RENDER_TEXTURE_WIDTH_2D,
+		RENDER_TEXTURE_HEIGHT_2D,
+	)
 	self.object = createGameObject(
 		UnrulyLandGraphics,
 		self,
@@ -1198,6 +1212,7 @@ setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 	case .Transit:
 		rl.PlaySound(getSound(.ElevatorMovingEnd))
 		rl.StopSound(getSound(.ElevatorMovingLoop))
+		e.panelData.buttonPressCount = 0
 	}
 
 	previousState := e.state

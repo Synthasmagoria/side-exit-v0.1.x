@@ -306,7 +306,7 @@ getIRectangleCenter :: proc(rectangle: iRectangle) -> iVector2 {
 
 getScreenScale :: proc() -> rl.Vector2 {
 	screenSize := rl.Vector2{f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
-	return screenSize / rl.Vector2{WINDOW_WIDTH, WINDOW_HEIGHT}
+	return screenSize / rl.Vector2{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D}
 }
 
 vector3ToStringTemp :: proc(v: rl.Vector3) -> cstring {

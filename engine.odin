@@ -11,10 +11,25 @@ import "core:reflect"
 import "core:strings"
 import rl "lib/raylib"
 
+MAX_TEXTURE_SIZE :: 4096
+TARGET_FPS :: 60
+TARGET_TIME_STEP :: 1.0 / cast(f32)TARGET_FPS
+RENDER_TEXTURE_WIDTH_2D :: 480
+RENDER_TEXTURE_HEIGHT_2D :: 360
+RENDER_TEXTURE_WIDTH_3D :: RENDER_TEXTURE_WIDTH_2D * 2
+RENDER_TEXTURE_HEIGHT_3D :: RENDER_TEXTURE_HEIGHT_2D * 2
+
 initEngine :: proc() {
 	initEngineMemory()
 	engine.renderTextureStack = createRenderTextureStack()
-	engine.renderTexture = rl.LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT)
+	engine.renderTexture2D = rl.LoadRenderTexture(
+		RENDER_TEXTURE_WIDTH_2D,
+		RENDER_TEXTURE_HEIGHT_2D,
+	)
+	engine.renderTexture3D = rl.LoadRenderTexture(
+		RENDER_TEXTURE_WIDTH_3D,
+		RENDER_TEXTURE_HEIGHT_3D,
+	)
 	engine.collisionRectangles = make([dynamic]iRectangle, 0, 1000, engine.gameAlloc)
 	engine.gameObjects = make([dynamic]GameObject, 0, 100, engine.gameAlloc)
 	engine.gameObjectsDepthOrdered = make([dynamic]^GameObject, 0, 100, engine.gameAlloc)
@@ -22,6 +37,8 @@ initEngine :: proc() {
 }
 
 deinitEngine :: proc() {
+	rl.UnloadRenderTexture(engine.renderTexture2D)
+	rl.UnloadRenderTexture(engine.renderTexture3D)
 	deinitEngineMemory()
 }
 
@@ -76,7 +93,8 @@ Engine :: struct {
 	lights3D:                [MAX_LIGHTS]Light3D,
 	collisionRectangles:     [dynamic]iRectangle,
 	defaultMaterial3D:       rl.Material,
-	renderTexture:           rl.RenderTexture,
+	renderTexture2D:         rl.RenderTexture,
+	renderTexture3D:         rl.RenderTexture,
 	ambientLightingColor:    rl.Vector4,
 }
 
@@ -746,8 +764,8 @@ debugDrawGameObjectCollisions :: proc() {
 
 getZeroCamera2D :: proc() -> rl.Camera2D {
 	return {
-		offset = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},
-		target = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2},
+		offset = {RENDER_TEXTURE_WIDTH_2D / 2, RENDER_TEXTURE_HEIGHT_2D / 2},
+		target = {RENDER_TEXTURE_WIDTH_2D / 2, RENDER_TEXTURE_HEIGHT_2D / 2},
 		rotation = 0.0,
 		zoom = 1.0,
 	}

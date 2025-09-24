@@ -99,11 +99,11 @@ loadLevel_TitleMenu :: proc(levelAlloc: mem.Allocator) {
 }
 loadLevel_Hub :: proc(levelAlloc: mem.Allocator) {
 	global.cameraFollowPlayer = false
-	global.camera.target = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2}
-	global.camera.offset = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2}
+	global.camera.target = {RENDER_TEXTURE_WIDTH_2D / 2, RENDER_TEXTURE_HEIGHT_2D / 2}
+	global.camera.offset = {RENDER_TEXTURE_WIDTH_2D / 2, RENDER_TEXTURE_HEIGHT_2D / 2}
 	generalObjects := loadLevelGeneral(levelAlloc)
 	_ = createHubGraphics(levelAlloc)
-	generalObjects.player.object.pos = {WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2}
+	generalObjects.player.object.pos = {RENDER_TEXTURE_WIDTH_2D / 2, RENDER_TEXTURE_HEIGHT_2D / 2}
 	generalObjects.elevator.object.pos = {146.0, 181.0}
 	generalObjects.elevator.visible = false
 	generalObjects.elevator.instant = true
@@ -221,12 +221,6 @@ audioProcessEffectLPF :: proc "c" (buffer: rawptr, frames: c.uint) {
 	}
 }
 
-MAX_TEXTURE_SIZE :: 4096
-TARGET_FPS :: 60
-TARGET_TIME_STEP :: 1.0 / cast(f32)TARGET_FPS
-WINDOW_WIDTH :: 480
-WINDOW_HEIGHT :: 360
-
 initRaylib :: proc() {
 	rl.SetConfigFlags({.WINDOW_RESIZABLE}) // TODO: Remove artifacts from main framebuffer when resizing
 	when ODIN_DEBUG {
@@ -236,7 +230,7 @@ initRaylib :: proc() {
 	}
 	rl.SetTargetFPS(TARGET_FPS)
 	rl.InitAudioDevice()
-	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Elevator Game")
+	rl.InitWindow(RENDER_TEXTURE_WIDTH_3D, RENDER_TEXTURE_HEIGHT_3D, "Elevator Game")
 }
 
 deinitRaylib :: proc() {
@@ -295,12 +289,13 @@ gameStep :: proc() {
 	}
 	if global.cameraFollowPlayer && player != nil {
 		global.camera.offset =
-			getObjectCenterAbsolute(player.object^) * -1.0 + {WINDOW_WIDTH, WINDOW_HEIGHT} / 2.0
+			getObjectCenterAbsolute(player.object^) * -1.0 +
+			{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D} / 2.0
 	}
 
 	rl.ClearBackground(rl.BLACK)
 	rl.BeginDrawing()
-	beginModeStacked(currentCamera^, engine.renderTexture)
+	beginModeStacked(currentCamera^, engine.renderTexture2D)
 	rl.ClearBackground({0, 0, 0, 0})
 	for object in engine.gameObjects {
 		object.updateProc(object.data)
@@ -313,9 +308,9 @@ gameStep :: proc() {
 	}
 	endModeStacked()
 
-	drawRenderTextureScaledToScreenBuffer(engine.renderTexture)
+	drawRenderTextureScaledToScreenBuffer(engine.renderTexture2D)
 
-	beginModeStacked(currentCamera3D^, engine.renderTexture)
+	beginModeStacked(currentCamera3D^, engine.renderTexture3D)
 	rl.ClearBackground({0.0, 0.0, 0.0, 0.0})
 	if global.debugMode {
 		rl.DrawGrid(10, 1.0)
@@ -328,7 +323,7 @@ gameStep :: proc() {
 	drawElevator3D(&global.elevator3D)
 	endModeStacked()
 
-	drawRenderTextureScaledToScreenBuffer(engine.renderTexture)
+	drawRenderTextureScaledToScreenBuffer(engine.renderTexture3D)
 
 	if player != nil {
 		if global.player3D.state != .Inactive {
