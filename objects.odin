@@ -553,10 +553,11 @@ drawHubGraphicsEnd :: proc(self: ^HubGraphics) {
 }
 
 UnrulyLandGraphics :: struct {
-	object:             ^GameObject,
-	blockRenderTexture: rl.RenderTexture,
-	blockShaderTime:    f32,
-	starBackground:     StarBackground,
+	object:               ^GameObject,
+	blockRenderTexture:   rl.RenderTexture,
+	blockShaderTime:      f32,
+	backgroundShaderTime: f32,
+	starBackground:       StarBackground,
 }
 createUnrulyLandGraphics :: proc(levelAlloc: mem.Allocator) -> ^UnrulyLandGraphics {
 	self := new(UnrulyLandGraphics, levelAlloc)
@@ -572,8 +573,21 @@ createUnrulyLandGraphics :: proc(levelAlloc: mem.Allocator) -> ^UnrulyLandGraphi
 	return self
 }
 drawUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
+	topLeft := global.camera.target - global.camera.offset
+
+	backgroundShader := getShader(.UnrulyLandBackground)
+	self.backgroundShaderTime += TARGET_TIME_STEP
+	rl.BeginShaderMode(backgroundShader)
+	setShaderValue(backgroundShader, "resolution", [2]f32{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
+	setShaderValue(backgroundShader, "time", self.backgroundShaderTime)
+	setShaderValue(backgroundShader, "color_a", [4]f32{0.0 / 255.0, 5.0 / 255.0, 17.0 / 255.0, 1.0})
+	setShaderValue(backgroundShader, "color_b", [4]f32{22.0 / 255.0, 1.0 / 255.0, 29.0 / 255.0, 1.0})
+	setShaderValue(backgroundShader, "offset", global.camera.offset * 0.96)
+	rl.DrawRectangleV(topLeft, {RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D}, rl.WHITE)
+	rl.EndShaderMode()
+
 	updateStarBackground(&self.starBackground)
-	drawStarBackground(&self.starBackground, global.camera.target - global.camera.offset)
+	drawStarBackground(&self.starBackground, topLeft)
 
 	beginModeStacked(nil, self.blockRenderTexture)
 	rl.ClearBackground({0, 0, 0, 0})
@@ -599,7 +613,7 @@ drawUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
 	setShaderValue(blockShader, "base_color_b", [4]f32{210.0 / 255.0, 0.0, 255.0 / 255.0, 1.0})
 	setShaderValue(blockShader, "band_color_a", [4]f32{246.0 / 255.0, 220.0 / 255.0, 0.0, 1.0})
 	setShaderValue(blockShader, "band_color_b", [4]f32{177.0 / 255.0, 80.0 / 255.0, 0.0, 1.0})
-	rl.DrawTextureV(self.blockRenderTexture.texture, global.camera.target - global.camera.offset, rl.WHITE)
+	rl.DrawTextureV(self.blockRenderTexture.texture, topLeft, rl.WHITE)
 	rl.EndShaderMode()
 }
 destroyUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {

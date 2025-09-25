@@ -269,6 +269,7 @@ ShaderNames :: enum {
 	NoiseAndCRT,
 	TitleMenuFog,
 	UnrulyLandGround,
+	UnrulyLandBackground,
 	AnimatedTexture3D,
 	Passthrough3D,
 	_Count,
