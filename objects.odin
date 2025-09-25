@@ -1004,11 +1004,12 @@ Elevator3DState :: enum {
 Elevator3DTransitStateData :: struct {
 	timer:              Timer,
 	duration:           f32,
+	shake:              f32,
 	shakeTimer:         Timer,
 	shakeInterval:      f32,
 	shakeSeverity:      f32,
 	initialLightColor:  [4]f32,
-	lightFlicker:       bool,
+	lightFlicker:       f32,
 	lightFlickerSeed01: f32,
 	lightFlickerSeed02: f32,
 }
@@ -1124,7 +1125,7 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 		shaking: i32 = 0
 		if isTimerFinished(stateData.shakeTimer) {
 			shakeFactor := smoothplot(stateData.timer.time, stateData.duration / 2.0, 1.0, 1.0)
-			shaking = cast(i32)(shakeFactor > 0.1)
+			shaking = cast(i32)(shakeFactor > 0.5)
 			global.camera3D.shakeOffset = {
 				(rand.float32() * stateData.shakeSeverity - stateData.shakeSeverity / 2.0) * shakeFactor,
 				0.0,
@@ -1139,13 +1140,13 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 			0.1,
 			0.1,
 		)
-		flickerPseudoRand := smoothplot(
+		flickerPseudoRandom := smoothplot(
 			linalg.fract((stateTimerProgress + stateData.lightFlickerSeed02 * 0.8 + 0.1) * 3.0),
 			0.5,
 			0.2,
 			0.2,
 		)
-		flicker := flickerInterval * flickerPseudoRand * cast(f32)shaking
+		flicker := flickerInterval * flickerPseudoRandom * cast(f32)shaking * stateData.lightFlicker
 		engine.lights3D[0].color = stateData.initialLightColor * (1.0 - flicker)
 		e.lightFrameIndex = math.step(flicker, cast(f32)0.5)
 
@@ -1212,6 +1213,7 @@ setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 		rl.StopSound(getSound(.ElevatorMovingLoop))
 		e.panelData.buttonPressCount = 0
 		engine.lights3D[0].color = e.transitStateData.initialLightColor
+		e.lightFrameIndex = 1.0
 	}
 
 	previousState := e.state
@@ -1237,10 +1239,13 @@ setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 		}
 	case .Transit:
 		e.transitStateData.timer = createTimer(5.0)
+		e.transitStateData.shake = math.step(rand.float32(), 0.5)
 		e.transitStateData.shakeTimer = createTimer(TARGET_TIME_STEP * 3.0)
 		e.transitStateData.initialLightColor = engine.lights3D[0].color
+		e.transitStateData.lightFlicker = math.step(rand.float32(), 0.5)
 		e.transitStateData.lightFlickerSeed01 = rand.float32()
 		e.transitStateData.lightFlickerSeed02 = rand.float32()
+		e.lightFrameIndex = 1.0
 		rl.PlaySound(getSound(.ElevatorMovingStart))
 		rl.PlaySound(getSound(.ElevatorMovingLoop))
 		rl.SetSoundVolume(getSound(.ElevatorMovingLoop), 0.0)
