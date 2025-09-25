@@ -50,7 +50,7 @@ createPlayer :: proc(alloc: mem.Allocator) -> ^Player {
 	self.verticalDampen = 0.7
 	self.scale = {1.0, 1.0}
 	self.airjumpStr = 5.8
-	self.airjumpCount = 1
+	self.airjumpCount = 999999
 	self.airjumpIndex = 0
 	self.frozenState = .Movable
 	self.frozenPuppetNoGravityStateData = {
@@ -546,6 +546,7 @@ drawHubGraphicsEnd :: proc(self: ^HubGraphics) {
 UnrulyLandGraphics :: struct {
 	object:             ^GameObject,
 	blockRenderTexture: rl.RenderTexture,
+	blockShaderTime:    f32,
 	starBackground:     StarBackground,
 }
 createUnrulyLandGraphics :: proc(levelAlloc: mem.Allocator) -> ^UnrulyLandGraphics {
@@ -573,10 +574,11 @@ drawUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
 	}
 	endModeStacked()
 
+	self.blockShaderTime += TARGET_TIME_STEP / 5.0
 	blockShader := getShader(.UnrulyLandGround)
 	rl.BeginShaderMode(blockShader)
 	setShaderValue(blockShader, "flipV", 1)
-	setShaderValue(blockShader, "time", 0.0)
+	setShaderValue(blockShader, "time", self.blockShaderTime)
 	setShaderValue(blockShader, "resolution", [2]f32{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
 	setShaderValue(blockShader, "band_add", 0.6)
 	setShaderValue(blockShader, "scale", 1.0)
@@ -585,7 +587,7 @@ drawUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
 	setShaderValue(blockShader, "turbulence_frequency", 2.0)
 	setShaderValue(blockShader, "turbulence_exp", 1.4)
 	setShaderValue(blockShader, "base_color_a", [4]f32{129.0 / 255.0, 0.0, 174.0 / 255.0, 1.0})
-	setShaderValue(blockShader, "base_color_b", [4]f32{210.0 / 255.0, 0.0, 255.0 / 255.0, 1})
+	setShaderValue(blockShader, "base_color_b", [4]f32{210.0 / 255.0, 0.0, 255.0 / 255.0, 1.0})
 	setShaderValue(blockShader, "band_color_a", [4]f32{246.0 / 255.0, 220.0 / 255.0, 0.0, 1.0})
 	setShaderValue(blockShader, "band_color_b", [4]f32{177.0 / 255.0, 80.0 / 255.0, 0.0, 1.0})
 	rl.DrawTextureV(self.blockRenderTexture.texture, global.camera.target - global.camera.offset, rl.WHITE)

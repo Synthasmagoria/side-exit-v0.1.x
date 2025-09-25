@@ -118,11 +118,23 @@ loadLevel_UnrulyLand :: proc(levelAlloc: mem.Allocator) {
 	global.camera.offset = {0.0, 0.0}
 	global.camera.target = {0.0, 0.0}
 	generalObjects := loadLevelGeneral(levelAlloc)
-	generateWorld({-64, -64, 128, 128}, -0.5, 0, 8.0)
-	generalObjects.player.object.pos = {0.0, 0.0}
-	generalObjects.elevator.object.pos = {0.0, 0.0}
+
+	collisionBitmask := generateWorldCollisionBitmask({-64, -64, 128, 128}, -1.0, 0, 8.0)
+	generateElevatorSpawnAreaInCollisionBitmaskCenter(&collisionBitmask, 9)
+
+	elevatorCollisionRectangle := generalObjects.elevator.object.colRec
+	elevatorX := -elevatorCollisionRectangle.width / 2.0 + GENERATION_BLOCK_SIZE
+	elevatorY :=
+		math.floor(elevatorCollisionRectangle.height / GENERATION_BLOCK_SIZE) * GENERATION_BLOCK_SIZE -
+		elevatorCollisionRectangle.height
+	generalObjects.elevator.object.pos = {elevatorX, elevatorY}
 	generalObjects.elevator.visible = true
 	generalObjects.elevator.instant = false
+
+
+	addWorldCollisionBitmaskToCollision(collisionBitmask)
+
+	generalObjects.player.object.pos = {0.0, 0.0}
 	_ = createUnrulyLandGraphics(levelAlloc)
 }
 

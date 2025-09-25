@@ -446,8 +446,8 @@ setLightStatus :: proc(val: i32) {
 }
 
 GENERATION_BLOCK_SIZE :: 16
-generateCircleMask2D :: proc(radius: i32) -> [dynamic]byte {
-	diameter := radius + radius
+generateCircleMask2D :: proc(diameter: i32) -> [dynamic]byte {
+	radius := cast(f32)diameter / 2.0
 	maskLength := diameter * diameter
 	mask := make([dynamic]byte, maskLength, maskLength)
 	center := rl.Vector2{f32(radius) - 0.5, f32(radius) - 0.5}
@@ -476,56 +476,72 @@ andMask2D :: proc(dest: ^[dynamic]byte, destWidth: i32, mask: [dynamic]byte, mas
 		}
 	}
 }
-generateWorld :: proc(area: iRectangle, threshold: f32, seed: i64, frequency: f64) {
-	clear(&engine.collisionRectangles)
+CollisionBitmask :: struct {
+	bitmask: [dynamic]byte,
+	area:    iRectangle,
+}
+generateWorldCollisionBitmask :: proc(
+	area: iRectangle,
+	threshold: f32,
+	seed: i64,
+	frequency: f64,
+) -> CollisionBitmask {
 	blocks := make([dynamic]byte, area.width * area.height, area.width * area.height)
 	areaWidth := f64(area.width)
 	areaHeight := f64(area.height)
 	for x in 0 ..< area.width {
 		for y in 0 ..< area.height {
 			samplePosition := [2]f64{f64(x) / areaWidth * frequency, f64(y) / areaHeight * frequency}
-			noiseValue := math.step(threshold, noise.noise_2d(seed, samplePosition))
+			noise := noise.noise_2d(seed, samplePosition)
+			noiseValue := math.step(threshold, noise)
 			blocks[x + y * area.width] = cast(byte)noiseValue
 		}
 	}
-	spawnAreaRadius: i32 = 5
-	spawnAreaMask := generateCircleMask2D(spawnAreaRadius)
+	return {blocks, area}
+}
+generateElevatorSpawnAreaInCollisionBitmaskCenter :: proc(collisionBitmask: ^CollisionBitmask, diameter: i32) {
+	spawnAreaMask := generateCircleMask2D(diameter)
 	andMask2D(
-		&blocks,
-		area.width,
+		&collisionBitmask.bitmask,
+		collisionBitmask.area.width,
 		spawnAreaMask,
-		spawnAreaRadius + spawnAreaRadius,
-		{area.width / 2 - spawnAreaRadius, area.height / 2 - spawnAreaRadius},
+		diameter,
+		{collisionBitmask.area.width / 2 - diameter / 2, collisionBitmask.area.height / 2 - diameter / 2},
 	)
+}
+addWorldCollisionBitmaskToCollision :: proc(collisionBitmask: CollisionBitmask) {
 	blockStartPosition: iVector2
 	wasPreviousBlockSolid: bool
-	for y in 0 ..< area.height {
-		for x in 0 ..< area.width {
-			isBlockSolid := blocks[x + y * area.height] == 1
+	for y in 0 ..< collisionBitmask.area.height {
+		for x in 0 ..< collisionBitmask.area.width {
+			isBlockSolid := collisionBitmask.bitmask[x + y * collisionBitmask.area.height] == 1
 			if !wasPreviousBlockSolid && isBlockSolid {
 				blockStartPosition = {x, y}
 			} else if wasPreviousBlockSolid && !isBlockSolid {
 				collisionRectangle := iRectangle {
-					(blockStartPosition.x + area.x) * GENERATION_BLOCK_SIZE,
-					(blockStartPosition.y + area.y) * GENERATION_BLOCK_SIZE,
+					(blockStartPosition.x + collisionBitmask.area.x) * GENERATION_BLOCK_SIZE,
+					(blockStartPosition.y + collisionBitmask.area.y) * GENERATION_BLOCK_SIZE,
 					(x - blockStartPosition.x + 1) * GENERATION_BLOCK_SIZE,
 					GENERATION_BLOCK_SIZE,
 				}
 				append(&engine.collisionRectangles, collisionRectangle)
 			}
-			if isBlockSolid && x + 1 == area.width {
+			if isBlockSolid && x + 1 == collisionBitmask.area.width {
 				collisionRectangle := iRectangle {
-					(blockStartPosition.x + area.x) * GENERATION_BLOCK_SIZE,
-					(blockStartPosition.y + area.y) * GENERATION_BLOCK_SIZE,
+					(blockStartPosition.x + collisionBitmask.area.x) * GENERATION_BLOCK_SIZE,
+					(blockStartPosition.y + collisionBitmask.area.y) * GENERATION_BLOCK_SIZE,
 					(x - blockStartPosition.x + 1) * GENERATION_BLOCK_SIZE,
 					GENERATION_BLOCK_SIZE,
 				}
 				append(&engine.collisionRectangles, collisionRectangle)
+				wasPreviousBlockSolid = false
+			} else {
+				wasPreviousBlockSolid = isBlockSolid
 			}
-			wasPreviousBlockSolid = isBlockSolid
 		}
 	}
 }
+
 doSolidCollision :: proc(hitbox: rl.Rectangle) -> Maybe(iRectangle) {
 	hitboxI32 := iRectangle{i32(hitbox.x), i32(hitbox.y), i32(hitbox.width), i32(hitbox.height)}
 	for rectangle in engine.collisionRectangles {
