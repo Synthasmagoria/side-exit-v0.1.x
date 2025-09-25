@@ -19,8 +19,8 @@ init :: proc() {
 	initLights()
 	initLoadLevelProcs()
 	engine.defaultMaterial3D = loadPassthroughMaterial3D()
-	global.musicLPFFrequency = 44100.0
-	global.levelIndex = .TitleMenu
+	global.musicLPFFrequency = 1.0
+	global.levelIndex = .Hub
 	global.changeLevel = true
 }
 
@@ -112,6 +112,8 @@ loadLevel_Hub :: proc(levelAlloc: mem.Allocator) {
 	append(&engine.collisionRectangles, iRectangle{47, 0, 10, 237})
 	append(&engine.collisionRectangles, iRectangle{47, 237, 382, 11})
 	append(&engine.collisionRectangles, iRectangle{419, 0, 8, 236})
+
+	playEngineMusicStream(.Hub)
 }
 loadLevel_UnrulyLand :: proc(levelAlloc: mem.Allocator) {
 	global.cameraFollowPlayer = true
@@ -127,8 +129,8 @@ loadLevel_UnrulyLand :: proc(levelAlloc: mem.Allocator) {
 	addElevatorPlatformToCollisionBitmask(&collisionBitmask, generalObjects.elevator^)
 	addWorldCollisionBitmaskToCollision(collisionBitmask)
 
-	//generalObjects.player.object.pos = generalObjects.elevator.object.pos
 	_ = createUnrulyLandGraphics(levelAlloc)
+	playEngineMusicStream(.UnrulyLand)
 }
 
 Camera3D :: struct {
@@ -193,7 +195,7 @@ dynamicArenaAllocatorDebugProc_Game :: proc(
 
 audioProcessEffectLPF :: proc "c" (buffer: rawptr, frames: c.uint) {
 	@(static) low: [2]f32 = {0.0, 0.0}
-	cutoff: f32 = global.musicLPFFrequency / 44100.0
+	cutoff: f32 = global.musicLPFFrequency / 1.0
 	k: f32 = cutoff / (cutoff + 0.159154931)
 
 	bufferData := cast([^]c.float)buffer
@@ -210,7 +212,7 @@ audioProcessEffectLPF :: proc "c" (buffer: rawptr, frames: c.uint) {
 initRaylib :: proc() {
 	rl.SetConfigFlags({.WINDOW_RESIZABLE}) // TODO: Remove artifacts from main framebuffer when resizing
 	when ODIN_DEBUG {
-		rl.SetTraceLogLevel(.WARNING)
+		rl.SetTraceLogLevel(.INFO)
 	} else {
 		rl.SetTraceLogLevel(.ERROR)
 	}

@@ -177,7 +177,9 @@ unloadModels :: proc() {
 }
 
 MusicName :: enum {
+	Hub,
 	KowloonSmokeBreak,
+	UnrulyLand,
 	_Count,
 }
 loadMusicStream :: proc(ind: MusicName) -> rl.Music {
@@ -186,9 +188,19 @@ loadMusicStream :: proc(ind: MusicName) -> rl.Music {
 	_ = ok
 	fileName := transmute([]byte)strings.clone(name)
 	fileName[0] = charLower(fileName[0])
-	filePath := [?]string{"aud/", cast(string)fileName, ".mp3"}
+	filePath := [?]string{"aud/", cast(string)fileName, ".ogg"}
 	joinedPath := strings.join(filePath[:], "")
 	return rl.LoadMusicStream(strings.clone_to_cstring(joinedPath))
+}
+playEngineMusicStream :: proc(ind: MusicName) -> rl.Music {
+	if rl.IsMusicValid(global.music) {
+		rl.UnloadMusicStream(global.music)
+	}
+	global.music = loadMusicStream(ind)
+	rl.PlayMusicStream(global.music)
+	rl.AttachAudioStreamProcessor(global.music, audioProcessEffectLPF)
+	rl.SetAudioStreamVolume(global.music, 1.0)
+	return global.music
 }
 
 TextureName :: enum {

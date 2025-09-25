@@ -1083,6 +1083,7 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 		}
 	case .Transit:
 		stateData := &e.transitStateData
+		stateTimerProgress := getTimerProgress(stateData.timer)
 		updateTimer(&stateData.timer)
 		elevatorSoundVolume := math.smoothstep(cast(f32)0.05, cast(f32)0.2, stateData.timer.time)
 		rl.SetSoundVolume(getSound(.ElevatorMovingLoop), elevatorSoundVolume)
@@ -1102,7 +1103,6 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 			}
 		}
 
-		stateTimerProgress := getTimerProgress(stateData.timer)
 		flickerInterval := smoothplot(
 			linalg.fract(stateTimerProgress * 8.0),
 			stateData.lightFlickerSeed01 * 0.8 + 0.1,
@@ -1119,6 +1119,11 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 		engine.lights3D[0].color = stateData.initialLightColor * (1.0 - flicker)
 		e.lightFrameIndex = math.step(flicker, cast(f32)0.5)
 
+		if rl.IsMusicValid(global.music) {
+			musicVolume := 1.0 - smoothplot(stateTimerProgress, 0.5, 0.1, 0.1)
+			rl.SetMusicVolume(global.music, musicVolume)
+		}
+
 		if isTimerFinished(e.transitStateData.timer) {
 			setElevator3DState(e, .Idle)
 		}
@@ -1127,7 +1132,7 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 	e.doorOpenness = updateAndStepTween(&e.doorsTween).(f32)
 	e.leftDoorModel.transform = rl.MatrixTranslate(0.0, 0.0, e.doorOpenness * 2.0)
 	e.rightDoorModel.transform = rl.MatrixTranslate(0.0, 0.0, -e.doorOpenness * 2.0)
-	global.musicLPFFrequency = 90.0 + (44100.0 - 90.0) * e.doorOpenness
+	global.musicLPFFrequency = 0.002 + (1.0 - 0.002) * e.doorOpenness
 
 	if tweenWasWaiting && !tweenIsWaiting(e.doorsTween) {
 		sounds := [?]rl.Sound{getSound(.ElevatorDoor1), getSound(.ElevatorDoor2), getSound(.ElevatorDoor3)}
