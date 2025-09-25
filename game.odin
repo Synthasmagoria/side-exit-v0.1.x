@@ -20,7 +20,7 @@ init :: proc() {
 	initLoadLevelProcs()
 	engine.defaultMaterial3D = loadPassthroughMaterial3D()
 	global.musicLPFFrequency = 44100.0
-	global.levelIndex = .Hub
+	global.levelIndex = .UnrulyLand
 	global.changeLevel = true
 }
 
@@ -123,7 +123,6 @@ loadLevel_UnrulyLand :: proc(levelAlloc: mem.Allocator) {
 	generalObjects.elevator.object.pos = {0.0, 0.0}
 	generalObjects.elevator.visible = true
 	generalObjects.elevator.instant = false
-	_ = createStarBackground(levelAlloc)
 	_ = createUnrulyLandGraphics(levelAlloc)
 }
 

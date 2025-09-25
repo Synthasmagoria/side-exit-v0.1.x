@@ -253,6 +253,7 @@ ShaderNames :: enum {
 	InsetOutline,
 	NoiseAndCRT,
 	TitleMenuFog,
+	UnrulyLandGround,
 	AnimatedTexture3D,
 	Passthrough3D,
 	_Count,
@@ -405,41 +406,37 @@ lightShaderPreviousId: u32 = 0
 MAX_LIGHTS :: 4
 // TODO: Possibly optimizable with constant locations by using a shader include system
 applyLightToShader :: proc(shd: rl.Shader) {
-	setShaderValue(shd, "ambient", &engine.ambientLightingColor)
-	setShaderValue(shd, "viewPos", &global.camera3D.position)
+	setShaderValue(shd, "ambient", engine.ambientLightingColor)
+	setShaderValue(shd, "viewPos", global.camera3D.position)
 
 	if shd.id == lightShaderPreviousId {
 		return
 	}
 	lightShaderPreviousId = shd.id
 
-	setShaderValue(shd, "lights[0].enabled", &engine.lights3D[0].enabled)
-	type0 := c.int(engine.lights3D[0].type)
-	setShaderValue(shd, "lights[0].type", &type0)
-	setShaderValue(shd, "lights[0].position", &engine.lights3D[0].position)
-	setShaderValue(shd, "lights[0].target", &engine.lights3D[0].target)
-	setShaderValue(shd, "lights[0].color", &engine.lights3D[0].color)
+	setShaderValue(shd, "lights[0].enabled", engine.lights3D[0].enabled)
+	setShaderValue(shd, "lights[0].type", cast(i32)engine.lights3D[0].type)
+	setShaderValue(shd, "lights[0].position", engine.lights3D[0].position)
+	setShaderValue(shd, "lights[0].target", engine.lights3D[0].target)
+	setShaderValue(shd, "lights[0].color", engine.lights3D[0].color)
 
-	setShaderValue(shd, "lights[1].enabled", &engine.lights3D[1].enabled)
-	type1 := c.int(engine.lights3D[1].type)
-	setShaderValue(shd, "lights[1].type", &type1)
-	setShaderValue(shd, "lights[1].position", &engine.lights3D[1].position)
-	setShaderValue(shd, "lights[1].target", &engine.lights3D[1].target)
-	setShaderValue(shd, "lights[1].color", &engine.lights3D[1].color)
+	setShaderValue(shd, "lights[1].enabled", engine.lights3D[1].enabled)
+	setShaderValue(shd, "lights[0].type", cast(i32)engine.lights3D[1].type)
+	setShaderValue(shd, "lights[1].position", engine.lights3D[1].position)
+	setShaderValue(shd, "lights[1].target", engine.lights3D[1].target)
+	setShaderValue(shd, "lights[1].color", engine.lights3D[1].color)
 
-	setShaderValue(shd, "lights[2].enabled", &engine.lights3D[2].enabled)
-	type2 := c.int(engine.lights3D[2].type)
-	setShaderValue(shd, "lights[2].type", &type2)
-	setShaderValue(shd, "lights[2].position", &engine.lights3D[2].position)
-	setShaderValue(shd, "lights[2].target", &engine.lights3D[2].target)
-	setShaderValue(shd, "lights[2].color", &engine.lights3D[2].color)
+	setShaderValue(shd, "lights[2].enabled", engine.lights3D[2].enabled)
+	setShaderValue(shd, "lights[0].type", cast(i32)engine.lights3D[2].type)
+	setShaderValue(shd, "lights[2].position", engine.lights3D[2].position)
+	setShaderValue(shd, "lights[2].target", engine.lights3D[2].target)
+	setShaderValue(shd, "lights[2].color", engine.lights3D[2].color)
 
-	setShaderValue(shd, "lights[3].enabled", &engine.lights3D[3].enabled)
-	type3 := c.int(engine.lights3D[3].type)
-	setShaderValue(shd, "lights[3].type", &type3)
-	setShaderValue(shd, "lights[3].position", &engine.lights3D[3].position)
-	setShaderValue(shd, "lights[3].target", &engine.lights3D[3].target)
-	setShaderValue(shd, "lights[3].color", &engine.lights3D[3].color)
+	setShaderValue(shd, "lights[3].enabled", engine.lights3D[3].enabled)
+	setShaderValue(shd, "lights[0].type", cast(i32)engine.lights3D[3].type)
+	setShaderValue(shd, "lights[3].position", engine.lights3D[3].position)
+	setShaderValue(shd, "lights[3].target", engine.lights3D[3].target)
+	setShaderValue(shd, "lights[3].color", engine.lights3D[3].color)
 }
 ACTIVE_LIGHTS :: 1
 setLightStatus :: proc(val: i32) {

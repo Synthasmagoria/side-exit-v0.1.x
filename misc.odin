@@ -112,3 +112,39 @@ debugPrintDynamicArenaAllocMessage :: proc(
 		")",
 	)
 }
+
+StarBackground :: struct {
+	genTex:     rl.Texture,
+	frameSize:  rl.Vector2,
+	frameIndex: f32,
+	frameSpd:   f32,
+	frameCount: i32,
+	scroll:     rl.Vector2,
+	scrollSpd:  rl.Vector2,
+}
+createStarBackground :: proc() -> StarBackground {
+	return {
+		genTex = web10CreateTexture({128, 128}, getSpriteDef(.Star), 16),
+		frameSize = {128.0, 128.0},
+		frameSpd = 4.0,
+		frameCount = getSpriteDef(.Star).frame_count,
+		scrollSpd = rl.Vector2{30.0, 30.0},
+	}
+}
+updateStarBackground :: proc(self: ^StarBackground) {
+	self.frameIndex += TARGET_TIME_STEP * self.frameSpd
+	self.scroll += self.scrollSpd * TARGET_TIME_STEP
+}
+drawStarBackground :: proc(self: ^StarBackground, position: rl.Vector2) {
+	shd := getShader(.AnimatedTextureRepeatPosition)
+	rl.BeginShaderMode(shd)
+	setShaderValue(shd, "frameCount", self.frameCount)
+	setShaderValue(shd, "frameInd", self.frameIndex)
+	setShaderValue(shd, "frameSize", self.frameSize)
+	setShaderValue(shd, "scrollPx", self.scroll)
+	drawTextureRecDest(self.genTex, {position.x, position.y, RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
+	rl.EndShaderMode()
+}
+destroyStarBackground :: proc(self: ^StarBackground) {
+	rl.UnloadTexture(self.genTex)
+}

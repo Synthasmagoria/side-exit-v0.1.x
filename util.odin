@@ -368,28 +368,30 @@ debugDrawTextOutline :: proc(text: cstring, x: i32, y: i32, fontSize: i32, color
 setShaderValue :: proc {
 	setShaderValueFloat,
 	setShaderValueInt,
-	setShaderValueCInt,
 	setShaderValueVec2,
 	setShaderValueVec3,
 	setShaderValueVec4,
 }
-setShaderValueFloat :: proc(shd: rl.Shader, uniformName: cstring, val: ^f32) {
-	rl.SetShaderValue(shd, rl.GetShaderLocation(shd, uniformName), val, .FLOAT)
+
+setShaderValueFloat :: proc "contextless" (shd: rl.Shader, uniformName: cstring, value: f32) {
+	valueHere := value
+	rl.SetShaderValue(shd, rl.GetShaderLocation(shd, uniformName), &valueHere, .FLOAT)
 }
-setShaderValueInt :: proc(shd: rl.Shader, uniformName: cstring, val: ^int) {
-	rl.SetShaderValue(shd, rl.GetShaderLocation(shd, uniformName), val, .INT)
+setShaderValueInt :: proc "contextless" (shd: rl.Shader, uniformName: cstring, value: i32) {
+	valueHere := value
+	rl.SetShaderValue(shd, rl.GetShaderLocation(shd, uniformName), &valueHere, .INT)
 }
-setShaderValueCInt :: proc(shd: rl.Shader, uniformName: cstring, val: ^c.int) {
-	rl.SetShaderValue(shd, rl.GetShaderLocation(shd, uniformName), val, .INT)
+setShaderValueVec2 :: proc "contextless" (shd: rl.Shader, uniformName: cstring, value: rl.Vector2) {
+	valueHere := value
+	rl.SetShaderValue(shd, rl.GetShaderLocation(shd, uniformName), &valueHere, .VEC2)
 }
-setShaderValueVec2 :: proc(shd: rl.Shader, uniformName: cstring, val: ^rl.Vector2) {
-	rl.SetShaderValue(shd, rl.GetShaderLocation(shd, uniformName), val, .VEC2)
+setShaderValueVec3 :: proc "contextless" (shd: rl.Shader, uniformName: cstring, value: rl.Vector3) {
+	valueHere := value
+	rl.SetShaderValue(shd, rl.GetShaderLocation(shd, uniformName), &valueHere, .VEC3)
 }
-setShaderValueVec3 :: proc(shd: rl.Shader, uniformName: cstring, val: ^rl.Vector3) {
-	rl.SetShaderValue(shd, rl.GetShaderLocation(shd, uniformName), val, .VEC3)
-}
-setShaderValueVec4 :: proc(shd: rl.Shader, uniformName: cstring, val: ^rl.Vector4) {
-	rl.SetShaderValue(shd, rl.GetShaderLocation(shd, uniformName), val, .VEC4)
+setShaderValueVec4 :: proc "contextless" (shd: rl.Shader, uniformName: cstring, value: rl.Vector4) {
+	valueHere := value
+	rl.SetShaderValue(shd, rl.GetShaderLocation(shd, uniformName), &valueHere, .VEC4)
 }
 loadPassthroughMaterial3D :: proc(albedoTexture: Maybe(rl.Texture) = nil) -> rl.Material {
 	material := rl.LoadMaterialDefault()

@@ -476,7 +476,7 @@ drawTitleMenuBackground :: proc(self: ^TitleMenuBackground) {
 	backgroundShaderDest := rl.Rectangle{0.0, 0.0, RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D}
 	backgroundShader := getShader(.TitleMenuFog)
 	rl.BeginShaderMode(backgroundShader)
-	setShaderValue(backgroundShader, "time", &self.backgroundShaderTime)
+	setShaderValue(backgroundShader, "time", self.backgroundShaderTime)
 	rl.DrawTexturePro(
 		backgroundShaderTexture,
 		backgroundShaderSource,
@@ -500,59 +500,6 @@ drawTitleMenuBackground3D :: proc(self: ^TitleMenuBackground) {
 	rlgl.EnableBackfaceCulling()
 }
 
-StarBackground :: struct {
-	genTex:     rl.Texture,
-	frameSize:  rl.Vector2,
-	frameIndex: f32,
-	frameSpd:   f32,
-	frameCount: i32,
-	scroll:     rl.Vector2,
-	scrollSpd:  rl.Vector2,
-	object:     ^GameObject,
-}
-createStarBackground :: proc(levelAlloc: mem.Allocator) -> ^StarBackground {
-	self := new(StarBackground, levelAlloc)
-	self.genTex = web10CreateTexture({128, 128}, getSpriteDef(.Star), 16)
-	self.frameSize = {128.0, 128.0}
-	self.frameSpd = 4.0
-	self.frameCount = getSpriteDef(.Star).frame_count
-	self.scrollSpd = rl.Vector2{30.0, 30.0}
-	self.object = createGameObject(
-		StarBackground,
-		self,
-		0,
-		updateProc = cast(proc(_: rawptr))updateStarBackground,
-		drawProc = cast(proc(_: rawptr))drawStarBackground,
-		destroyProc = cast(proc(_: rawptr))destroyStarBackground,
-	)
-	return self
-}
-updateStarBackground :: proc(self: ^StarBackground) {
-	self.object.pos = global.camera.target - global.camera.offset
-}
-drawStarBackground :: proc(self: ^StarBackground) {
-	shd := getShader(.AnimatedTextureRepeatPosition)
-	rl.BeginShaderMode(shd)
-	frameCountLoc := rl.GetShaderLocation(shd, "frameCount")
-	rl.SetShaderValue(shd, frameCountLoc, &self.frameCount, .INT)
-	frameIndexLoc := rl.GetShaderLocation(shd, "frameInd")
-	rl.SetShaderValue(shd, frameIndexLoc, &self.frameIndex, .FLOAT)
-	texSizeLoc := rl.GetShaderLocation(shd, "frameSize")
-	rl.SetShaderValue(shd, texSizeLoc, &self.frameSize, .VEC2)
-	self.frameIndex += TARGET_TIME_STEP * self.frameSpd
-	scrollPxLoc := rl.GetShaderLocation(shd, "scrollPx")
-	rl.SetShaderValue(shd, scrollPxLoc, &self.scroll, .VEC2)
-	self.scroll += self.scrollSpd * TARGET_TIME_STEP
-	drawTextureRecDest(
-		self.genTex,
-		{self.object.pos.x, self.object.pos.y, RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D},
-	)
-	rl.EndShaderMode()
-}
-destroyStarBackground :: proc(self: ^StarBackground) {
-	rl.UnloadTexture(self.genTex)
-}
-
 HubGraphics :: struct {
 	object:                      ^GameObject,
 	postProcessingRenderTexture: rl.RenderTexture,
@@ -560,6 +507,7 @@ HubGraphics :: struct {
 }
 createHubGraphics :: proc(levelAlloc: mem.Allocator) -> ^HubGraphics {
 	self := new(HubGraphics, levelAlloc)
+	self.postProcessingRenderTexture = rl.LoadRenderTexture(RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D)
 	self.object = createGameObject(
 		HubGraphics,
 		self,
@@ -568,7 +516,6 @@ createHubGraphics :: proc(levelAlloc: mem.Allocator) -> ^HubGraphics {
 		drawEndProc = cast(proc(_: rawptr))drawHubGraphicsEnd,
 		destroyProc = cast(proc(_: rawptr))destroyHubGraphics,
 	)
-	self.postProcessingRenderTexture = rl.LoadRenderTexture(RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D)
 	return self
 }
 destroyHubGraphics :: proc(self: ^HubGraphics) {
@@ -584,15 +531,11 @@ drawHubGraphicsEnd :: proc(self: ^HubGraphics) {
 	shader := getShader(.NoiseAndCRT)
 	rl.BeginShaderMode(shader)
 	self.shaderTime += TARGET_TIME_STEP
-	setShaderValue(shader, "time", &self.shaderTime)
-	noiseFactor: f32 = 0.3
-	setShaderValue(shader, "noiseFactor", &noiseFactor)
-	crtWidth: f32 = 96.0
-	setShaderValue(shader, "crtWidth", &crtWidth)
-	crtFactor: f32 = 0.3
-	setShaderValue(shader, "crtFactor", &crtFactor)
-	crtSpeed: f32 = 40.0
-	setShaderValue(shader, "crtSpeed", &crtSpeed)
+	setShaderValue(shader, "time", self.shaderTime)
+	setShaderValue(shader, "noiseFactor", 0.3)
+	setShaderValue(shader, "crtWidth", 96.0)
+	setShaderValue(shader, "crtFactor", 0.3)
+	setShaderValue(shader, "crtSpeed", 40.0)
 	rl.DrawTexture(engine.renderTexture2D.texture, 0, 0, rl.WHITE)
 	rl.EndShaderMode()
 	endModeStacked()
@@ -603,9 +546,11 @@ drawHubGraphicsEnd :: proc(self: ^HubGraphics) {
 UnrulyLandGraphics :: struct {
 	object:             ^GameObject,
 	blockRenderTexture: rl.RenderTexture,
+	starBackground:     StarBackground,
 }
 createUnrulyLandGraphics :: proc(levelAlloc: mem.Allocator) -> ^UnrulyLandGraphics {
 	self := new(UnrulyLandGraphics, levelAlloc)
+	self.starBackground = createStarBackground()
 	self.blockRenderTexture = rl.LoadRenderTexture(RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D)
 	self.object = createGameObject(
 		UnrulyLandGraphics,
@@ -617,6 +562,9 @@ createUnrulyLandGraphics :: proc(levelAlloc: mem.Allocator) -> ^UnrulyLandGraphi
 	return self
 }
 drawUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
+	updateStarBackground(&self.starBackground)
+	drawStarBackground(&self.starBackground, global.camera.target - global.camera.offset)
+
 	beginModeStacked(nil, self.blockRenderTexture)
 	rl.ClearBackground({0, 0, 0, 0})
 	for rectangle in engine.collisionRectangles {
@@ -624,20 +572,28 @@ drawUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
 		rl.DrawRectangleRec(rectangleF32, rl.WHITE)
 	}
 	endModeStacked()
-	outlineShader := getShader(.InsetOutline)
-	rl.BeginShaderMode(outlineShader)
-	outlineThickness: f32 = 2.0
-	setShaderValue(outlineShader, "outlineThickness", &outlineThickness)
-	renderTextureSize := getTextureSize(self.blockRenderTexture.texture)
-	outlineShaderTexelSize := rl.Vector2{1.0, 1.0} / renderTextureSize
-	setShaderValue(outlineShader, "texelSize", &outlineShaderTexelSize)
-	outlineShaderFlipY: i32 = 1
-	setShaderValue(outlineShader, "flipY", &outlineShaderFlipY)
+
+	blockShader := getShader(.UnrulyLandGround)
+	rl.BeginShaderMode(blockShader)
+	setShaderValue(blockShader, "flipV", 1)
+	setShaderValue(blockShader, "time", 0.0)
+	setShaderValue(blockShader, "resolution", [2]f32{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
+	setShaderValue(blockShader, "band_add", 0.6)
+	setShaderValue(blockShader, "scale", 1.0)
+	setShaderValue(blockShader, "turbulence_amplitude", 0.8)
+	setShaderValue(blockShader, "turbulence_speed", 0.3)
+	setShaderValue(blockShader, "turbulence_frequency", 2.0)
+	setShaderValue(blockShader, "turbulence_exp", 1.4)
+	setShaderValue(blockShader, "base_color_a", [4]f32{129.0 / 255.0, 0.0, 174.0 / 255.0, 1.0})
+	setShaderValue(blockShader, "base_color_b", [4]f32{210.0 / 255.0, 0.0, 255.0 / 255.0, 1})
+	setShaderValue(blockShader, "band_color_a", [4]f32{246.0 / 255.0, 220.0 / 255.0, 0.0, 1.0})
+	setShaderValue(blockShader, "band_color_b", [4]f32{177.0 / 255.0, 80.0 / 255.0, 0.0, 1.0})
 	rl.DrawTextureV(self.blockRenderTexture.texture, global.camera.target - global.camera.offset, rl.WHITE)
 	rl.EndShaderMode()
 }
 destroyUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
 	rl.UnloadRenderTexture(self.blockRenderTexture)
+	destroyStarBackground(&self.starBackground)
 }
 
 FORWARD_3D :: rl.Vector3{1.0, 0.0, 0.0} // out of elevator
@@ -1175,11 +1131,9 @@ drawElevator3D :: proc(e: ^Elevator3D) {
 	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.Walls], e.wallMaterial, transform)
 
 	applyLightToShader(e.floorMaterial.shader)
-	setShaderValue(e.lightMaterial.shader, "frameIndex", &e.lightFrameIndex)
-	lightFrameCount: int = 2
-	setShaderValue(e.lightMaterial.shader, "frameCount", &lightFrameCount)
-	lightFlipY: int = 0
-	setShaderValue(e.lightMaterial.shader, "flipY", &lightFlipY)
+	setShaderValue(e.lightMaterial.shader, "frameIndex", e.lightFrameIndex)
+	setShaderValue(e.lightMaterial.shader, "frameCount", 2)
+	setShaderValue(e.lightMaterial.shader, "flipY", 0)
 	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.Floor], e.floorMaterial, transform)
 
 	applyLightToShader(e.lightMaterial.shader)
@@ -1189,12 +1143,9 @@ drawElevator3D :: proc(e: ^Elevator3D) {
 	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.PanelBox], engine.defaultMaterial3D, transform)
 
 	applyLightToShader(e.panelMaterial.shader)
-	panelFrameIndex: f32 = 0.0
-	setShaderValue(e.panelMaterial.shader, "frameIndex", &e.lightFrameIndex)
-	panelFrameCount: int = 1
-	setShaderValue(e.panelMaterial.shader, "frameCount", &panelFrameCount)
-	panelFlipY: int = 1
-	setShaderValue(e.panelMaterial.shader, "flipY", &panelFlipY)
+	setShaderValue(e.panelMaterial.shader, "frameIndex", 0.0)
+	setShaderValue(e.panelMaterial.shader, "frameCount", 1)
+	setShaderValue(e.panelMaterial.shader, "flipY", 1)
 	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.Panel], e.panelMaterial, transform)
 
 	rl.DrawMesh(e.leftDoorModel.meshes[0], engine.defaultMaterial3D, e.leftDoorModel.transform)
