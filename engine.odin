@@ -912,6 +912,9 @@ getSpriteSourceRect :: proc(spr: Sprite, scale: rl.Vector2) -> rl.Rectangle {
 		cast(f32)spr.def.tex.height,
 	}
 }
+getSpriteFrameSize :: proc(spr: Sprite) -> rl.Vector2 {
+	return {cast(f32)spr.def.frame_width, cast(f32)spr.def.tex.height}
+}
 drawSpriteEx :: proc(spr: Sprite, pos: rl.Vector2, scale: rl.Vector2, blend := rl.WHITE) {
 	src := getSpriteSourceRect(spr, scale)
 	frame_width := f32(spr.def.frame_width)

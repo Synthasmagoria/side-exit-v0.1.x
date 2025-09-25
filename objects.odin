@@ -15,8 +15,8 @@ PlayerFrozenState :: enum {
 	PuppetNoGravity,
 }
 PlayerFrozenPuppetNoGravityStateData :: struct {
-	moveIllusionTween:     Tween,
-	moveIllusionNextState: PlayerFrozenState,
+	moveTween:     Tween,
+	moveNextState: PlayerFrozenState,
 }
 Player :: struct {
 	object:                         ^GameObject,
@@ -35,7 +35,6 @@ Player :: struct {
 	airjumpCount:                   i32,
 	airjumpIndex:                   i32,
 	frozenState:                    PlayerFrozenState,
-	moveIllusionOffset:             rl.Vector2,
 	frozenPuppetNoGravityStateData: PlayerFrozenPuppetNoGravityStateData,
 }
 createPlayer :: proc(alloc: mem.Allocator) -> ^Player {
@@ -54,7 +53,7 @@ createPlayer :: proc(alloc: mem.Allocator) -> ^Player {
 	self.airjumpIndex = 0
 	self.frozenState = .Movable
 	self.frozenPuppetNoGravityStateData = {
-		moveIllusionTween = createFinishedTween(rl.Vector2{0.0, 0.0}),
+		moveTween = createFinishedTween(rl.Vector2{0.0, 0.0}),
 	}
 	self.object = createGameObject(
 		Player,
@@ -124,34 +123,24 @@ updatePlayer :: proc(self: ^Player) {
 		updateSprite(self.currentSpr)
 	case .PuppetNoGravity:
 		stateData := &self.frozenPuppetNoGravityStateData
-		self.moveIllusionOffset = updateAndStepTween(&stateData.moveIllusionTween).(rl.Vector2)
-		if tweenIsFinished(stateData.moveIllusionTween) {
-			if stateData.moveIllusionNextState != self.frozenState {
-				self.frozenState = stateData.moveIllusionNextState
+		self.object.pos = updateAndStepTween(&stateData.moveTween).(rl.Vector2)
+		if tweenIsFinished(stateData.moveTween) {
+			if stateData.moveNextState != self.frozenState {
+				self.frozenState = stateData.moveNextState
 			}
 			setPlayerSprite(self, &self.idleSpr)
 		} else {
 			setPlayerSprite(self, &self.walkSpr)
 		}
 		updateSprite(self.currentSpr)
-		drawSpriteEx(self.currentSpr^, self.object.pos + self.moveIllusionOffset, self.scale)
 	}
 }
 drawPlayer :: proc(self: ^Player) {
-	drawSpriteEx(self.currentSpr^, self.object.pos + self.moveIllusionOffset, self.scale)
+	drawSpriteEx(self.currentSpr^, self.object.pos, self.scale)
 }
 MoveAndCollidePlayerResult :: struct {
 	newPosition: rl.Vector2,
 	newVelocity: rl.Vector2,
-}
-playerMoveIllusion :: proc(player: ^Player, toRelative: rl.Vector2, duration: f32, nextState: PlayerFrozenState) {
-	assert(player.frozenState != .Movable)
-	player.frozenPuppetNoGravityStateData.moveIllusionTween = createTween(
-		TweenVector2Range{player.moveIllusionOffset, toRelative},
-		.Linear,
-		duration,
-	)
-	player.frozenPuppetNoGravityStateData.moveIllusionNextState = nextState
 }
 moveAndCollidePlayer :: proc(
 	position: rl.Vector2,
@@ -222,6 +211,15 @@ setPlayerSprite :: proc(player: ^Player, spr: ^Sprite) {
 		player.currentSpr = spr
 		setSpriteFrame(player.currentSpr, 0)
 	}
+}
+movePlayerNoGravity :: proc(player: ^Player, position: rl.Vector2, duration: f32, nextState: PlayerFrozenState) {
+	player.frozenState = .PuppetNoGravity
+	player.frozenPuppetNoGravityStateData.moveTween = createTween(
+		TweenVector2Range{player.object.pos, position},
+		.Linear,
+		duration,
+	)
+	player.frozenPuppetNoGravityStateData.moveNextState = nextState
 }
 
 ElevatorState :: enum {
@@ -303,15 +301,12 @@ updateElevator :: proc(self: ^Elevator) {
 				) {
 					self.drawInteractionArrow = true
 					if rl.IsKeyPressed(.UP) {
-						playerPositionInsideRelative :=
+						playerSpriteFrameSize := getSpriteFrameSize(player.currentSpr^)
+						insidePlayerPosition :=
+							self.object.pos +
 							self.insidePositionRelative -
-							(player.object.pos - self.object.pos) -
-							{
-									cast(f32)player.currentSpr.def.frame_width / 2.0,
-									cast(f32)player.currentSpr.def.tex.height,
-								}
-						player.frozenState = .PuppetNoGravity
-						playerMoveIllusion(player, playerPositionInsideRelative, 1.0, .PuppetNoGravity)
+							{playerSpriteFrameSize.x / 2.0, playerSpriteFrameSize.y}
+						movePlayerNoGravity(player, insidePlayerPosition, 0.5, .PuppetNoGravity)
 						setElevatorState(self, .PlayerInside)
 						break
 					}
@@ -329,6 +324,13 @@ updateElevator :: proc(self: ^Elevator) {
 			setElevatorState(self, .Gone)
 		}
 	}
+}
+getElevatorPlayerInsidePositionRelative :: proc(self: Elevator, player: Player) -> rl.Vector2 {
+	return(
+		self.insidePositionRelative -
+		(player.object.pos - self.object.pos) -
+		{cast(f32)player.currentSpr.def.frame_width / 2.0, cast(f32)player.currentSpr.def.tex.height} \
+	)
 }
 drawElevator :: proc(self: ^Elevator) {
 	if self.visible {
@@ -699,11 +701,12 @@ setPlayer3DState :: proc(player: ^Player3D, nextState: Player3DState) {
 		if player.movingStateData.nextState == .Inactive {
 			if player := getFirstGameObjectOfType(Player); player != nil {
 				if elevator := getFirstGameObjectOfType(Elevator); elevator != nil {
-					elevatorCenterToGround :=
-						cast(f32)elevator.object.colRec.height - elevator.insidePositionRelative.y
-					player.object.pos += player.moveIllusionOffset + {0.0, elevatorCenterToGround}
-					player.moveIllusionOffset = {0.0, -elevatorCenterToGround}
-					playerMoveIllusion(player, {0.0, 0.0}, 1.0, .Movable)
+					playerSpriteFrameSize := getSpriteFrameSize(player.currentSpr^)
+					playerGroundPosition :=
+						elevator.object.pos +
+						{elevator.object.colRec.width / 2.0, elevator.object.colRec.height} -
+						{playerSpriteFrameSize.x / 2.0, playerSpriteFrameSize.y}
+					movePlayerNoGravity(player, playerGroundPosition, 0.5, .Movable)
 				} else {
 					panic("Couldn't unfreeze player because there was no elevator")
 				}
@@ -977,6 +980,7 @@ Elevator3DTransitStateData :: struct {
 	lightFlicker:       f32,
 	lightFlickerSeed01: f32,
 	lightFlickerSeed02: f32,
+	playerState:        Player,
 }
 Elevator3D :: struct {
 	state:              Elevator3DState,
@@ -1174,11 +1178,21 @@ setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 		e.panelData.buttonPressCount = 0
 		engine.lights3D[0].color = e.transitStateData.initialLightColor
 		e.lightFrameIndex = 1.0
+
+		player := getFirstGameObjectOfType(Player)
+		player.frozenState = e.transitStateData.playerState.frozenState
+
+		elevator := getFirstGameObjectOfType(Elevator)
+		setElevatorState(elevator, .PlayerInside)
+		playerSpriteFrameSize := getSpriteFrameSize(player.currentSpr^)
+		player.object.pos =
+			elevator.object.pos +
+			elevator.insidePositionRelative -
+			{playerSpriteFrameSize.x / 2.0, playerSpriteFrameSize.y}
 	}
 
 	previousState := e.state
 	e.state = newState
-	fmt.println(e.state)
 
 	switch e.state {
 	case .Invisible:
@@ -1205,6 +1219,7 @@ setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 		e.transitStateData.lightFlicker = math.step(rand.float32(), 0.5)
 		e.transitStateData.lightFlickerSeed01 = rand.float32()
 		e.transitStateData.lightFlickerSeed02 = rand.float32()
+		e.transitStateData.playerState = getFirstGameObjectOfType(Player)^
 		e.lightFrameIndex = 1.0
 		rl.PlaySound(getSound(.ElevatorMovingStart))
 		rl.PlaySound(getSound(.ElevatorMovingLoop))

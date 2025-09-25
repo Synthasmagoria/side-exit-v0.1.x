@@ -20,7 +20,7 @@ init :: proc() {
 	initLoadLevelProcs()
 	engine.defaultMaterial3D = loadPassthroughMaterial3D()
 	global.musicLPFFrequency = 44100.0
-	global.levelIndex = .UnrulyLand
+	global.levelIndex = .TitleMenu
 	global.changeLevel = true
 }
 
@@ -127,7 +127,7 @@ loadLevel_UnrulyLand :: proc(levelAlloc: mem.Allocator) {
 	addElevatorPlatformToCollisionBitmask(&collisionBitmask, generalObjects.elevator^)
 	addWorldCollisionBitmaskToCollision(collisionBitmask)
 
-	generalObjects.player.object.pos = {0.0, 0.0}
+	//generalObjects.player.object.pos = generalObjects.elevator.object.pos
 	_ = createUnrulyLandGraphics(levelAlloc)
 }
 
@@ -144,7 +144,6 @@ Global :: struct {
 	camera:             rl.Camera2D,
 	cameraFollowPlayer: bool,
 	camera3D:           Camera3D,
-	player:             Player,
 	player3D:           Player3D,
 	elevator3D:         Elevator3D,
 	debugCamera:        rl.Camera2D,
@@ -228,7 +227,6 @@ deinitRaylib :: proc() {
 setGameGlobals :: proc() {
 	global.player3D = createPlayer3D()
 	global.elevator3D = createElevator3D()
-	global.player = createPlayer()
 }
 
 gameStep :: proc() {
@@ -237,6 +235,7 @@ gameStep :: proc() {
 
 	if global.changeLevel {
 		destroyAllGameObjects()
+		clear(&engine.collisionRectangles)
 		mem.dynamic_arena_reset(&engine.levelArena)
 		loadLevelProcs[global.levelIndex](engine.levelAlloc)
 		for object in engine.gameObjects {
