@@ -20,7 +20,7 @@ init :: proc() {
 	initLoadLevelProcs()
 	engine.defaultMaterial3D = loadPassthroughMaterial3D()
 	global.musicLPFFrequency = 1.0
-	global.levelIndex = .Hub
+	global.levelIndex = .UnrulyLand
 	global.changeLevel = true
 }
 
@@ -212,7 +212,7 @@ audioProcessEffectLPF :: proc "c" (buffer: rawptr, frames: c.uint) {
 initRaylib :: proc() {
 	rl.SetConfigFlags({.WINDOW_RESIZABLE}) // TODO: Remove artifacts from main framebuffer when resizing
 	when ODIN_DEBUG {
-		rl.SetTraceLogLevel(.INFO)
+		rl.SetTraceLogLevel(.WARNING)
 	} else {
 		rl.SetTraceLogLevel(.ERROR)
 	}

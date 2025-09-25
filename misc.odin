@@ -7,7 +7,6 @@ import "core:mem"
 import rl "lib/raylib"
 
 web10CreateTexture :: proc(size: iVector2, spr_def: SpriteDef, num: i32) -> rl.Texture {
-	context.allocator = context.temp_allocator
 	tex_w := size.x * spr_def.frame_count
 	assert(tex_w <= MAX_TEXTURE_SIZE)
 	spr_list := make([dynamic]Sprite, num, num)
@@ -42,6 +41,63 @@ web10CreateTexture :: proc(size: iVector2, spr_def: SpriteDef, num: i32) -> rl.T
 	endModeStacked()
 	img := rl.LoadImageFromTexture(rtex.texture)
 	return rl.LoadTextureFromImage(img)
+}
+web10CreateTexture2D :: proc(
+	frameSize: iVector2,
+	spriteDefinitions: [dynamic]SpriteDef,
+	instanceCount: i32,
+) -> rl.Texture {
+	spriteDefinitionCount := len(spriteDefinitions)
+	assert(spriteDefinitionCount > 0)
+	frameCount := spriteDefinitions[0].frame_count
+	for definition in spriteDefinitions {
+		assert(definition.frame_count == frameCount)
+	}
+	textureSize := frameSize * {frameCount, cast(i32)spriteDefinitionCount}
+	renderTexture := rl.LoadRenderTexture(textureSize.x, textureSize.y)
+
+	spriteList := make([dynamic][dynamic]Sprite, spriteDefinitionCount, spriteDefinitionCount)
+	rectangleList := make([dynamic][dynamic]rl.Rectangle, spriteDefinitionCount, spriteDefinitionCount)
+	for i in 0 ..< spriteDefinitionCount {
+		spriteList[i] = make([dynamic]Sprite, instanceCount, instanceCount)
+		rectangleList[i] = make([dynamic]rl.Rectangle, instanceCount, instanceCount)
+	}
+
+	for i in 0 ..< len(spriteDefinitions) {
+		offsetY := cast(f32)(cast(i32)i * frameSize.y)
+		spriteDefinition := spriteDefinitions[i]
+		spriteFrameSize := getSpriteDefinitionFrameSize(spriteDefinition)
+		spriteFrameSizeF32 := rl.Vector2{cast(f32)spriteFrameSize.x, cast(f32)spriteFrameSize.y}
+		for j in 0 ..< instanceCount {
+			sprite := createSprite(spriteDefinition)
+			setSpriteFrame(&sprite, rand.int31_max(spriteDefinitions[i].frame_count - 1))
+			spriteList[i][j] = sprite
+
+			x := rand.float32() * (cast(f32)frameSize.x - spriteFrameSizeF32.x)
+			y := rand.float32() * (cast(f32)frameSize.y - spriteFrameSizeF32.y)
+			rectangleList[i][j] = {x, y, spriteFrameSizeF32.x, spriteFrameSizeF32.y}
+		}
+	}
+
+	beginModeStacked(getZeroCamera2D(), renderTexture)
+	for i in 0 ..< len(spriteDefinitions) {
+		offsetY := cast(f32)(cast(i32)i * frameSize.y)
+		for j in 0 ..< frameCount {
+			offsetX := cast(f32)(cast(i32)j * frameSize.x)
+			for k in 0 ..< instanceCount {
+				position := rl.Vector2{rectangleList[i][k].x, rectangleList[i][k].y} + {offsetX, offsetY}
+				drawSpriteEx(spriteList[i][k], position, {1.0, 1.0}, rl.WHITE)
+				advanceSpriteFrame(&spriteList[i][k])
+			}
+		}
+	}
+	endModeStacked()
+
+	image := rl.LoadImageFromTexture(renderTexture.texture)
+	texture := rl.LoadTextureFromImage(image)
+	rl.UnloadRenderTexture(renderTexture)
+	rl.UnloadImage(image)
+	return texture
 }
 
 DEBUG_FONT_SIZE :: 12
@@ -114,21 +170,30 @@ debugPrintDynamicArenaAllocMessage :: proc(
 }
 
 StarBackground :: struct {
-	genTex:     rl.Texture,
-	frameSize:  rl.Vector2,
-	frameIndex: f32,
-	frameSpd:   f32,
-	frameCount: i32,
-	scroll:     rl.Vector2,
-	scrollSpd:  rl.Vector2,
+	genTex:                rl.Texture,
+	frameSize:             rl.Vector2,
+	spriteCount:           i32,
+	frameIndex:            f32,
+	frameSpd:              f32,
+	frameCount:            i32,
+	paralax:               f32,
+	scroll:                rl.Vector2,
+	scrollSpd:             rl.Vector2,
+	scrollSpeedMultiplier: f32,
 }
 createStarBackground :: proc() -> StarBackground {
+	spriteDefinitions := make([dynamic]SpriteDef, 2, 2)
+	spriteDefinitions[0] = getSpriteDef(.Star)
+	spriteDefinitions[1] = getSpriteDef(.StarSmall)
 	return {
-		genTex = web10CreateTexture({128, 128}, getSpriteDef(.Star), 16),
+		genTex = web10CreateTexture2D({128, 128}, spriteDefinitions, 16),
 		frameSize = {128.0, 128.0},
+		spriteCount = cast(i32)len(spriteDefinitions),
 		frameSpd = 4.0,
 		frameCount = getSpriteDef(.Star).frame_count,
-		scrollSpd = rl.Vector2{30.0, 30.0},
+		scrollSpd = rl.Vector2{12.0, 12.0},
+		scrollSpeedMultiplier = 1.1,
+		paralax = 0.9,
 	}
 }
 updateStarBackground :: proc(self: ^StarBackground) {
@@ -136,14 +201,18 @@ updateStarBackground :: proc(self: ^StarBackground) {
 	self.scroll += self.scrollSpd * TARGET_TIME_STEP
 }
 drawStarBackground :: proc(self: ^StarBackground, position: rl.Vector2) {
-	shd := getShader(.AnimatedTextureRepeatPosition)
+	shd := getShader(.AnimatedTextureRepeatPositionMulti)
 	rl.BeginShaderMode(shd)
 	setShaderValue(shd, "frameCount", self.frameCount)
+	setShaderValue(shd, "spriteCount", self.spriteCount)
 	setShaderValue(shd, "frameInd", self.frameIndex)
 	setShaderValue(shd, "frameSize", self.frameSize)
 	setShaderValue(shd, "scrollPx", self.scroll)
+	setShaderValue(shd, "offset", global.camera.offset * self.paralax)
+	setShaderValue(shd, "speedMultiplier", self.scrollSpeedMultiplier)
 	drawTextureRecDest(self.genTex, {position.x, position.y, RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
 	rl.EndShaderMode()
+	// drawTextureRecDest(self.genTex, {position.x, position.y, cast(f32)self.genTex.width, cast(f32)self.genTex.height})
 }
 destroyStarBackground :: proc(self: ^StarBackground) {
 	rl.UnloadTexture(self.genTex)

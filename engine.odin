@@ -205,6 +205,7 @@ playEngineMusicStream :: proc(ind: MusicName) -> rl.Music {
 
 TextureName :: enum {
 	Star,
+	StarSmall,
 	SynthIdle,
 	SynthIdleBack,
 	SynthWalk,
@@ -250,6 +251,7 @@ _setSpriteDef :: proc(ind: TextureName, frame_width: i32, frame_spd: f32, origin
 }
 initSpriteDefs :: proc() {
 	_setSpriteDef(.Star, 4, 8.0)
+	_setSpriteDef(.StarSmall, 3, 8.0)
 	_setSpriteDef(.SynthIdle, 24, 8.0)
 	_setSpriteDef(.SynthIdleBack, 24, 8.0)
 	_setSpriteDef(.SynthWalk, 24, 8.0)
@@ -261,6 +263,7 @@ initSpriteDefs :: proc() {
 
 ShaderNames :: enum {
 	AnimatedTextureRepeatPosition,
+	AnimatedTextureRepeatPositionMulti,
 	FlipY,
 	InsetOutline,
 	NoiseAndCRT,
@@ -890,6 +893,9 @@ SpriteDef :: struct {
 	frame_width: i32,
 	frame_spd:   f32,
 	origin:      rl.Vector2,
+}
+getSpriteDefinitionFrameSize :: proc(spriteDefinition: SpriteDef) -> iVector2 {
+	return {spriteDefinition.frame_width, cast(i32)spriteDefinition.tex.height}
 }
 createSpriteDef :: proc(
 	tex: rl.Texture,

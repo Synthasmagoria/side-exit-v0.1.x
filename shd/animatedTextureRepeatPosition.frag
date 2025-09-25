@@ -11,6 +11,7 @@ uniform int frameCount;
 uniform float frameInd;
 uniform vec2 frameSize;
 uniform vec2 scrollPx;
+uniform vec2 offset;
 
 float random(vec2 st) {
     return fract(sin(dot(mod(st, 2.386), vec2(58.2894, 28.483))) * 43028.49);
@@ -26,8 +27,7 @@ vec2 rot270(vec2 st) {
 
 void main() {
     float fc = float(frameCount);
-    float animationOffset = floor(frameInd) / fc;
-    vec2 pos = fragPos + scrollPx;
+    vec2 pos = fragPos + scrollPx + offset;
     vec2 st = fract(pos / frameSize);
     vec2 ist = floor(pos / frameSize);
 
@@ -42,6 +42,8 @@ void main() {
     st = mix(st, rot270(st), rotate270);
     st += 0.5;
 
+    float animationFrameRandom = fract((r.x + 0.39338) * 1.3959);
+    float animationOffset = floor(frameInd + animationFrameRandom * fc) / fc;
     vec2 uv = vec2(st.x / fc + animationOffset, st.y);
     vec4 texelColor = texture2D(texture0, uv);
     gl_FragColor = texelColor * colDiffuse * fragCol;
