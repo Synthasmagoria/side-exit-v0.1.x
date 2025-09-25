@@ -1002,11 +1002,15 @@ Elevator3DState :: enum {
 	Transit,
 }
 Elevator3DTransitStateData :: struct {
-	timer:         Timer,
-	duration:      f32,
-	shakeTimer:    Timer,
-	shakeInterval: f32,
-	shakeSeverity: f32,
+	timer:              Timer,
+	duration:           f32,
+	shakeTimer:         Timer,
+	shakeInterval:      f32,
+	shakeSeverity:      f32,
+	initialLightColor:  [4]f32,
+	lightFlicker:       bool,
+	lightFlickerSeed01: f32,
+	lightFlickerSeed02: f32,
 }
 Elevator3D :: struct {
 	state:              Elevator3DState,
@@ -1099,14 +1103,6 @@ createElevator3D :: proc() -> Elevator3D {
 	setElevator3DState(&self, .Invisible)
 	return self
 }
-toggleElevatorLights :: proc(e: ^Elevator3D) {
-	if e.lightFrameIndex == 0.0 {
-		e.lightFrameIndex = 1.0
-	} else {
-		e.lightFrameIndex = 0.0
-	}
-	setLightStatus(i32(e.lightFrameIndex))
-}
 updateElevator3D :: proc(e: ^Elevator3D) {
 	switch e.state {
 	case .Invisible:
@@ -1123,14 +1119,36 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 		if isTimerProgressTimestamp(stateData.timer, 0.5) {
 			loadLevel(.UnrulyLand)
 		}
+		// TODO: Add a sound that only plays when the elevator gets shaky
 		updateTimer(&stateData.shakeTimer)
+		shaking: i32 = 0
 		if isTimerFinished(stateData.shakeTimer) {
+			shakeFactor := smoothplot(stateData.timer.time, stateData.duration / 2.0, 1.0, 1.0)
+			shaking = cast(i32)(shakeFactor > 0.1)
 			global.camera3D.shakeOffset = {
-				rand.float32() * stateData.shakeSeverity - stateData.shakeSeverity / 2.0,
+				(rand.float32() * stateData.shakeSeverity - stateData.shakeSeverity / 2.0) * shakeFactor,
 				0.0,
-				rand.float32() * stateData.shakeSeverity - stateData.shakeSeverity / 2.0,
+				(rand.float32() * stateData.shakeSeverity - stateData.shakeSeverity / 2.0) * shakeFactor,
 			}
 		}
+
+		stateTimerProgress := getTimerProgress(stateData.timer)
+		flickerInterval := smoothplot(
+			linalg.fract(stateTimerProgress * 8.0),
+			stateData.lightFlickerSeed01 * 0.8 + 0.1,
+			0.1,
+			0.1,
+		)
+		flickerPseudoRand := smoothplot(
+			linalg.fract((stateTimerProgress + stateData.lightFlickerSeed02 * 0.8 + 0.1) * 3.0),
+			0.5,
+			0.2,
+			0.2,
+		)
+		flicker := flickerInterval * flickerPseudoRand * cast(f32)shaking
+		engine.lights3D[0].color = stateData.initialLightColor * (1.0 - flicker)
+		e.lightFrameIndex = math.step(flicker, cast(f32)0.5)
+
 		if isTimerFinished(e.transitStateData.timer) {
 			setElevator3DState(e, .Idle)
 		}
@@ -1193,6 +1211,7 @@ setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 		rl.PlaySound(getSound(.ElevatorMovingEnd))
 		rl.StopSound(getSound(.ElevatorMovingLoop))
 		e.panelData.buttonPressCount = 0
+		engine.lights3D[0].color = e.transitStateData.initialLightColor
 	}
 
 	previousState := e.state
@@ -1219,6 +1238,9 @@ setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 	case .Transit:
 		e.transitStateData.timer = createTimer(5.0)
 		e.transitStateData.shakeTimer = createTimer(TARGET_TIME_STEP * 3.0)
+		e.transitStateData.initialLightColor = engine.lights3D[0].color
+		e.transitStateData.lightFlickerSeed01 = rand.float32()
+		e.transitStateData.lightFlickerSeed02 = rand.float32()
 		rl.PlaySound(getSound(.ElevatorMovingStart))
 		rl.PlaySound(getSound(.ElevatorMovingLoop))
 		rl.SetSoundVolume(getSound(.ElevatorMovingLoop), 0.0)

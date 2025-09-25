@@ -290,6 +290,13 @@ vector2ToStringTemp :: proc(v: rl.Vector2) -> cstring {
 	return rl.TextFormat("{{%f, %f}}", v.x, v.y)
 }
 
+rlColorToFColor :: proc(color: rl.Color) -> [4]f32 {
+	return {cast(f32)color.r / 255.0, cast(f32)color.g / 255.0, cast(f32)color.b / 255.0, cast(f32)color.a / 255.0}
+}
+FColorToRlColor :: proc(color: [4]f32) -> rl.Color {
+	return {cast(u8)(color.r * 255.0), cast(u8)(color.g * 255.0), cast(u8)(color.b * 255.0), cast(u8)(color.a * 255.0)}
+}
+
 HorizontalTextAlign :: enum {
 	Left,
 	Center,

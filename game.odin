@@ -39,7 +39,7 @@ initLights :: proc() {
 		type     = .Point,
 		position = {0.0, 3.0, 0.0},
 		target   = {0.0, 0.0, 0.0},
-		color    = {1.0, 1.0, 1.0, 1.0},
+		color    = {0.5, 0.5, 0.5, 1.0},
 	}
 	engine.lights3D[1] = Light3D {
 		enabled  = 0,
