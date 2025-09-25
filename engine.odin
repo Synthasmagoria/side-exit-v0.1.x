@@ -509,6 +509,29 @@ generateElevatorSpawnAreaInCollisionBitmaskCenter :: proc(collisionBitmask: ^Col
 		{collisionBitmask.area.width / 2 - diameter / 2, collisionBitmask.area.height / 2 - diameter / 2},
 	)
 }
+worldPositionToCollisionBitmaskPosition :: proc(position: rl.Vector2) -> iVector2 {
+	return {
+		cast(i32)math.floor(position.x / GENERATION_BLOCK_SIZE),
+		cast(i32)math.floor(position.y / GENERATION_BLOCK_SIZE),
+	}
+}
+getCollisionBitmaskIndex :: proc(collisionBitmask: CollisionBitmask, x: i32, y: i32) -> i32 {
+	xx := x - collisionBitmask.area.x
+	yy := y - collisionBitmask.area.y
+	return xx % collisionBitmask.area.width + yy * collisionBitmask.area.width
+}
+addElevatorPlatformToCollisionBitmask :: proc(collisionBitmask: ^CollisionBitmask, elevator: Elevator) {
+	elevatorBottom := rl.Vector2{elevator.object.pos.x, elevator.object.pos.y + elevator.object.colRec.height}
+	elevatorBottomCollisionBitmaskPosition := worldPositionToCollisionBitmaskPosition(elevatorBottom)
+	for i in 0 ..< 3 {
+		index := getCollisionBitmaskIndex(
+			collisionBitmask^,
+			elevatorBottomCollisionBitmaskPosition.x + cast(i32)i,
+			elevatorBottomCollisionBitmaskPosition.y,
+		)
+		collisionBitmask.bitmask[index] = 1
+	}
+}
 addWorldCollisionBitmaskToCollision :: proc(collisionBitmask: CollisionBitmask) {
 	blockStartPosition: iVector2
 	wasPreviousBlockSolid: bool

@@ -119,19 +119,12 @@ loadLevel_UnrulyLand :: proc(levelAlloc: mem.Allocator) {
 	global.camera.target = {0.0, 0.0}
 	generalObjects := loadLevelGeneral(levelAlloc)
 
-	collisionBitmask := generateWorldCollisionBitmask({-64, -64, 128, 128}, -1.0, 0, 8.0)
+	collisionBitmask := generateWorldCollisionBitmask({-64, -64, 128, 128}, -0.2, 0, 8.0)
 	generateElevatorSpawnAreaInCollisionBitmaskCenter(&collisionBitmask, 9)
-
-	elevatorCollisionRectangle := generalObjects.elevator.object.colRec
-	elevatorX := -elevatorCollisionRectangle.width / 2.0 + GENERATION_BLOCK_SIZE
-	elevatorY :=
-		math.floor(elevatorCollisionRectangle.height / GENERATION_BLOCK_SIZE) * GENERATION_BLOCK_SIZE -
-		elevatorCollisionRectangle.height
-	generalObjects.elevator.object.pos = {elevatorX, elevatorY}
+	generalObjects.elevator.object.pos = getElevatorWorldCenterPosition(generalObjects.elevator^, collisionBitmask)
 	generalObjects.elevator.visible = true
 	generalObjects.elevator.instant = false
-
-
+	addElevatorPlatformToCollisionBitmask(&collisionBitmask, generalObjects.elevator^)
 	addWorldCollisionBitmaskToCollision(collisionBitmask)
 
 	generalObjects.player.object.pos = {0.0, 0.0}
@@ -151,6 +144,7 @@ Global :: struct {
 	camera:             rl.Camera2D,
 	cameraFollowPlayer: bool,
 	camera3D:           Camera3D,
+	player:             Player,
 	player3D:           Player3D,
 	elevator3D:         Elevator3D,
 	debugCamera:        rl.Camera2D,
@@ -234,6 +228,7 @@ deinitRaylib :: proc() {
 setGameGlobals :: proc() {
 	global.player3D = createPlayer3D()
 	global.elevator3D = createElevator3D()
+	global.player = createPlayer()
 }
 
 gameStep :: proc() {

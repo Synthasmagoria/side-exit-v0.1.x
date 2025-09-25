@@ -344,6 +344,13 @@ drawElevatorEnd :: proc(self: ^Elevator) {
 		}
 	}
 }
+getElevatorWorldCenterPosition :: proc(self: Elevator, collisionBitmask: CollisionBitmask) -> rl.Vector2 {
+	return {
+		-self.object.colRec.width / 2.0 + GENERATION_BLOCK_SIZE,
+		math.floor(self.object.colRec.height / GENERATION_BLOCK_SIZE) * GENERATION_BLOCK_SIZE -
+		self.object.colRec.height,
+	}
+}
 setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
 	if (self.state == newState) {
 		return
