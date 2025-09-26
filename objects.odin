@@ -1139,7 +1139,17 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 		elevatorSoundVolume := math.smoothstep(cast(f32)0.05, cast(f32)0.2, stateData.timer.time)
 		rl.SetSoundVolume(getSound(.ElevatorMovingLoop), elevatorSoundVolume)
 		if isTimerProgressTimestamp(stateData.timer, 0.5) {
-			loadLevel(.UnrulyLand)
+			// TODO: Make this less predictable
+			hash :=
+				e.panelData.buttonPressStack[0] +
+				e.panelData.buttonPressStack[1] +
+				e.panelData.buttonPressStack[2] +
+				e.panelData.buttonPressStack[3] +
+				e.panelData.buttonPressStack[4] +
+				e.panelData.buttonPressStack[5]
+			possibleLevels := [?]Level{Level.Between, Level.UnrulyLand}
+			nextLevelIndex := hash % len(possibleLevels)
+			loadLevel(possibleLevels[nextLevelIndex])
 		}
 		// TODO: Add a sound that only plays when the elevator gets shaky
 		updateTimer(&stateData.shakeTimer)

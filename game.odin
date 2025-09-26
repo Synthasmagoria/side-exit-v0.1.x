@@ -149,7 +149,7 @@ loadLevel_Between :: proc(levelAlloc: mem.Allocator) {
 	addWorldCollisionBitmaskToCollision(collisionBitmask)
 
 	_ = createBetweenGraphics(levelAlloc)
-	playEngineMusicStream(.UnrulyLand)
+	playEngineMusicStream(.Between)
 }
 
 Camera3D :: struct {
