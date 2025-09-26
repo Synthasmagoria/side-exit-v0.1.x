@@ -173,6 +173,7 @@ loadLevel_Forest :: proc(levelAlloc: mem.Allocator) {
 	addWorldCollisionBitmaskToCollision(collisionBitmask)
 
 	_ = createForestGraphics(levelAlloc)
+	playEngineMusicStream(.Forest)
 }
 
 Camera3D :: struct {

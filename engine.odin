@@ -181,6 +181,7 @@ MusicName :: enum {
 	KowloonSmokeBreak,
 	UnrulyLand,
 	Between,
+	Forest,
 	_Count,
 }
 loadMusicStream :: proc(ind: MusicName) -> rl.Music {
@@ -229,7 +230,8 @@ TextureName :: enum {
 	BetweenBlock2,
 	BetweenBlock3,
 	BetweenBackgroundNoise,
-	Forest,
+	ForestBackground,
+	ForestDirt,
 	_Count,
 }
 getTexture :: proc(ind: TextureName) -> rl.Texture {
@@ -283,6 +285,7 @@ ShaderNames :: enum {
 	FlipY,
 	InsetOutline,
 	NoiseAndCRT,
+	TextureRepeatMask,
 	TitleMenuFog,
 	UnrulyLandGround,
 	UnrulyLandBackground,

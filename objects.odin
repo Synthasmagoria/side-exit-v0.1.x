@@ -659,11 +659,13 @@ destroyUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
 }
 
 ForestGraphics :: struct {
-	object:        ^GameObject,
-	fogShaderTime: f32,
+	object:             ^GameObject,
+	fogShaderTime:      f32,
+	blockRenderTexture: rl.RenderTexture,
 }
 createForestGraphics :: proc(levelAlloc: mem.Allocator) -> ^ForestGraphics {
 	self := new(ForestGraphics, levelAlloc)
+	self.blockRenderTexture = rl.LoadRenderTexture(RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D)
 	self.object = createGameObject(
 		ForestGraphics,
 		self,
@@ -673,14 +675,30 @@ createForestGraphics :: proc(levelAlloc: mem.Allocator) -> ^ForestGraphics {
 	)
 	return self
 }
+destroyForestGraphics :: proc(self: ^ForestGraphics) {
+	rl.UnloadRenderTexture(self.blockRenderTexture)
+}
 drawForestGraphics :: proc(self: ^ForestGraphics) {
-	forestTextureSize := getTextureSize(getTexture(.Forest))
+	forestTextureSize := getTextureSize(getTexture(.ForestBackground))
 	forestPosition := -forestTextureSize / 4.0
 	forestPosition.y -= forestTextureSize.y / 5.0
-	rl.DrawTextureEx(getTexture(.Forest), forestPosition, 0.0, 0.5, rl.WHITE)
+
+	rl.DrawTextureEx(getTexture(.ForestBackground), forestPosition, 0.0, 0.5, rl.WHITE)
+	beginModeStacked(nil, self.blockRenderTexture)
+	rl.ClearBackground({0, 0, 0, 0})
 	for rectangle in engine.collisionRectangles {
 		rl.DrawRectangleRec(iRectangleToRlRectangle(rectangle), rl.WHITE)
 	}
+	endModeStacked()
+
+	textureMaskShader := getShader(.TextureRepeatMask)
+	rl.BeginShaderMode(textureMaskShader)
+	textureShaderLocation := rl.GetShaderLocation(textureMaskShader, "texture1")
+	rl.SetShaderValueTexture(textureMaskShader, textureShaderLocation, getTexture(.ForestDirt))
+	setShaderValue(textureMaskShader, "textureResolution", getTextureSize(getTexture(.ForestDirt)))
+	setShaderValue(textureMaskShader, "flipV", 1)
+	rl.DrawTextureV(self.blockRenderTexture.texture, getCamera2DTopLeft(), rl.WHITE)
+	rl.EndShaderMode()
 }
 drawForestGraphicsEnd :: proc(self: ^ForestGraphics) {
 	self.fogShaderTime += TARGET_TIME_STEP
