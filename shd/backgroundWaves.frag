@@ -22,7 +22,7 @@ mat2 make_rotation_matrix(float ang) {
 }
 
 void main() {
-    vec2 mult = vec2(resolution.x) / 64.0;
+    vec2 mult = vec2(resolution.x) / 32.0;
     vec2 pos = floor(fragPosition / mult) * mult;
     vec2 uv = pos / resolution;
     uv += 0.5;

@@ -20,7 +20,7 @@ init :: proc() {
 	initLoadLevelProcs()
 	engine.defaultMaterial3D = loadPassthroughMaterial3D()
 	global.musicLPFFrequency = 1.0
-	global.levelIndex = .Forest
+	global.levelIndex = .Y0
 	global.changeLevel = true
 }
 
@@ -70,6 +70,7 @@ Level :: enum {
 	UnrulyLand,
 	Between,
 	Forest,
+	Y0,
 	_Count,
 }
 loadLevelProcs: [Level._Count]proc(_: mem.Allocator)
@@ -79,6 +80,7 @@ initLoadLevelProcs :: proc() {
 	loadLevelProcs[Level.UnrulyLand] = loadLevel_UnrulyLand
 	loadLevelProcs[Level.Between] = loadLevel_Between
 	loadLevelProcs[Level.Forest] = loadLevel_Forest
+	loadLevelProcs[Level.Y0] = loadLevel_Y0
 }
 loadLevel :: proc(level: Level) {
 	global.levelIndex = level
@@ -174,6 +176,23 @@ loadLevel_Forest :: proc(levelAlloc: mem.Allocator) {
 
 	_ = createForestGraphics(levelAlloc)
 	playEngineMusicStream(.Forest)
+}
+loadLevel_Y0 :: proc(levelAlloc: mem.Allocator) {
+	global.cameraFollowPlayer = true
+	global.camera.offset = {0.0, 0.0}
+	global.camera.target = {0.0, 0.0}
+	generalObjects := loadLevelGeneral(levelAlloc)
+
+	collisionBitmask := generateWorldCollisionBitmask_Empty({-32, -32, 64, 64})
+	generateElevatorSpawnAreaInCollisionBitmaskCenter(&collisionBitmask, 9)
+	generalObjects.elevator.object.pos = getElevatorWorldCenterPosition(generalObjects.elevator^, collisionBitmask)
+	generalObjects.elevator.visible = true
+	generalObjects.elevator.instant = false
+	addElevatorPlatformToCollisionBitmask(&collisionBitmask, generalObjects.elevator^)
+	addWorldCollisionBitmaskToCollision(collisionBitmask)
+
+	_ = createY0Graphics(levelAlloc)
+	playEngineMusicStream(.Y0)
 }
 
 Camera3D :: struct {

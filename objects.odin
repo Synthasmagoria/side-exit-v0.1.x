@@ -719,6 +719,31 @@ drawForestGraphicsEnd :: proc(self: ^ForestGraphics) {
 	rl.EndShaderMode()
 }
 
+Y0Graphics :: struct {
+	object:               ^GameObject,
+	backgroundShaderTime: f32,
+}
+createY0Graphics :: proc(levelAlloc: mem.Allocator) -> ^Y0Graphics {
+	self := new(Y0Graphics, levelAlloc)
+	self.object = createGameObject(ForestGraphics, self, 100, drawProc = cast(proc(_: rawptr))drawY0Graphics)
+	return self
+}
+drawY0Graphics :: proc(self: ^Y0Graphics) {
+	backgroundShader := getShader(.BackgroundWaves)
+	rl.BeginShaderMode(backgroundShader)
+	self.backgroundShaderTime += TARGET_TIME_STEP * 0.1
+	setShaderValue(backgroundShader, "time", self.backgroundShaderTime)
+	setShaderValue(backgroundShader, "resolution", rl.Vector2{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
+	setShaderValue(backgroundShader, "color_a", [4]f32{0.0, 0.0, 0.0, 1.0})
+	setShaderValue(backgroundShader, "color_b", [4]f32{72.0 / 255.0, 54.0 / 255.0, 0.0, 1.0})
+	rl.DrawRectangleRec(getCamera2DViewRect(), rl.WHITE)
+	rl.EndShaderMode()
+
+	for rectangle in engine.collisionRectangles {
+		rl.DrawRectangleLines(rectangle.x, rectangle.y, rectangle.width, rectangle.height, {255, 255, 255, 128})
+	}
+}
+
 FORWARD_3D :: rl.Vector3{1.0, 0.0, 0.0} // out of elevator
 BACKWARD_3D :: rl.Vector3{-1.0, 0.0, 0.0} // into elevator
 LEFT_3D :: rl.Vector3{0.0, 0.0, -1.0}
@@ -1208,7 +1233,7 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 				e.panelData.buttonPressStack[3] +
 				e.panelData.buttonPressStack[4] +
 				e.panelData.buttonPressStack[5]
-			possibleLevels := [?]Level{Level.Between, Level.UnrulyLand, Level.Forest}
+			possibleLevels := [?]Level{Level.Between, Level.UnrulyLand, Level.Forest, Level.Y0}
 			nextLevelIndex := hash % len(possibleLevels)
 			loadLevel(possibleLevels[nextLevelIndex])
 		}

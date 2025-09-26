@@ -182,6 +182,7 @@ MusicName :: enum {
 	UnrulyLand,
 	Between,
 	Forest,
+	Y0,
 	_Count,
 }
 loadMusicStream :: proc(ind: MusicName) -> rl.Music {
@@ -515,6 +516,9 @@ andMask2D :: proc(dest: ^[dynamic]byte, destWidth: i32, mask: [dynamic]byte, mas
 CollisionBitmask :: struct {
 	bitmask: [dynamic]byte,
 	area:    iRectangle,
+}
+generateWorldCollisionBitmask_Empty :: proc(area: iRectangle) -> CollisionBitmask {
+	return {bitmask = make([dynamic]byte, area.width * area.height, area.width * area.height), area = area}
 }
 generateWorldCollisionBitmask :: proc(
 	area: iRectangle,
