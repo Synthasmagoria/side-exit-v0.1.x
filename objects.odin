@@ -548,8 +548,47 @@ drawHubGraphicsEnd :: proc(self: ^HubGraphics) {
 	rl.DrawTexture(engine.renderTexture2D.texture, 0, 0, rl.WHITE)
 	rl.EndShaderMode()
 	endModeStacked()
-	worldPosition := global.camera.target - global.camera.offset
-	rl.DrawTextureV(self.postProcessingRenderTexture.texture, worldPosition, rl.WHITE)
+	rl.DrawTextureV(self.postProcessingRenderTexture.texture, getCamera2DTopLeft(), rl.WHITE)
+}
+
+BetweenGraphics :: struct {
+	object:                ^GameObject,
+	backgroundNoiseSprite: Sprite,
+	moonSprite:            Sprite,
+	moonPosition:          rl.Vector2,
+	moonParalax:           f32,
+}
+createBetweenGraphics :: proc(levelAllocator: mem.Allocator) -> ^BetweenGraphics {
+	self := new(BetweenGraphics, levelAllocator)
+	self.backgroundNoiseSprite = createSprite(getSpriteDef(.BetweenBackgroundNoise))
+	self.moonSprite = createSprite(getSpriteDef(.BetweenMoon))
+	self.moonPosition = {0.0, 200.0}
+	self.moonParalax = 0.8
+	self.object = createGameObject(type_of(self), self, 100, drawProc = cast(proc(_: rawptr))drawBetweenGraphics)
+	return self
+}
+drawBetweenGraphics :: proc(self: ^BetweenGraphics) {
+	updateSprite(&self.moonSprite)
+	drawSpriteEx(
+		self.moonSprite,
+		self.moonPosition + getCamera2DTopLeft() * self.moonParalax,
+		{0.75, 0.75},
+		{200, 200, 200, 255},
+	)
+
+	backgroundNoiseShader := getShader(.AnimatedTextureRepeatPosition)
+	rl.BeginShaderMode(backgroundNoiseShader)
+	updateSprite(&self.backgroundNoiseSprite)
+	setShaderValue(backgroundNoiseShader, "frameCount", self.backgroundNoiseSprite.def.frame_count)
+	setShaderValue(backgroundNoiseShader, "frameInd", cast(f32)self.backgroundNoiseSprite.frame_ind)
+	setShaderValue(backgroundNoiseShader, "frameSize", getSpriteFrameSize(self.backgroundNoiseSprite))
+	setShaderValue(backgroundNoiseShader, "offset", -getCamera2DTopLeft())
+	drawTextureRecDest(self.backgroundNoiseSprite.def.tex, getCamera2DViewRect(), {255, 0, 0, 192})
+	rl.EndShaderMode()
+
+	for rectangle in engine.collisionRectangles {
+		rl.DrawRectangleRec(iRectangleToRlRectangle(rectangle), {128, 128, 128, 200})
+	}
 }
 
 UnrulyLandGraphics :: struct {
@@ -573,21 +612,19 @@ createUnrulyLandGraphics :: proc(levelAlloc: mem.Allocator) -> ^UnrulyLandGraphi
 	return self
 }
 drawUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
-	topLeft := global.camera.target - global.camera.offset
-
-	backgroundShader := getShader(.UnrulyLandBackground)
-	self.backgroundShaderTime += TARGET_TIME_STEP
-	rl.BeginShaderMode(backgroundShader)
-	setShaderValue(backgroundShader, "resolution", [2]f32{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
-	setShaderValue(backgroundShader, "time", self.backgroundShaderTime)
-	setShaderValue(backgroundShader, "color_a", [4]f32{0.0 / 255.0, 5.0 / 255.0, 17.0 / 255.0, 1.0})
-	setShaderValue(backgroundShader, "color_b", [4]f32{22.0 / 255.0, 1.0 / 255.0, 29.0 / 255.0, 1.0})
-	setShaderValue(backgroundShader, "offset", global.camera.offset * 0.96)
-	rl.DrawRectangleV(topLeft, {RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D}, rl.WHITE)
-	rl.EndShaderMode()
+	// backgroundShader := getShader(.UnrulyLandBackground)
+	// self.backgroundShaderTime += TARGET_TIME_STEP
+	// rl.BeginShaderMode(backgroundShader)
+	// setShaderValue(backgroundShader, "resolution", [2]f32{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
+	// setShaderValue(backgroundShader, "time", self.backgroundShaderTime)
+	// setShaderValue(backgroundShader, "color_a", [4]f32{0.0 / 255.0, 5.0 / 255.0, 17.0 / 255.0, 1.0})
+	// setShaderValue(backgroundShader, "color_b", [4]f32{22.0 / 255.0, 1.0 / 255.0, 29.0 / 255.0, 1.0})
+	// setShaderValue(backgroundShader, "offset", global.camera.offset * 0.96)
+	// rl.DrawRectangleV(topLeft, {RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D}, rl.WHITE)
+	// rl.EndShaderMode()
 
 	updateStarBackground(&self.starBackground)
-	drawStarBackground(&self.starBackground, topLeft)
+	drawStarBackground(&self.starBackground, getCamera2DTopLeft())
 
 	beginModeStacked(nil, self.blockRenderTexture)
 	rl.ClearBackground({0, 0, 0, 0})
@@ -613,7 +650,7 @@ drawUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
 	setShaderValue(blockShader, "base_color_b", [4]f32{210.0 / 255.0, 0.0, 255.0 / 255.0, 1.0})
 	setShaderValue(blockShader, "band_color_a", [4]f32{246.0 / 255.0, 220.0 / 255.0, 0.0, 1.0})
 	setShaderValue(blockShader, "band_color_b", [4]f32{177.0 / 255.0, 80.0 / 255.0, 0.0, 1.0})
-	rl.DrawTextureV(self.blockRenderTexture.texture, topLeft, rl.WHITE)
+	rl.DrawTextureV(self.blockRenderTexture.texture, getCamera2DTopLeft(), rl.WHITE)
 	rl.EndShaderMode()
 }
 destroyUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {

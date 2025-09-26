@@ -222,6 +222,12 @@ TextureName :: enum {
 	InteractionIndicationArrow,
 	HubBackground,
 	HubBuilding,
+	BetweenMoon,
+	BetweenBlock0,
+	BetweenBlock1,
+	BetweenBlock2,
+	BetweenBlock3,
+	BetweenBackgroundNoise,
 	_Count,
 }
 getTexture :: proc(ind: TextureName) -> rl.Texture {
@@ -259,10 +265,17 @@ initSpriteDefs :: proc() {
 	_setSpriteDef(.InteractionIndicationArrow, 14, 8.0, {7.0, 7.0})
 	_setSpriteDef(.ElevatorPanelButton, 21, 1.0)
 	_setSpriteDef(.ElevatorPanelSymbols, 21, 0.0)
+	_setSpriteDef(.BetweenBackgroundNoise, 12, 8.0)
+	_setSpriteDef(.BetweenBlock0, 12, 8.0)
+	_setSpriteDef(.BetweenBlock1, 32, 8.0)
+	_setSpriteDef(.BetweenBlock2, 32, 8.0)
+	_setSpriteDef(.BetweenBlock3, 32, 8.0)
+	_setSpriteDef(.BetweenMoon, 686, 8.0)
 }
 
 ShaderNames :: enum {
 	AnimatedTextureRepeatPosition,
+	AnimatedTextureRepeatPositionNoRand,
 	AnimatedTextureRepeatPositionMulti,
 	FlipY,
 	InsetOutline,
@@ -937,7 +950,7 @@ getSpriteFrameSize :: proc(spr: Sprite) -> rl.Vector2 {
 drawSpriteEx :: proc(spr: Sprite, pos: rl.Vector2, scale: rl.Vector2, blend := rl.WHITE) {
 	src := getSpriteSourceRect(spr, scale)
 	frame_width := f32(spr.def.frame_width)
-	size := rl.Vector2{frame_width, frame_width} * scale
+	size := getSpriteFrameSize(spr) * scale
 	dest := rl.Rectangle{pos.x - spr.def.origin.x, pos.y - spr.def.origin.y, size.x, size.y}
 	rl.DrawTexturePro(spr.def.tex, src, dest, {0.0, 0.0}, 0.0, blend)
 }

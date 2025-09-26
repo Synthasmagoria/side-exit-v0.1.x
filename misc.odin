@@ -210,9 +210,12 @@ drawStarBackground :: proc(self: ^StarBackground, position: rl.Vector2) {
 	setShaderValue(shd, "scrollPx", self.scroll)
 	setShaderValue(shd, "offset", global.camera.offset * self.paralax)
 	setShaderValue(shd, "speedMultiplier", self.scrollSpeedMultiplier)
-	drawTextureRecDest(self.genTex, {position.x, position.y, RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
+	drawTextureRecDest(
+		self.genTex,
+		{position.x, position.y, RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D},
+		rl.WHITE,
+	)
 	rl.EndShaderMode()
-	// drawTextureRecDest(self.genTex, {position.x, position.y, cast(f32)self.genTex.width, cast(f32)self.genTex.height})
 }
 destroyStarBackground :: proc(self: ^StarBackground) {
 	rl.UnloadTexture(self.genTex)

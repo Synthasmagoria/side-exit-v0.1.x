@@ -255,6 +255,9 @@ iRectangle :: struct {
 	width:  i32,
 	height: i32,
 }
+iRectangleToRlRectangle :: proc(irec: iRectangle) -> rl.Rectangle {
+	return {cast(f32)irec.x, cast(f32)irec.y, cast(f32)irec.width, cast(f32)irec.height}
+}
 iRectangleClampVal :: proc(irec: iRectangle, a: i32, b: i32) -> iRectangle {
 	x2 := irec.x + irec.width
 	y2 := irec.y + irec.height
@@ -354,8 +357,8 @@ drawRenderTextureScaledToScreenBuffer :: proc(rtex: rl.RenderTexture) {
 	rl.EndShaderMode()
 }
 
-drawTextureRecDest :: proc(tex: rl.Texture, dest: rl.Rectangle) {
-	rl.DrawTexturePro(tex, getTextureRec(tex), dest, rl.Vector2{0.0, 0.0}, 0.0, rl.WHITE)
+drawTextureRecDest :: proc(tex: rl.Texture, dest: rl.Rectangle, blend: rl.Color) {
+	rl.DrawTexturePro(tex, getTextureRec(tex), dest, rl.Vector2{0.0, 0.0}, 0.0, blend)
 }
 debugDrawTextOutline :: proc(text: cstring, x: i32, y: i32, fontSize: i32, color: rl.Color, outlineColor: rl.Color) {
 	rl.DrawText(text, x - 1, y - 1, fontSize, outlineColor)
@@ -433,4 +436,16 @@ smoothplot :: proc(x: f32, threshold: f32, thickness: f32, smoothing: f32) -> f3
 		math.smoothstep(threshold - thickness - smoothing, threshold - thickness, x) -
 		math.smoothstep(threshold + thickness, threshold + thickness + smoothing, x) \
 	)
+}
+
+getCamera2DViewRect :: proc() -> rl.Rectangle {
+	return {
+		global.camera.target.x - global.camera.offset.x,
+		global.camera.target.y - global.camera.offset.y,
+		RENDER_TEXTURE_WIDTH_2D,
+		RENDER_TEXTURE_HEIGHT_2D,
+	}
+}
+getCamera2DTopLeft :: proc() -> rl.Vector2 {
+	return global.camera.target - global.camera.offset
 }
