@@ -229,6 +229,7 @@ TextureName :: enum {
 	BetweenBlock2,
 	BetweenBlock3,
 	BetweenBackgroundNoise,
+	Forest,
 	_Count,
 }
 getTexture :: proc(ind: TextureName) -> rl.Texture {
@@ -278,6 +279,7 @@ ShaderNames :: enum {
 	AnimatedTextureRepeatPosition,
 	AnimatedTextureRepeatPositionNoRand,
 	AnimatedTextureRepeatPositionMulti,
+	Fog,
 	FlipY,
 	InsetOutline,
 	NoiseAndCRT,
@@ -525,6 +527,23 @@ generateWorldCollisionBitmask :: proc(
 			noise := noise.noise_2d(seed, samplePosition)
 			noiseValue := math.step(threshold, noise)
 			blocks[x + y * area.width] = cast(byte)noiseValue
+		}
+	}
+	return {blocks, area}
+}
+generateWorldCollisionBitmask_Ground :: proc(
+	area: iRectangle,
+	seed: i64,
+	frequency: f64,
+	groundStart: f64,
+	groundFluctuation: f32,
+) -> CollisionBitmask {
+	blocks := make([dynamic]byte, area.width * area.height, area.width * area.height)
+	for x in 0 ..< area.width {
+		n := noise.noise_2d(seed, {f64(x) * frequency, 0.0}) * groundFluctuation
+		groundStartY := cast(i32)groundStart + cast(i32)n
+		for y in groundStartY ..< area.height {
+			blocks[x + y * area.height] = 1
 		}
 	}
 	return {blocks, area}

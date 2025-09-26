@@ -658,6 +658,39 @@ destroyUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
 	destroyStarBackground(&self.starBackground)
 }
 
+ForestGraphics :: struct {
+	object:        ^GameObject,
+	fogShaderTime: f32,
+}
+createForestGraphics :: proc(levelAlloc: mem.Allocator) -> ^ForestGraphics {
+	self := new(ForestGraphics, levelAlloc)
+	self.object = createGameObject(
+		ForestGraphics,
+		self,
+		100,
+		drawProc = cast(proc(_: rawptr))drawForestGraphics,
+		drawEndProc = cast(proc(_: rawptr))drawForestGraphicsEnd,
+	)
+	return self
+}
+drawForestGraphics :: proc(self: ^ForestGraphics) {
+	forestTextureSize := getTextureSize(getTexture(.Forest))
+	forestPosition := -forestTextureSize / 4.0
+	forestPosition.y -= forestTextureSize.y / 5.0
+	rl.DrawTextureEx(getTexture(.Forest), forestPosition, 0.0, 0.5, rl.WHITE)
+	for rectangle in engine.collisionRectangles {
+		rl.DrawRectangleRec(iRectangleToRlRectangle(rectangle), rl.WHITE)
+	}
+}
+drawForestGraphicsEnd :: proc(self: ^ForestGraphics) {
+	self.fogShaderTime += TARGET_TIME_STEP
+	fogShader := getShader(.Fog)
+	rl.BeginShaderMode(fogShader)
+	setShaderValue(fogShader, "time", self.fogShaderTime)
+	rl.DrawRectangleRec(getCamera2DViewRect(), rl.WHITE)
+	rl.EndShaderMode()
+}
+
 FORWARD_3D :: rl.Vector3{1.0, 0.0, 0.0} // out of elevator
 BACKWARD_3D :: rl.Vector3{-1.0, 0.0, 0.0} // into elevator
 LEFT_3D :: rl.Vector3{0.0, 0.0, -1.0}
