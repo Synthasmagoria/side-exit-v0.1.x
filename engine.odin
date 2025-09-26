@@ -281,6 +281,7 @@ ShaderNames :: enum {
 	AnimatedTextureRepeatPosition,
 	AnimatedTextureRepeatPositionNoRand,
 	AnimatedTextureRepeatPositionMulti,
+	BackgroundWaves,
 	Fog,
 	FlipY,
 	InsetOutline,

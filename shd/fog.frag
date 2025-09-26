@@ -28,9 +28,9 @@ float snoise_fbm(vec3 st) {
 }
 
 void main() {
-    float gradient = smoothstep(-180.0, 180.0, fragPosition.y);
-    vec2 st = fragPosition * 0.005;
-    st.y -= time * 0.01;
-    vec4 fog = vec4(vec3(0.5), snoise_fbm(vec3(st, time * 0.2)) * gradient);
+    float gradient = smoothstep(-240.0, 180.0, fragPosition.y);
+    vec2 st = fragPosition * 0.001;
+    st.y += time * 0.01;
+    vec4 fog = vec4(vec3(1.0), snoise_fbm(vec3(st, time * 0.2)) * gradient);
     gl_FragColor = fog * colDiffuse * fragColor;
 }

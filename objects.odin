@@ -612,16 +612,15 @@ createUnrulyLandGraphics :: proc(levelAlloc: mem.Allocator) -> ^UnrulyLandGraphi
 	return self
 }
 drawUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
-	// backgroundShader := getShader(.UnrulyLandBackground)
-	// self.backgroundShaderTime += TARGET_TIME_STEP
-	// rl.BeginShaderMode(backgroundShader)
-	// setShaderValue(backgroundShader, "resolution", [2]f32{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
-	// setShaderValue(backgroundShader, "time", self.backgroundShaderTime)
-	// setShaderValue(backgroundShader, "color_a", [4]f32{0.0 / 255.0, 5.0 / 255.0, 17.0 / 255.0, 1.0})
-	// setShaderValue(backgroundShader, "color_b", [4]f32{22.0 / 255.0, 1.0 / 255.0, 29.0 / 255.0, 1.0})
-	// setShaderValue(backgroundShader, "offset", global.camera.offset * 0.96)
-	// rl.DrawRectangleV(topLeft, {RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D}, rl.WHITE)
-	// rl.EndShaderMode()
+	backgroundShader := getShader(.BackgroundWaves)
+	rl.BeginShaderMode(backgroundShader)
+	self.backgroundShaderTime += TARGET_TIME_STEP * 0.5
+	setShaderValue(backgroundShader, "time", self.backgroundShaderTime)
+	setShaderValue(backgroundShader, "resolution", rl.Vector2{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
+	setShaderValue(backgroundShader, "color_a", [4]f32{0.0, 0.0, 2.0 / 255.0, 1.0})
+	setShaderValue(backgroundShader, "color_b", [4]f32{16.0 / 255.0, 0.0, 60.0 / 255.0, 1.0})
+	rl.DrawRectangleRec(getCamera2DViewRect(), rl.WHITE)
+	rl.EndShaderMode()
 
 	updateStarBackground(&self.starBackground)
 	drawStarBackground(&self.starBackground, getCamera2DTopLeft())
@@ -659,9 +658,10 @@ destroyUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
 }
 
 ForestGraphics :: struct {
-	object:             ^GameObject,
-	fogShaderTime:      f32,
-	blockRenderTexture: rl.RenderTexture,
+	object:               ^GameObject,
+	fogShaderTime:        f32,
+	blockRenderTexture:   rl.RenderTexture,
+	backgroundShaderTime: f32,
 }
 createForestGraphics :: proc(levelAlloc: mem.Allocator) -> ^ForestGraphics {
 	self := new(ForestGraphics, levelAlloc)
@@ -679,6 +679,16 @@ destroyForestGraphics :: proc(self: ^ForestGraphics) {
 	rl.UnloadRenderTexture(self.blockRenderTexture)
 }
 drawForestGraphics :: proc(self: ^ForestGraphics) {
+	backgroundShader := getShader(.BackgroundWaves)
+	rl.BeginShaderMode(backgroundShader)
+	self.backgroundShaderTime += TARGET_TIME_STEP * 0.5
+	setShaderValue(backgroundShader, "time", self.backgroundShaderTime)
+	setShaderValue(backgroundShader, "resolution", rl.Vector2{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
+	setShaderValue(backgroundShader, "color_a", [4]f32{0.0, 0.0, 2.0 / 255.0, 1.0})
+	setShaderValue(backgroundShader, "color_b", [4]f32{16.0 / 255.0, 0.0, 60.0 / 255.0, 1.0})
+	rl.DrawRectangleRec(getCamera2DViewRect(), rl.WHITE)
+	rl.EndShaderMode()
+
 	forestTextureSize := getTextureSize(getTexture(.ForestBackground))
 	forestPosition := -forestTextureSize / 4.0
 	forestPosition.y -= forestTextureSize.y / 5.0
@@ -705,7 +715,7 @@ drawForestGraphicsEnd :: proc(self: ^ForestGraphics) {
 	fogShader := getShader(.Fog)
 	rl.BeginShaderMode(fogShader)
 	setShaderValue(fogShader, "time", self.fogShaderTime)
-	rl.DrawRectangleRec(getCamera2DViewRect(), rl.WHITE)
+	rl.DrawRectangleRec(getCamera2DViewRect(), {192, 192, 192, 255})
 	rl.EndShaderMode()
 }
 
@@ -1198,7 +1208,7 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 				e.panelData.buttonPressStack[3] +
 				e.panelData.buttonPressStack[4] +
 				e.panelData.buttonPressStack[5]
-			possibleLevels := [?]Level{Level.Between, Level.UnrulyLand}
+			possibleLevels := [?]Level{Level.Between, Level.UnrulyLand, Level.Forest}
 			nextLevelIndex := hash % len(possibleLevels)
 			loadLevel(possibleLevels[nextLevelIndex])
 		}
