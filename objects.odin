@@ -392,7 +392,9 @@ setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
 		if player := getFirstGameObjectOfType(Player); player != nil {
 			player.frozenState = .PuppetNoGravity
 		}
-		movePlayer3D(&global.player3D, PLAYER_3D_OUTSIDE_POSITION, PLAYER_3D_INSIDE_POSITION, .Looking)
+		if global.player3D.state == .Inactive {
+			movePlayer3D(&global.player3D, PLAYER_3D_OUTSIDE_POSITION, PLAYER_3D_INSIDE_POSITION, .Looking)
+		}
 	case .Leaving:
 		self.blend = rl.WHITE
 		self.leavingStateData.movementTween = createTween(TweenVector2Range{{0.0, 0.0}, {0.0, -224.0}}, .Exp, 2.0)
@@ -824,6 +826,7 @@ setPlayer3DState :: proc(player: ^Player3D, nextState: Player3DState) {
 	}
 	previousState := player.state
 	player.state = nextState
+	fmt.printf("Player3D: %s -> %s\n", previousState, nextState)
 	switch player.state {
 	case .Uninitialized:
 	case .Inactive:
@@ -1350,6 +1353,7 @@ setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 	}
 
 	previousState := e.state
+	fmt.printf("Elevator3D: %s -> %s\n", previousState, newState)
 	e.state = newState
 
 	switch e.state {
