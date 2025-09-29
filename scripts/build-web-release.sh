@@ -1,4 +1,4 @@
-OUT_DIR=build/wasm/debug
+OUT_DIR=build/wasm/release
 mkdir -p $OUT_DIR
 
 odin build . -target:js_wasm32 -build-mode:obj -define:RAYLIB_WASM_LIB=env.o -out:$OUT_DIR/game.wasm.o
@@ -7,11 +7,11 @@ ODIN_PATH=$(odin root)
 
 cp $ODIN_PATH/core/sys/wasm/js/odin.js $OUT_DIR
 
-files="$OUT_DIR/game.wasm.o lib/raylib/raylib/build/wasm/debug/libraylib.web.a"
+files="$OUT_DIR/game.wasm.o lib/raylib/raylib/build/wasm/release/libraylib.web.a"
 
 # index_template.html contains the javascript code that calls the procedures in
 # source/main_web/main_web.odin
-flags="-sUSE_GLFW=3 -sWASM_BIGINT -sWARN_ON_UNDEFINED_SYMBOLS=0 -sASSERTIONS --shell-file index_template.html -sINITIAL_MEMORY=64mb -g"
+flags="-sUSE_GLFW=3 -sWASM_BIGINT -sWARN_ON_UNDEFINED_SYMBOLS=0 -sASSERTIONS --shell-file index_template.html -sINITIAL_MEMORY=64mb"
 preload="--preload-file aud --preload-file mod --preload-file shd --preload-file sfx --preload-file tex"
 
 # For debugging: Add `-g` to `emcc` (gives better error callstack in chrome)

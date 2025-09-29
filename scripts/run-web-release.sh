@@ -1,3 +1,3 @@
-pushd build/wasm/debug
+pushd build/wasm/release
 python3 -m http.server
 popd

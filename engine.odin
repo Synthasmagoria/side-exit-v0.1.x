@@ -134,11 +134,7 @@ loadSounds :: proc() {
 		n := transmute([]u8)strings.clone(name)
 		n[0] = charLower(n[0])
 		path := strings.join({"sfx/", cast(string)n, ".wav"}, "", context.temp_allocator)
-		if looping[i] {
-			resources.sounds[i] = rl.LoadSoundLooping(strings.clone_to_cstring(path))
-		} else {
-			resources.sounds[i] = rl.LoadSound(strings.clone_to_cstring(path))
-		}
+		resources.sounds[i] = rl.LoadSound(strings.clone_to_cstring(path), looping[i])
 	}
 }
 unloadSounds :: proc() {
@@ -284,6 +280,7 @@ ShaderNames :: enum {
 	AnimatedTextureRepeatPositionMulti,
 	BackgroundWaves,
 	Fog,
+	Flip,
 	FlipY,
 	InsetOutline,
 	NoiseAndCRT,

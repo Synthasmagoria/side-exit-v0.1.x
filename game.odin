@@ -9,6 +9,8 @@ import "core:math/noise"
 import mem "core:mem"
 import rl "lib/raylib"
 
+DEBUG_LEVEL :: Level.Y0
+
 init :: proc() {
 	initEngine()
 	loadModels()
@@ -20,8 +22,12 @@ init :: proc() {
 	initLoadLevelProcs()
 	engine.defaultMaterial3D = loadPassthroughMaterial3D()
 	global.musicLPFFrequency = 1.0
-	global.levelIndex = .Y0
 	global.changeLevel = true
+	when ODIN_DEBUG {
+		global.levelIndex = DEBUG_LEVEL
+	} else {
+		global.levelIndex = .TitleMenu
+	}
 }
 
 deinit :: proc() {

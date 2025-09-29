@@ -136,7 +136,13 @@ updatePlayer :: proc(self: ^Player) {
 	}
 }
 drawPlayer :: proc(self: ^Player) {
-	drawSpriteEx(self.currentSpr^, self.object.pos, self.scale)
+	flipShader := getShader(.Flip)
+	flip: iVector2 = {cast(i32)(math.sign(self.scale.x) == -1), cast(i32)(math.sign(self.scale.y) == -1)}
+	rl.BeginShaderMode(flipShader)
+	setShaderValue(flipShader, "flipX", flip.x)
+	setShaderValue(flipShader, "flipY", flip.y)
+	drawSpriteEx(self.currentSpr^, self.object.pos, {abs(self.scale.x), abs(self.scale.y)})
+	rl.EndShaderMode()
 }
 MoveAndCollidePlayerResult :: struct {
 	newPosition: rl.Vector2,

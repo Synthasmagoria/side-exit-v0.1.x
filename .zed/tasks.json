@@ -1,7 +1,18 @@
 [
   {
-    "label": "Run",
-    "command": "odin run .",
+    "label": "Run (debug)",
+    "command": "odin run . -debug",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "hide": "never",
+    "shell": "system",
+    "show_summary": true,
+    "show_command": true
+  },
+  {
+    "label": "Run (release)",
+    "command": "odin run . -o:speed",
     "use_new_terminal": false,
     "allow_concurrent_runs": false,
     "reveal": "always",
