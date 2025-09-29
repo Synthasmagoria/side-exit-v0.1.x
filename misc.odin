@@ -26,7 +26,7 @@ web10CreateTexture :: proc(size: iVector2, spr_def: SpriteDef, num: i32) -> rl.T
 
 	rtex := rl.LoadRenderTexture(tex_w, size.y)
 	defer rl.UnloadRenderTexture(rtex)
-	beginModeStacked(getZeroCamera2D(), rtex)
+	beginModeStacked(getZeroCamera(), rtex)
 	rl.ClearBackground(rl.Color{0, 0, 0, 0})
 
 	for i: i32 = 0; i < spr_def.frame_count; i += 1 {
@@ -79,7 +79,7 @@ web10CreateTexture2D :: proc(
 		}
 	}
 
-	beginModeStacked(getZeroCamera2D(), renderTexture)
+	beginModeStacked(getZeroCamera(), renderTexture)
 	for i in 0 ..< len(spriteDefinitions) {
 		offsetY := cast(f32)(cast(i32)i * frameSize.y)
 		for j in 0 ..< frameCount {

@@ -542,7 +542,7 @@ drawHubGraphics :: proc(self: ^HubGraphics) {
 }
 drawHubGraphicsEnd :: proc(self: ^HubGraphics) {
 	// TODO: This shit could be done a lot more optimally
-	beginModeStacked(getZeroCamera2D(), self.postProcessingRenderTexture)
+	beginModeStacked(getZeroCamera(), self.postProcessingRenderTexture)
 	shader := getShader(.NoiseAndCRT)
 	rl.BeginShaderMode(shader)
 	self.shaderTime += TARGET_TIME_STEP
@@ -1385,7 +1385,7 @@ setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 	}
 }
 renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^ElevatorPanelData) {
-	beginModeStacked(getZeroCamera2D(), renderTexture)
+	beginModeStacked(getZeroCamera(), renderTexture)
 	rl.ClearBackground({0, 0, 0, 0})
 
 	buttonSprite := createSprite(getSpriteDef(.ElevatorPanelButton))
