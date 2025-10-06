@@ -2,6 +2,5 @@
 The game is currently under development. Follow development/try the latest demo on itch.io:
 https://synthasmagoria.itch.io/side-exit
 
-Short preview video:
+https://github.com/user-attachments/assets/f18522fd-9e0d-42ab-90b2-cbadce2005b0
 
-[![Preview video](https://img.youtube.com/vi/4beTfVPIVPU/0.jpg)](https://www.youtube.com/watch?v=4beTfVPIVPU)
