@@ -9,7 +9,7 @@ import "core:math/noise"
 import mem "core:mem"
 import rl "lib/raylib"
 
-DEBUG_LEVEL :: Level.Y0
+DEBUG_LEVEL :: Level.TitleMenu
 
 init :: proc() {
 	initEngine()
