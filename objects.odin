@@ -385,7 +385,9 @@ elevatorSetState :: proc(self: ^Elevator, newState: ElevatorState) {
 		if player := getFirstGameObjectOfType(Player); player != nil {
 			player.frozenState = .PuppetNoGravity
 		}
-		player3DMove(&global.player3D, PLAYER_3D_OUTSIDE_POSITION, PLAYER_3D_INSIDE_POSITION, .Looking)
+		if global.player3D.state == .Inactive {
+		    player3DMove(&global.player3D, PLAYER_3D_OUTSIDE_POSITION, PLAYER_3D_INSIDE_POSITION, .Looking)
+		}
 	case .Leaving:
 		self.blend = rl.WHITE
 		self.leavingStateData.movementTween = createTween(TweenVector2Range{{0.0, 0.0}, {0.0, -224.0}}, .Exp, 2.0)
@@ -535,7 +537,7 @@ hubGraphicsDraw :: proc(self: ^HubGraphics) {
 }
 hubGraphicsDrawEnd :: proc(self: ^HubGraphics) {
 	// TODO: This shit could be done a lot more optimally
-	beginModeStacked(getZeroCamera2D(), self.postProcessingRenderTexture)
+	beginModeStacked(camera2DGetZero(), self.postProcessingRenderTexture)
 	shader := getShader(.NoiseAndCRT)
 	rl.BeginShaderMode(shader)
 	self.shaderTime += TARGET_TIME_STEP
@@ -818,6 +820,7 @@ player3DSetState :: proc(player: ^Player3D, nextState: Player3DState) {
 	}
 	previousState := player.state
 	player.state = nextState
+	fmt.printf("Player3D: %s -> %s\n", previousState, nextState)
 	switch player.state {
 	case .Uninitialized:
 	case .Inactive:
@@ -1344,6 +1347,7 @@ elevator3DSetState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 	}
 
 	previousState := e.state
+	fmt.printf("Elevator3D: %s -> %s\n", previousState, newState)
 	e.state = newState
 
 	switch e.state {
@@ -1379,7 +1383,7 @@ elevator3DSetState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 	}
 }
 elevator3DPanelRenderTexture :: proc(renderTexture: rl.RenderTexture, data: ^ElevatorPanelData) {
-	beginModeStacked(getZeroCamera2D(), renderTexture)
+	beginModeStacked(camera2DGetZero(), renderTexture)
 	rl.ClearBackground({0, 0, 0, 0})
 
 	buttonSprite := createSprite(getSpriteDef(.ElevatorPanelButton))

@@ -9,7 +9,8 @@ import "core:math/noise"
 import mem "core:mem"
 import rl "lib/raylib"
 
-DEBUG_LEVEL :: Level.TitleMenu
+DEBUG_START_LEVEL :: Level.TitleMenu
+RELEASE_START_LEVEL :: Level.TitleMenu
 
 init :: proc() {
 	initEngine()
@@ -21,12 +22,16 @@ init :: proc() {
 	initLights()
 	initLoadLevelProcs()
 	engine.defaultMaterial3D = materialLoadPassthrough3D()
+	global.camera = camera2DGetZero()
+	global.camera3D = camera3DGetZero()
+	global.debugCamera = camera2DGetZero()
+	global.debugCamera3D = camera3DGetZero()
 	global.musicLPFFrequency = 1.0
 	global.changeLevel = true
 	when ODIN_DEBUG {
-		global.levelIndex = DEBUG_LEVEL
+		global.levelIndex = DEBUG_START_LEVEL
 	} else {
-		global.levelIndex = .TitleMenu
+		global.levelIndex = RELEASE_START_LEVEL
 	}
 }
 
@@ -104,8 +109,8 @@ loadLevelGeneral :: proc(levelAlloc: mem.Allocator) -> GeneralLevelObjects {
 }
 loadLevel_TitleMenu :: proc(levelAlloc: mem.Allocator) {
 	global.cameraFollowPlayer = false
-	global.camera = getZeroCamera2D()
-	global.camera3D = getZeroCamera3D()
+	global.camera = camera2DGetZero()
+	global.camera3D = camera3DGetZero()
 	_ = titleMenuCreate(levelAlloc)
 	_ = titleMenuBackgroundCreate(levelAlloc)
 }
@@ -224,10 +229,10 @@ Global :: struct {
 	windowCloseRequest: bool,
 }
 global := Global {
-	camera        = getZeroCamera2D(),
-	debugCamera   = getZeroCamera2D(),
-	camera3D      = getZeroCamera3D(),
-	debugCamera3D = getZeroCamera3D(),
+	camera        = camera2DGetZero(),
+	debugCamera   = camera2DGetZero(),
+	camera3D      = camera3DGetZero(),
+	debugCamera3D = camera3DGetZero(),
 }
 
 dynamicArenaAllocatorDebugProc_Level :: proc(
@@ -311,8 +316,10 @@ gameStep :: proc() {
 	rl.UpdateMusicStream(global.music)
 
 	debugModePrevious := global.debugMode
-	if rl.IsKeyPressed(.BACKSPACE) {
-		global.debugMode = global.debugMode ? false : true
+	when ODIN_DEBUG {
+		if rl.IsKeyPressed(.BACKSPACE) {
+			global.debugMode = global.debugMode ? false : true
+		}
 	}
 	currentCamera := &global.camera
 	currentCamera3D := &global.camera3D
@@ -376,14 +383,20 @@ gameStep :: proc() {
 
 	drawRenderTextureScaledToScreenBuffer(engine.renderTexture3D)
 
-	if player != nil {
-		if global.player3D.state != .Inactive {
-			debugDrawGlobalCamera3DInfo(currentCamera3D._camera, 4, 4)
-		} else {
-			debugDrawPlayerInfo(player^, 4, 4)
+	when ODIN_DEBUG {
+		if global.debugMode {
+			if player != nil {
+				if global.player3D.state != .Inactive {
+					debugDrawGlobalCamera3DInfo(currentCamera3D._camera, 4, 4)
+				} else {
+					debugDrawPlayerInfo(player^, 4, 4)
+				}
+			} else {
+				debugDrawGlobalCamera3DInfo(currentCamera3D._camera, 4, 4)
+			}
+			debugDrawFrameTime(rl.GetScreenWidth() - 4, 4)
 		}
 	}
-	debugDrawFrameTime(rl.GetScreenWidth() - 4, 4)
 
 	rl.EndDrawing()
 	mem.dynamic_arena_reset(&engine.frameArena)

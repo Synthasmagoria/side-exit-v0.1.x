@@ -801,7 +801,7 @@ debugDrawGameObjectCollisions :: proc() {
 	}
 }
 
-getZeroCamera2D :: proc "contextless" () -> rl.Camera2D {
+camera2DGetZero :: proc "contextless" () -> rl.Camera2D {
 	return {
 		offset = {RENDER_TEXTURE_WIDTH_2D / 2, RENDER_TEXTURE_HEIGHT_2D / 2},
 		target = {RENDER_TEXTURE_WIDTH_2D / 2, RENDER_TEXTURE_HEIGHT_2D / 2},
@@ -810,7 +810,7 @@ getZeroCamera2D :: proc "contextless" () -> rl.Camera2D {
 	}
 }
 
-getZeroCamera3D :: proc "contextless" () -> Camera3D {
+camera3DGetZero :: proc "contextless" () -> Camera3D {
 	return {
 		_camera = {
 			position = {0.0, 0.0, 0.0},
@@ -820,6 +820,8 @@ getZeroCamera3D :: proc "contextless" () -> Camera3D {
 			fovy = 90.0,
 		},
 		shakeOffset = {0.0, 0.0, 0.0},
+		position = {0.0, 0.0, 0.0},
+		target = FORWARD_3D,
 	}
 }
 
