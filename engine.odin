@@ -166,7 +166,7 @@ loadModels :: proc() {
 unloadModels :: proc() {
 	for model in resources.models {
 		for i in 0 ..< model.materialCount {
-			unloadMaterialNoMap(model.materials[i])
+			materialUnloadNoMap(model.materials[i])
 		}
 		rl.UnloadModel(model)
 	}
@@ -330,14 +330,14 @@ loadAndResolveShader :: proc(name: string) -> Maybe(rl.Shader) {
 	vertPath := strings.join(vertPathParts[:], "")
 	fragPath := strings.join(fragPathParts[:], "")
 
-	vertCodeBytes, vertFileReadSuccess := readEntireFile(vertPath)
+	vertCodeBytes, vertFileReadSuccess := fileReadFull(vertPath)
 	if !vertFileReadSuccess {
 		msgParts := [?]string{"Couldn't read vertex shader at '", vertPath, "'"}
 		rl.TraceLog(.WARNING, strings.clone_to_cstring(strings.join(msgParts[:], "")))
 		return nil
 	}
 
-	fragCodeBytes, fragCodeReadSuccess := readEntireFile(fragPath)
+	fragCodeBytes, fragCodeReadSuccess := fileReadFull(fragPath)
 	if !fragCodeReadSuccess {
 		msgParts := [?]string{"Coultn't read fragment shader at '", fragPath, "'"}
 		rl.TraceLog(.WARNING, strings.clone_to_cstring(strings.join(msgParts[:], "")))
@@ -390,7 +390,7 @@ resolveShaderIncludes :: proc(shdStr: string, dir: string) -> (string, ResolveSh
 			}
 			includePathParts := [?]string{dir, vertCodeLoopSlice[openingQuote + 1:closingQuote + 1]}
 
-			includeCodeBytes, includeCodeReadSuccess := readEntireFile(strings.join(includePathParts[:], ""))
+			includeCodeBytes, includeCodeReadSuccess := fileReadFull(strings.join(includePathParts[:], ""))
 			if !includeCodeReadSuccess {
 				return shdStr, .CouldntReadIncludeFile
 			}
@@ -440,37 +440,37 @@ lightShaderPreviousId: u32 = 0
 MAX_LIGHTS :: 4
 // TODO: Possibly optimizable with constant locations by using a shader include system
 applyLightToShader :: proc(shd: rl.Shader) {
-	setShaderValue(shd, "ambient", engine.ambientLightingColor)
-	setShaderValue(shd, "viewPos", global.camera3D.position)
+	shaderSetValue(shd, "ambient", engine.ambientLightingColor)
+	shaderSetValue(shd, "viewPos", global.camera3D.position)
 
 	if shd.id == lightShaderPreviousId {
 		return
 	}
 	lightShaderPreviousId = shd.id
 
-	setShaderValue(shd, "lights[0].enabled", engine.lights3D[0].enabled)
-	setShaderValue(shd, "lights[0].type", cast(i32)engine.lights3D[0].type)
-	setShaderValue(shd, "lights[0].position", engine.lights3D[0].position)
-	setShaderValue(shd, "lights[0].target", engine.lights3D[0].target)
-	setShaderValue(shd, "lights[0].color", engine.lights3D[0].color)
+	shaderSetValue(shd, "lights[0].enabled", engine.lights3D[0].enabled)
+	shaderSetValue(shd, "lights[0].type", cast(i32)engine.lights3D[0].type)
+	shaderSetValue(shd, "lights[0].position", engine.lights3D[0].position)
+	shaderSetValue(shd, "lights[0].target", engine.lights3D[0].target)
+	shaderSetValue(shd, "lights[0].color", engine.lights3D[0].color)
 
-	setShaderValue(shd, "lights[1].enabled", engine.lights3D[1].enabled)
-	setShaderValue(shd, "lights[0].type", cast(i32)engine.lights3D[1].type)
-	setShaderValue(shd, "lights[1].position", engine.lights3D[1].position)
-	setShaderValue(shd, "lights[1].target", engine.lights3D[1].target)
-	setShaderValue(shd, "lights[1].color", engine.lights3D[1].color)
+	shaderSetValue(shd, "lights[1].enabled", engine.lights3D[1].enabled)
+	shaderSetValue(shd, "lights[0].type", cast(i32)engine.lights3D[1].type)
+	shaderSetValue(shd, "lights[1].position", engine.lights3D[1].position)
+	shaderSetValue(shd, "lights[1].target", engine.lights3D[1].target)
+	shaderSetValue(shd, "lights[1].color", engine.lights3D[1].color)
 
-	setShaderValue(shd, "lights[2].enabled", engine.lights3D[2].enabled)
-	setShaderValue(shd, "lights[0].type", cast(i32)engine.lights3D[2].type)
-	setShaderValue(shd, "lights[2].position", engine.lights3D[2].position)
-	setShaderValue(shd, "lights[2].target", engine.lights3D[2].target)
-	setShaderValue(shd, "lights[2].color", engine.lights3D[2].color)
+	shaderSetValue(shd, "lights[2].enabled", engine.lights3D[2].enabled)
+	shaderSetValue(shd, "lights[0].type", cast(i32)engine.lights3D[2].type)
+	shaderSetValue(shd, "lights[2].position", engine.lights3D[2].position)
+	shaderSetValue(shd, "lights[2].target", engine.lights3D[2].target)
+	shaderSetValue(shd, "lights[2].color", engine.lights3D[2].color)
 
-	setShaderValue(shd, "lights[3].enabled", engine.lights3D[3].enabled)
-	setShaderValue(shd, "lights[0].type", cast(i32)engine.lights3D[3].type)
-	setShaderValue(shd, "lights[3].position", engine.lights3D[3].position)
-	setShaderValue(shd, "lights[3].target", engine.lights3D[3].target)
-	setShaderValue(shd, "lights[3].color", engine.lights3D[3].color)
+	shaderSetValue(shd, "lights[3].enabled", engine.lights3D[3].enabled)
+	shaderSetValue(shd, "lights[0].type", cast(i32)engine.lights3D[3].type)
+	shaderSetValue(shd, "lights[3].position", engine.lights3D[3].position)
+	shaderSetValue(shd, "lights[3].target", engine.lights3D[3].target)
+	shaderSetValue(shd, "lights[3].color", engine.lights3D[3].color)
 }
 ACTIVE_LIGHTS :: 1
 setLightStatus :: proc(val: i32) {
@@ -788,7 +788,7 @@ getObjectAbsoluteCollisionRectangle :: proc(object: ^GameObject, offset: rl.Vect
 }
 debugDrawGameObjectCollisions :: proc() {
 	whiteTex := getTexture(.White32)
-	whiteTexSrc := getTextureRec(whiteTex)
+	whiteTexSrc := textureGetRectangle(whiteTex)
 	for i in 0 ..< len(engine.gameObjects) {
 		rl.DrawTexturePro(
 			whiteTex,

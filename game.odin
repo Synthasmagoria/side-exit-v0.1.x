@@ -20,7 +20,7 @@ init :: proc() {
 	initSpriteDefs()
 	initLights()
 	initLoadLevelProcs()
-	engine.defaultMaterial3D = loadPassthroughMaterial3D()
+	engine.defaultMaterial3D = materialLoadPassthrough3D()
 	global.musicLPFFrequency = 1.0
 	global.changeLevel = true
 	when ODIN_DEBUG {
@@ -97,24 +97,24 @@ GeneralLevelObjects :: struct {
 	elevator: ^Elevator,
 }
 loadLevelGeneral :: proc(levelAlloc: mem.Allocator) -> GeneralLevelObjects {
-	elevator := createElevator(levelAlloc)
+	elevator := elevatorCreate(levelAlloc)
 	elevator.object.pos = {0.0, 56.0}
-	player := createPlayer(levelAlloc)
+	player := playerCreate(levelAlloc)
 	return {player, elevator}
 }
 loadLevel_TitleMenu :: proc(levelAlloc: mem.Allocator) {
 	global.cameraFollowPlayer = false
 	global.camera = getZeroCamera2D()
 	global.camera3D = getZeroCamera3D()
-	_ = createTitleMenu(levelAlloc)
-	_ = createTitleMenuBackground(levelAlloc)
+	_ = titleMenuCreate(levelAlloc)
+	_ = titleMenuBackgroundCreate(levelAlloc)
 }
 loadLevel_Hub :: proc(levelAlloc: mem.Allocator) {
 	global.cameraFollowPlayer = false
 	global.camera.target = {RENDER_TEXTURE_WIDTH_2D / 2, RENDER_TEXTURE_HEIGHT_2D / 2}
 	global.camera.offset = {RENDER_TEXTURE_WIDTH_2D / 2, RENDER_TEXTURE_HEIGHT_2D / 2}
 	generalObjects := loadLevelGeneral(levelAlloc)
-	_ = createHubGraphics(levelAlloc)
+	_ = hubGraphicsCreate(levelAlloc)
 	generalObjects.player.object.pos = {RENDER_TEXTURE_WIDTH_2D / 2, RENDER_TEXTURE_HEIGHT_2D / 2}
 	generalObjects.elevator.object.pos = {146.0, 151.0}
 	generalObjects.elevator.visible = false
@@ -135,13 +135,13 @@ loadLevel_UnrulyLand :: proc(levelAlloc: mem.Allocator) {
 
 	collisionBitmask := generateWorldCollisionBitmask({-64, -64, 128, 128}, -0.2, 0, 8.0)
 	generateElevatorSpawnAreaInCollisionBitmaskCenter(&collisionBitmask, 9)
-	generalObjects.elevator.object.pos = getElevatorWorldCenterPosition(generalObjects.elevator^, collisionBitmask)
+	generalObjects.elevator.object.pos = elevatorGetWorldCenterPosition(generalObjects.elevator^, collisionBitmask)
 	generalObjects.elevator.visible = true
 	generalObjects.elevator.instant = false
 	addElevatorPlatformToCollisionBitmask(&collisionBitmask, generalObjects.elevator^)
 	addWorldCollisionBitmaskToCollision(collisionBitmask)
 
-	_ = createUnrulyLandGraphics(levelAlloc)
+	_ = unrulyLandGraphicsCreate(levelAlloc)
 	playEngineMusicStream(.UnrulyLand)
 }
 loadLevel_Between :: proc(levelAlloc: mem.Allocator) {
@@ -152,13 +152,13 @@ loadLevel_Between :: proc(levelAlloc: mem.Allocator) {
 
 	collisionBitmask := generateWorldCollisionBitmask({-64, -64, 128, 128}, 0.5, 0, 8.0)
 	generateElevatorSpawnAreaInCollisionBitmaskCenter(&collisionBitmask, 9)
-	generalObjects.elevator.object.pos = getElevatorWorldCenterPosition(generalObjects.elevator^, collisionBitmask)
+	generalObjects.elevator.object.pos = elevatorGetWorldCenterPosition(generalObjects.elevator^, collisionBitmask)
 	generalObjects.elevator.visible = true
 	generalObjects.elevator.instant = false
 	addElevatorPlatformToCollisionBitmask(&collisionBitmask, generalObjects.elevator^)
 	addWorldCollisionBitmaskToCollision(collisionBitmask)
 
-	_ = createBetweenGraphics(levelAlloc)
+	_ = betweenGraphicsCreate(levelAlloc)
 	playEngineMusicStream(.Between)
 }
 loadLevel_Forest :: proc(levelAlloc: mem.Allocator) {
@@ -174,13 +174,13 @@ loadLevel_Forest :: proc(levelAlloc: mem.Allocator) {
 		groundFluctuation = 3.0,
 	)
 	generateElevatorSpawnAreaInCollisionBitmaskCenter(&collisionBitmask, 9)
-	generalObjects.elevator.object.pos = getElevatorWorldCenterPosition(generalObjects.elevator^, collisionBitmask)
+	generalObjects.elevator.object.pos = elevatorGetWorldCenterPosition(generalObjects.elevator^, collisionBitmask)
 	generalObjects.elevator.visible = true
 	generalObjects.elevator.instant = false
 	addElevatorPlatformToCollisionBitmask(&collisionBitmask, generalObjects.elevator^)
 	addWorldCollisionBitmaskToCollision(collisionBitmask)
 
-	_ = createForestGraphics(levelAlloc)
+	_ = forestGraphicsCreate(levelAlloc)
 	playEngineMusicStream(.Forest)
 }
 loadLevel_Y0 :: proc(levelAlloc: mem.Allocator) {
@@ -191,13 +191,13 @@ loadLevel_Y0 :: proc(levelAlloc: mem.Allocator) {
 
 	collisionBitmask := generateWorldCollisionBitmask_Empty({-32, -32, 64, 64})
 	generateElevatorSpawnAreaInCollisionBitmaskCenter(&collisionBitmask, 9)
-	generalObjects.elevator.object.pos = getElevatorWorldCenterPosition(generalObjects.elevator^, collisionBitmask)
+	generalObjects.elevator.object.pos = elevatorGetWorldCenterPosition(generalObjects.elevator^, collisionBitmask)
 	generalObjects.elevator.visible = true
 	generalObjects.elevator.instant = false
 	addElevatorPlatformToCollisionBitmask(&collisionBitmask, generalObjects.elevator^)
 	addWorldCollisionBitmaskToCollision(collisionBitmask)
 
-	_ = createY0Graphics(levelAlloc)
+	_ = y0GraphicsCreate(levelAlloc)
 	playEngineMusicStream(.Y0)
 }
 
@@ -294,11 +294,6 @@ deinitRaylib :: proc() {
 	rl.CloseAudioDevice()
 }
 
-setGameGlobals :: proc() {
-	global.player3D = createPlayer3D()
-	global.elevator3D = createElevator3D()
-}
-
 gameStep :: proc() {
 	player := getFirstGameObjectOfType(Player)
 	elevator := getFirstGameObjectOfType(Elevator)
@@ -371,12 +366,12 @@ gameStep :: proc() {
 	if global.debugMode {
 		rl.DrawGrid(10, 1.0)
 	}
-	updateElevator3D(&global.elevator3D)
-	updatePlayer3D(&global.player3D)
+	elevator3DUpdate(&global.elevator3D)
+	player3DUpdate(&global.player3D)
 	for object in engine.gameObjects {
 		object.draw3DProc(object.data)
 	}
-	drawElevator3D(&global.elevator3D)
+	elevator3DDraw(&global.elevator3D)
 	endModeStacked()
 
 	drawRenderTextureScaledToScreenBuffer(engine.renderTexture3D)

@@ -12,7 +12,7 @@ import rl "lib/raylib"
 import rlgl "lib/raylib/rlgl"
 
 @(require_results)
-readEntireFile :: proc(
+fileReadFull :: proc(
 	name: string,
 	allocator := context.allocator,
 	loc := #caller_location,
@@ -20,11 +20,11 @@ readEntireFile :: proc(
 	data: []byte,
 	success: bool,
 ) {
-	return _readEntireFile(name, allocator, loc)
+	return _fileReadFull(name, allocator, loc)
 }
 
-writeEntireFile :: proc(name: string, data: []byte, truncate := true) -> (success: bool) {
-	return _writeEntireFile(name, data, truncate)
+fileWriteFull :: proc(name: string, data: []byte, truncate := true) -> (success: bool) {
+	return _fileWriteFull(name, data, truncate)
 }
 
 when ODIN_ARCH == .wasm32 || ODIN_ARCH == .wasm64p32 {
@@ -49,11 +49,7 @@ when ODIN_ARCH == .wasm32 || ODIN_ARCH == .wasm64p32 {
 	}
 
 	// Similar to raylib's LoadFileData
-	_readEntireFile :: proc(
-		name: string,
-		allocator := context.allocator,
-		loc := #caller_location,
-	) -> (
+	_fileReadFull :: proc(name: string,allocator := context.allocator,loc := #caller_location) -> (
 		data: []byte,
 		success: bool,
 	) {
@@ -104,7 +100,7 @@ when ODIN_ARCH == .wasm32 || ODIN_ARCH == .wasm64p32 {
 	// save any data between sessions. So when you close the tab your saved files
 	// are gone. Perhaps you could communicate back to emscripten and save a cookie.
 	// Or communicate with a server and tell it to save data.
-	_writeEntireFile :: proc(name: string, data: []byte, truncate := true) -> (success: bool) {
+	_fileWriteFull :: proc(name: string, data: []byte, truncate := true) -> (success: bool) {
 		if name == "" {
 			log.error("No file name provided")
 			return
@@ -132,7 +128,7 @@ when ODIN_ARCH == .wasm32 || ODIN_ARCH == .wasm64p32 {
 		return true
 	}
 } else {
-	_readEntireFile :: proc(
+	_fileReadFull :: proc(
 		name: string,
 		allocator := context.allocator,
 		loc := #caller_location,
@@ -143,12 +139,20 @@ when ODIN_ARCH == .wasm32 || ODIN_ARCH == .wasm64p32 {
 		return os.read_entire_file(name, allocator, loc)
 	}
 
-	_writeEntireFile :: proc(name: string, data: []byte, truncate := true) -> (success: bool) {
+	_fileWriteFull :: proc(name: string, data: []byte, truncate := true) -> (success: bool) {
 		return os.write_entire_file(name, data, truncate)
 	}
 }
 
-unloadMaterialNoMap :: proc(material: rl.Material) {
+materialLoadPassthrough3D :: proc(albedoTexture: Maybe(rl.Texture) = nil) -> rl.Material {
+	material := rl.LoadMaterialDefault()
+	material.shader = getShader(.Passthrough3D)
+	if albedoTexture != nil {
+		rl.SetMaterialTexture(&material, .ALBEDO, albedoTexture.?)
+	}
+	return material
+}
+materialUnloadNoMap :: proc(material: rl.Material) {
 	if material.shader.id != rlgl.GetShaderIdDefault() {
 		rl.UnloadShader(material.shader)
 	}
@@ -166,6 +170,12 @@ wrapi :: proc(val, mn, mx: $T) -> T {
 	newVal = T(f32(newVal) - math.floor(f32(val) / f32(mx - mn)) * f32(mx - mn))
 	return newVal + mn
 }
+smoothplot :: proc(x: f32, threshold: f32, thickness: f32, smoothing: f32) -> f32 {
+	return(
+		math.smoothstep(threshold - thickness - smoothing, threshold - thickness, x) -
+		math.smoothstep(threshold + thickness, threshold + thickness + smoothing, x) \
+	)
+}
 
 charLower :: proc(c: u8) -> u8 {
 	if c >= 'A' && c <= 'Z' {
@@ -173,19 +183,19 @@ charLower :: proc(c: u8) -> u8 {
 	}
 	return c
 }
-getTextureSize :: proc(tex: rl.Texture) -> rl.Vector2 {
+textureGetSize :: proc(tex: rl.Texture) -> rl.Vector2 {
 	return {f32(tex.width), f32(tex.height)}
 }
-getTextureDestRecCentered :: proc(tex: rl.Texture, areaSize: rl.Vector2) -> rl.Rectangle {
-	texSize := getTextureSize(tex)
+textureGetDestinationRectangleCentered :: proc(tex: rl.Texture, areaSize: rl.Vector2) -> rl.Rectangle {
+	texSize := textureGetSize(tex)
 	return {areaSize.x / 2.0 - texSize.x / 2.0, areaSize.y / 2.0 - texSize.y / 2.0, texSize.x, texSize.y}
 }
-getTextureDestinationRectangle :: proc(texture: rl.Texture, offset: rl.Vector2) -> rl.Rectangle {
-	textureSize := getTextureSize(texture)
+textureGetDestinationRectangle :: proc(texture: rl.Texture, offset: rl.Vector2) -> rl.Rectangle {
+	textureSize := textureGetSize(texture)
 	return {offset.x, offset.y, textureSize.x, textureSize.y}
 }
-getTextureDestRecCenteredFit :: proc(tex: rl.Texture, areaSize: rl.Vector2, inset: f32) -> rl.Rectangle {
-	texSize := getTextureSize(tex)
+textureGetDestinationRectangleCenteredFit :: proc(tex: rl.Texture, areaSize: rl.Vector2, inset: f32) -> rl.Rectangle {
+	texSize := textureGetSize(tex)
 	maxTexLength := max(texSize.x, texSize.y)
 	maxAreaLength := max(areaSize.x, areaSize.y)
 	if texSize.x > areaSize.x || texSize.y > areaSize.y {
@@ -203,16 +213,13 @@ getTextureDestRecCenteredFit :: proc(tex: rl.Texture, areaSize: rl.Vector2, inse
 	}
 	return rect
 }
-getTextureRec :: proc(tex: rl.Texture) -> rl.Rectangle {
+textureGetRectangle :: proc(tex: rl.Texture) -> rl.Rectangle {
 	return {0.0, 0.0, f32(tex.width), f32(tex.height)}
 }
-getTextureRecYflip :: proc(tex: rl.Texture) -> rl.Rectangle {
+textureGetRectangleYflip :: proc(tex: rl.Texture) -> rl.Rectangle {
 	return {0.0, f32(tex.height), f32(tex.width), -f32(tex.height)}
 }
 
-pointInCircle :: proc(point: rl.Vector2, circlePosition: rl.Vector2, circleRadius: f32) -> bool {
-	return linalg.distance(point, circlePosition) < circleRadius
-}
 rectangleInRectangle :: proc {
 	rectangleInRectangleF32,
 	rectangleInRectangleI32,
@@ -222,6 +229,12 @@ rectangleInRectangleF32 :: proc(a: rl.Rectangle, b: rl.Rectangle) -> bool {
 }
 rectangleInRectangleI32 :: proc(a: iRectangle, b: iRectangle) -> bool {
 	return a.x + a.width >= b.x && a.x < b.x + b.width && a.y + a.height >= b.y && a.y < b.y + b.height
+}
+rectangleShift :: proc(rec: rl.Rectangle, off: rl.Vector2) -> rl.Rectangle {
+	return {rec.x + off.x, rec.y + off.y, rec.width, rec.height}
+}
+rectangleGetCenter :: proc(rectangle: rl.Rectangle) -> rl.Vector2 {
+	return {rectangle.x + rectangle.width / 2.0, rectangle.y + rectangle.height / 2.0}
 }
 pointInRectangle :: proc {
 	pointInRectangleF32,
@@ -243,8 +256,8 @@ pointInRectangleI32 :: proc(point: iVector2, rectangle: iRectangle) -> bool {
 		point.y < rectangle.y + rectangle.height \
 	)
 }
-shiftRectangle :: proc(rec: rl.Rectangle, off: rl.Vector2) -> rl.Rectangle {
-	return {rec.x + off.x, rec.y + off.y, rec.width, rec.height}
+pointInCircle :: proc(point: rl.Vector2, circlePosition: rl.Vector2, circleRadius: f32) -> bool {
+	return linalg.distance(point, circlePosition) < circleRadius
 }
 
 iVector2 :: [2]i32
@@ -255,7 +268,7 @@ iRectangle :: struct {
 	width:  i32,
 	height: i32,
 }
-iRectangleToRlRectangle :: proc(irec: iRectangle) -> rl.Rectangle {
+iRectangleToRectangle :: proc(irec: iRectangle) -> rl.Rectangle {
 	return {cast(f32)irec.x, cast(f32)irec.y, cast(f32)irec.width, cast(f32)irec.height}
 }
 iRectangleClampVal :: proc(irec: iRectangle, a: i32, b: i32) -> iRectangle {
@@ -273,15 +286,11 @@ iRectangleAssertInv :: proc(irec: iRectangle) {
 iRectangleGetInd :: proc(irec: iRectangle, maxWidth: i32) -> i32 {
 	return irec.x + irec.height * maxWidth
 }
-
-getRlRectangleCenter :: proc(rectangle: rl.Rectangle) -> rl.Vector2 {
-	return {rectangle.x + rectangle.width / 2.0, rectangle.y + rectangle.height / 2.0}
-}
-getIRectangleCenter :: proc(rectangle: iRectangle) -> iVector2 {
+iRectangleGetCenter :: proc(rectangle: iRectangle) -> iVector2 {
 	return {rectangle.x + rectangle.width >> 1, rectangle.y + rectangle.height >> 1}
 }
 
-getScreenScale :: proc() -> rl.Vector2 {
+screenGetScale :: proc() -> rl.Vector2 {
 	screenSize := rl.Vector2{f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
 	return screenSize / rl.Vector2{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D}
 }
@@ -293,10 +302,10 @@ vector2ToStringTemp :: proc(v: rl.Vector2) -> cstring {
 	return rl.TextFormat("{{%f, %f}}", v.x, v.y)
 }
 
-rlColorToFColor :: proc(color: rl.Color) -> [4]f32 {
+colorToShaderColor :: proc(color: rl.Color) -> [4]f32 {
 	return {cast(f32)color.r / 255.0, cast(f32)color.g / 255.0, cast(f32)color.b / 255.0, cast(f32)color.a / 255.0}
 }
-FColorToRlColor :: proc(color: [4]f32) -> rl.Color {
+shaderColorToColor :: proc(color: [4]f32) -> rl.Color {
 	return {cast(u8)(color.r * 255.0), cast(u8)(color.g * 255.0), cast(u8)(color.b * 255.0), cast(u8)(color.a * 255.0)}
 }
 
@@ -340,7 +349,7 @@ drawTextAligned :: proc(
 	rl.DrawTextEx(font, text, textPosition, fontSize, 1.0, color)
 }
 drawRenderTextureScaledToScreenBuffer :: proc(rtex: rl.RenderTexture) {
-	rtex_size := getTextureSize(rtex.texture)
+	rtex_size := textureGetSize(rtex.texture)
 	screen_size := rl.Vector2{cast(f32)rl.GetScreenWidth(), cast(f32)rl.GetScreenHeight()}
 	dest: rl.Rectangle
 	if screen_size.x < screen_size.y {
@@ -350,7 +359,7 @@ drawRenderTextureScaledToScreenBuffer :: proc(rtex: rl.RenderTexture) {
 		w := screen_size.y / rtex_size.y * rtex_size.x
 		dest = {screen_size.x / 2.0 - w / 2.0, 0.0, w, screen_size.y}
 	}
-	src := getTextureRec(rtex.texture)
+	src := textureGetRectangle(rtex.texture)
 	flipShader := getShader(.FlipY)
 	rl.BeginShaderMode(flipShader)
 	rl.DrawTexturePro(rtex.texture, src, dest, {0.0, 0.0}, 0.0, rl.WHITE)
@@ -358,9 +367,9 @@ drawRenderTextureScaledToScreenBuffer :: proc(rtex: rl.RenderTexture) {
 }
 
 drawTextureRecDest :: proc(tex: rl.Texture, dest: rl.Rectangle, blend: rl.Color) {
-	rl.DrawTexturePro(tex, getTextureRec(tex), dest, rl.Vector2{0.0, 0.0}, 0.0, blend)
+	rl.DrawTexturePro(tex, textureGetRectangle(tex), dest, rl.Vector2{0.0, 0.0}, 0.0, blend)
 }
-debugDrawTextOutline :: proc(text: cstring, x: i32, y: i32, fontSize: i32, color: rl.Color, outlineColor: rl.Color) {
+drawDebugTextOutline :: proc(text: cstring, x: i32, y: i32, fontSize: i32, color: rl.Color, outlineColor: rl.Color) {
 	rl.DrawText(text, x - 1, y - 1, fontSize, outlineColor)
 	rl.DrawText(text, x + 1, y - 1, fontSize, outlineColor)
 	rl.DrawText(text, x + 1, y + 1, fontSize, outlineColor)
@@ -368,19 +377,19 @@ debugDrawTextOutline :: proc(text: cstring, x: i32, y: i32, fontSize: i32, color
 	rl.DrawText(text, x, y, fontSize, color)
 }
 
-setShaderValue :: proc {
-	setShaderValueFloat,
-	setShaderValueInt,
+shaderSetValue :: proc {
+	shaderSetValueF32,
+	shaderSetValueI32,
 	setShaderValueVec2,
 	setShaderValueVec3,
 	setShaderValueVec4,
 }
 
-setShaderValueFloat :: proc "contextless" (shd: rl.Shader, uniformName: cstring, value: f32) {
+shaderSetValueF32 :: proc "contextless" (shd: rl.Shader, uniformName: cstring, value: f32) {
 	valueHere := value
 	rl.SetShaderValue(shd, rl.GetShaderLocation(shd, uniformName), &valueHere, .FLOAT)
 }
-setShaderValueInt :: proc "contextless" (shd: rl.Shader, uniformName: cstring, value: i32) {
+shaderSetValueI32 :: proc "contextless" (shd: rl.Shader, uniformName: cstring, value: i32) {
 	valueHere := value
 	rl.SetShaderValue(shd, rl.GetShaderLocation(shd, uniformName), &valueHere, .INT)
 }
@@ -395,14 +404,6 @@ setShaderValueVec3 :: proc "contextless" (shd: rl.Shader, uniformName: cstring, 
 setShaderValueVec4 :: proc "contextless" (shd: rl.Shader, uniformName: cstring, value: rl.Vector4) {
 	valueHere := value
 	rl.SetShaderValue(shd, rl.GetShaderLocation(shd, uniformName), &valueHere, .VEC4)
-}
-loadPassthroughMaterial3D :: proc(albedoTexture: Maybe(rl.Texture) = nil) -> rl.Material {
-	material := rl.LoadMaterialDefault()
-	material.shader = getShader(.Passthrough3D)
-	if albedoTexture != nil {
-		rl.SetMaterialTexture(&material, .ALBEDO, albedoTexture.?)
-	}
-	return material
 }
 
 printArray2D :: proc(array: [dynamic]$T, arrayWidth: i32) {
@@ -431,14 +432,7 @@ isEnumLast :: proc(value: $T) -> bool {
 	return values[len(values) - 1] == reflect.Type_Info_Enum_Value(value)
 }
 
-smoothplot :: proc(x: f32, threshold: f32, thickness: f32, smoothing: f32) -> f32 {
-	return(
-		math.smoothstep(threshold - thickness - smoothing, threshold - thickness, x) -
-		math.smoothstep(threshold + thickness, threshold + thickness + smoothing, x) \
-	)
-}
-
-getCamera2DViewRect :: proc() -> rl.Rectangle {
+camera2DGetViewRectangle :: proc() -> rl.Rectangle {
 	return {
 		global.camera.target.x - global.camera.offset.x,
 		global.camera.target.y - global.camera.offset.y,
@@ -446,6 +440,6 @@ getCamera2DViewRect :: proc() -> rl.Rectangle {
 		RENDER_TEXTURE_HEIGHT_2D,
 	}
 }
-getCamera2DTopLeft :: proc() -> rl.Vector2 {
+camera2DGetTopLeft :: proc() -> rl.Vector2 {
 	return global.camera.target - global.camera.offset
 }

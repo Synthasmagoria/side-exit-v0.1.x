@@ -37,7 +37,7 @@ Player :: struct {
 	frozenState:                    PlayerFrozenState,
 	frozenPuppetNoGravityStateData: PlayerFrozenPuppetNoGravityStateData,
 }
-createPlayer :: proc(alloc: mem.Allocator) -> ^Player {
+playerCreate :: proc(alloc: mem.Allocator) -> ^Player {
 	self := new(Player, alloc)
 	self.idleSpr = createSprite(getSpriteDef(.SynthIdle))
 	self.walkSpr = createSprite(getSpriteDef(.SynthWalk))
@@ -59,14 +59,14 @@ createPlayer :: proc(alloc: mem.Allocator) -> ^Player {
 		Player,
 		self,
 		-100,
-		updateProc = cast(proc(_: rawptr))updatePlayer,
-		drawProc = cast(proc(_: rawptr))drawPlayer,
+		updateProc = cast(proc(_: rawptr))playerUpdate,
+		drawProc = cast(proc(_: rawptr))playerDraw,
 	)
 	self.object.pos = {0.0, 0.0}
 	self.object.colRec = {7.0, 3.0, 12.0, 20.0}
 	return self
 }
-updatePlayer :: proc(self: ^Player) {
+playerUpdate :: proc(self: ^Player) {
 	switch self.frozenState {
 	case .Movable:
 		rightInput := rl.IsKeyDown(.RIGHT)
@@ -104,7 +104,7 @@ updatePlayer :: proc(self: ^Player) {
 
 		self.velocity = rl.Vector2Clamp(self.velocity, -self.maxVelocity, self.maxVelocity)
 
-		moveAndCollideResult := moveAndCollidePlayer(
+		moveAndCollideResult := playerMoveAndCollide(
 			self.object.pos,
 			self.object.colRec,
 			self.velocity,
@@ -115,10 +115,10 @@ updatePlayer :: proc(self: ^Player) {
 
 		if math.abs(self.velocity.x) > 0.0 {
 			if self.frozenState == .Movable {
-				setPlayerSprite(self, &self.walkSpr)
+				playerSetSprite(self, &self.walkSpr)
 			}
 		} else {
-			setPlayerSprite(self, &self.idleSpr)
+			playerSetSprite(self, &self.idleSpr)
 		}
 		updateSprite(self.currentSpr)
 	case .PuppetNoGravity:
@@ -128,33 +128,33 @@ updatePlayer :: proc(self: ^Player) {
 			if stateData.moveNextState != self.frozenState {
 				self.frozenState = stateData.moveNextState
 			}
-			setPlayerSprite(self, &self.idleSpr)
+			playerSetSprite(self, &self.idleSpr)
 		} else {
-			setPlayerSprite(self, &self.walkSpr)
+			playerSetSprite(self, &self.walkSpr)
 		}
 		updateSprite(self.currentSpr)
 	}
 }
-drawPlayer :: proc(self: ^Player) {
+playerDraw :: proc(self: ^Player) {
 	flipShader := getShader(.Flip)
 	flip: iVector2 = {cast(i32)(math.sign(self.scale.x) == -1), cast(i32)(math.sign(self.scale.y) == -1)}
 	rl.BeginShaderMode(flipShader)
-	setShaderValue(flipShader, "flipX", flip.x)
-	setShaderValue(flipShader, "flipY", flip.y)
+	shaderSetValue(flipShader, "flipX", flip.x)
+	shaderSetValue(flipShader, "flipY", flip.y)
 	drawSpriteEx(self.currentSpr^, self.object.pos, {abs(self.scale.x), abs(self.scale.y)})
 	rl.EndShaderMode()
 }
-MoveAndCollidePlayerResult :: struct {
+PlayerMoveAndCollideResult :: struct {
 	newPosition: rl.Vector2,
 	newVelocity: rl.Vector2,
 }
-moveAndCollidePlayer :: proc(
+playerMoveAndCollide :: proc(
 	position: rl.Vector2,
 	collisionRectangle: rl.Rectangle,
 	velocity: rl.Vector2,
 	facing: f32,
-) -> MoveAndCollidePlayerResult {
-	result := MoveAndCollidePlayerResult {
+) -> PlayerMoveAndCollideResult {
+	result := PlayerMoveAndCollideResult {
 		newPosition = position,
 		newVelocity = velocity,
 	}
@@ -164,9 +164,9 @@ moveAndCollidePlayer :: proc(
 		i32(collisionRectangle.width),
 		i32(collisionRectangle.height),
 	}
-	absoluteHitboxDiagonal := shiftRectangle(collisionRectangle, result.newPosition + result.newVelocity)
+	absoluteHitboxDiagonal := rectangleShift(collisionRectangle, result.newPosition + result.newVelocity)
 	if collisionRectangleDiagonal := doSolidCollision(absoluteHitboxDiagonal); collisionRectangleDiagonal != nil {
-		absoluteHitboxVertical := shiftRectangle(collisionRectangle, result.newPosition + {0.0, result.newVelocity.y})
+		absoluteHitboxVertical := rectangleShift(collisionRectangle, result.newPosition + {0.0, result.newVelocity.y})
 		if collisionRectangleVertical := doSolidCollision(absoluteHitboxVertical); collisionRectangleVertical != nil {
 			verticalDirection := math.sign(result.newVelocity.y)
 			if (verticalDirection == 1.0) {
@@ -186,7 +186,7 @@ moveAndCollidePlayer :: proc(
 			result.newPosition.y += result.newVelocity.y
 		}
 
-		absoluteHitboxHorizontal := shiftRectangle(
+		absoluteHitboxHorizontal := rectangleShift(
 			collisionRectangle,
 			result.newPosition + {result.newVelocity.x, 0.0},
 		)
@@ -212,13 +212,13 @@ moveAndCollidePlayer :: proc(
 	}
 	return result
 }
-setPlayerSprite :: proc(player: ^Player, spr: ^Sprite) {
+playerSetSprite :: proc(player: ^Player, spr: ^Sprite) {
 	if (player.currentSpr != spr) {
 		player.currentSpr = spr
 		setSpriteFrame(player.currentSpr, 0)
 	}
 }
-movePlayerNoGravity :: proc(player: ^Player, position: rl.Vector2, duration: f32, nextState: PlayerFrozenState) {
+playerMoveNoGravity :: proc(player: ^Player, position: rl.Vector2, duration: f32, nextState: PlayerFrozenState) {
 	player.frozenState = .PuppetNoGravity
 	player.frozenPuppetNoGravityStateData.moveTween = createTween(
 		TweenVector2Range{player.object.pos, position},
@@ -258,7 +258,7 @@ Elevator :: struct {
 	panelBlend:             rl.Color,
 	activationDist:         f32,
 }
-createElevator :: proc(alloc: mem.Allocator) -> ^Elevator {
+elevatorCreate :: proc(alloc: mem.Allocator) -> ^Elevator {
 	self := new(Elevator, alloc)
 	self.interactionArrowSpr = createSprite(getSpriteDef(.InteractionIndicationArrow))
 	self.state = .Gone
@@ -271,21 +271,21 @@ createElevator :: proc(alloc: mem.Allocator) -> ^Elevator {
 		Elevator,
 		self,
 		-50,
-		updateProc = cast(proc(_: rawptr))updateElevator,
-		drawProc = cast(proc(_: rawptr))drawElevator,
-		drawEndProc = cast(proc(_: rawptr))drawElevatorEnd,
+		updateProc = cast(proc(_: rawptr))elevatorUpdate,
+		drawProc = cast(proc(_: rawptr))elevatorDraw,
+		drawEndProc = cast(proc(_: rawptr))elevatorDrawEnd,
 	)
-	setElevatorState(self, .Gone)
+	elevatorSetState(self, .Gone)
 	self.object.pos = {0.0, 0.0}
-	self.object.colRec = getTextureRec(getTexture(.Elevator))
+	self.object.colRec = textureGetRectangle(getTexture(.Elevator))
 	return self
 }
-updateElevator :: proc(self: ^Elevator) {
+elevatorUpdate :: proc(self: ^Elevator) {
 	switch (self.state) {
 	case .Gone:
 		if player := getFirstGameObjectOfType(Player); player != nil {
 			if linalg.distance(player.object.pos, self.object.pos) < self.activationDist {
-				setElevatorState(self, .Arriving)
+				elevatorSetState(self, .Arriving)
 			}
 		}
 	case .Arriving:
@@ -293,12 +293,12 @@ updateElevator :: proc(self: ^Elevator) {
 		self.blend.a = updateAndStepTween(&self.arrivingStateData.alphaTween).(u8)
 		if tweenIsFinished(self.arrivingStateData.movementTween) &&
 		   tweenIsFinished(self.arrivingStateData.alphaTween) {
-			setElevatorState(self, .Interactable)
+			elevatorSetState(self, .Interactable)
 		}
 	case .Interactable:
 		if player := getFirstGameObjectOfType(Player); player != nil {
 			if linalg.distance(player.object.pos, self.object.pos) >= self.activationDist {
-				setElevatorState(self, .Leaving)
+				elevatorSetState(self, .Leaving)
 				break
 			} else {
 				if pointInRectangle(
@@ -312,8 +312,8 @@ updateElevator :: proc(self: ^Elevator) {
 							self.object.pos +
 							self.insidePositionRelative -
 							{playerSpriteFrameSize.x / 2.0, playerSpriteFrameSize.y}
-						movePlayerNoGravity(player, insidePlayerPosition, 0.5, .PuppetNoGravity)
-						setElevatorState(self, .PlayerInside)
+						playerMoveNoGravity(player, insidePlayerPosition, 0.5, .PuppetNoGravity)
+						elevatorSetState(self, .PlayerInside)
 						break
 					}
 				} else {
@@ -327,23 +327,16 @@ updateElevator :: proc(self: ^Elevator) {
 		self.drawOffset = updateAndStepTween(&self.leavingStateData.movementTween).(rl.Vector2)
 		self.blend.a = updateAndStepTween(&self.leavingStateData.alphaTween).(u8)
 		if tweenIsFinished(self.leavingStateData.alphaTween) && tweenIsFinished(self.leavingStateData.alphaTween) {
-			setElevatorState(self, .Gone)
+			elevatorSetState(self, .Gone)
 		}
 	}
 }
-getElevatorPlayerInsidePositionRelative :: proc(self: Elevator, player: Player) -> rl.Vector2 {
-	return(
-		self.insidePositionRelative -
-		(player.object.pos - self.object.pos) -
-		{cast(f32)player.currentSpr.def.frame_width / 2.0, cast(f32)player.currentSpr.def.tex.height} \
-	)
-}
-drawElevator :: proc(self: ^Elevator) {
+elevatorDraw :: proc(self: ^Elevator) {
 	if self.visible {
 		rl.DrawTextureV(getTexture(.Elevator), self.object.pos + self.drawOffset, self.blend)
 	}
 }
-drawElevatorEnd :: proc(self: ^Elevator) {
+elevatorDrawEnd :: proc(self: ^Elevator) {
 	if self.drawInteractionArrow {
 		if player := getFirstGameObjectOfType(Player); player != nil {
 			abovePlayerCenter := getObjectCenterAbsolute(player.object^) - {0.0, player.object.colRec.height}
@@ -352,14 +345,14 @@ drawElevatorEnd :: proc(self: ^Elevator) {
 		}
 	}
 }
-getElevatorWorldCenterPosition :: proc(self: Elevator, collisionBitmask: CollisionBitmask) -> rl.Vector2 {
+elevatorGetWorldCenterPosition :: proc(self: Elevator, collisionBitmask: CollisionBitmask) -> rl.Vector2 {
 	return {
 		-self.object.colRec.width / 2.0 + GENERATION_BLOCK_SIZE,
 		math.floor(self.object.colRec.height / GENERATION_BLOCK_SIZE) * GENERATION_BLOCK_SIZE -
 		self.object.colRec.height,
 	}
 }
-setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
+elevatorSetState :: proc(self: ^Elevator, newState: ElevatorState) {
 	if (self.state == newState) {
 		return
 	}
@@ -377,7 +370,7 @@ setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
 		if self.instant {
 			self.drawOffset = {0.0, 0.0}
 			self.blend.a = 255
-			setElevatorState(self, .Interactable)
+			elevatorSetState(self, .Interactable)
 		} else {
 			self.blend = {255, 255, 255, 0}
 			self.arrivingStateData.movementTween = createTween(
@@ -392,7 +385,7 @@ setElevatorState :: proc(self: ^Elevator, newState: ElevatorState) {
 		if player := getFirstGameObjectOfType(Player); player != nil {
 			player.frozenState = .PuppetNoGravity
 		}
-		movePlayer3D(&global.player3D, PLAYER_3D_OUTSIDE_POSITION, PLAYER_3D_INSIDE_POSITION, .Looking)
+		player3DMove(&global.player3D, PLAYER_3D_OUTSIDE_POSITION, PLAYER_3D_INSIDE_POSITION, .Looking)
 	case .Leaving:
 		self.blend = rl.WHITE
 		self.leavingStateData.movementTween = createTween(TweenVector2Range{{0.0, 0.0}, {0.0, -224.0}}, .Exp, 2.0)
@@ -407,7 +400,7 @@ TitleMenu :: struct {
 	options:     [2]string,
 	optionIndex: i32,
 }
-createTitleMenu :: proc(levelAlloc: mem.Allocator) -> ^TitleMenu {
+titleMenuCreate :: proc(levelAlloc: mem.Allocator) -> ^TitleMenu {
 	self := new(TitleMenu, levelAlloc)
 	self.options = [2]string{"Start", "Quit"}
 	self.optionIndex = 0
@@ -415,13 +408,13 @@ createTitleMenu :: proc(levelAlloc: mem.Allocator) -> ^TitleMenu {
 		TitleMenu,
 		self,
 		0,
-		updateProc = cast(proc(_: rawptr))updateTitleMenu,
-		drawProc = cast(proc(_: rawptr))drawTitleMenu,
+		updateProc = cast(proc(_: rawptr))titleMenuUpdate,
+		drawProc = cast(proc(_: rawptr))titleMenuDraw,
 	)
 	self.object.pos = {RENDER_TEXTURE_WIDTH_2D / 2, RENDER_TEXTURE_HEIGHT_2D / 2 + RENDER_TEXTURE_HEIGHT_2D / 4}
 	return self
 }
-updateTitleMenu :: proc(self: ^TitleMenu) {
+titleMenuUpdate :: proc(self: ^TitleMenu) {
 	// TODO: Play menu select sound
 	if rl.IsKeyPressed(.DOWN) {
 		self.optionIndex = (self.optionIndex + 1) % i32(len(self.options))
@@ -437,7 +430,7 @@ updateTitleMenu :: proc(self: ^TitleMenu) {
 		}
 	}
 }
-drawTitleMenu :: proc(self: ^TitleMenu) {
+titleMenuDraw :: proc(self: ^TitleMenu) {
 	font := rl.GetFontDefault()
 	for i in 0 ..< len(self.options) {
 		if i32(i) != self.optionIndex {
@@ -468,30 +461,30 @@ TitleMenuBackground :: struct {
 	elevatorAngle:        f32,
 	backgroundShaderTime: f32,
 }
-createTitleMenuBackground :: proc(levelAlloc: mem.Allocator) -> ^TitleMenuBackground {
+titleMenuBackgroundCreate :: proc(levelAlloc: mem.Allocator) -> ^TitleMenuBackground {
 	self := new(TitleMenuBackground, levelAlloc)
 	self.object = createGameObject(
 		TitleMenuBackground,
 		self,
 		0,
-		updateProc = cast(proc(_: rawptr))updateTitleMenuBackground,
-		drawProc = cast(proc(_: rawptr))drawTitleMenuBackground,
-		draw3DProc = cast(proc(_: rawptr))drawTitleMenuBackground3D,
+		updateProc = cast(proc(_: rawptr))titleMenuUpdateBackground,
+		drawProc = cast(proc(_: rawptr))titleMenuBackgroundDraw,
+		draw3DProc = cast(proc(_: rawptr))titleMenuBackgroundDraw3D,
 	)
 	self.elevatorAngle = 0.0
 	return self
 }
-updateTitleMenuBackground :: proc(self: ^TitleMenuBackground) {
+titleMenuUpdateBackground :: proc(self: ^TitleMenuBackground) {
 	self.elevatorAngle += TARGET_TIME_STEP * 30.0
 	self.backgroundShaderTime += TARGET_TIME_STEP
 }
-drawTitleMenuBackground :: proc(self: ^TitleMenuBackground) {
+titleMenuBackgroundDraw :: proc(self: ^TitleMenuBackground) {
 	backgroundShaderTexture := getTexture(.White32)
-	backgroundShaderSource := getTextureRec(backgroundShaderTexture)
+	backgroundShaderSource := textureGetRectangle(backgroundShaderTexture)
 	backgroundShaderDest := rl.Rectangle{0.0, 0.0, RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D}
 	backgroundShader := getShader(.TitleMenuFog)
 	rl.BeginShaderMode(backgroundShader)
-	setShaderValue(backgroundShader, "time", self.backgroundShaderTime)
+	shaderSetValue(backgroundShader, "time", self.backgroundShaderTime)
 	rl.DrawTexturePro(
 		backgroundShaderTexture,
 		backgroundShaderSource,
@@ -502,7 +495,7 @@ drawTitleMenuBackground :: proc(self: ^TitleMenuBackground) {
 	)
 	rl.EndShaderMode()
 }
-drawTitleMenuBackground3D :: proc(self: ^TitleMenuBackground) {
+titleMenuBackgroundDraw3D :: proc(self: ^TitleMenuBackground) {
 	rlgl.DisableBackfaceCulling()
 	rl.DrawModelWiresEx(
 		getModel(.ElevatorTitleMenu),
@@ -520,41 +513,41 @@ HubGraphics :: struct {
 	postProcessingRenderTexture: rl.RenderTexture,
 	shaderTime:                  f32,
 }
-createHubGraphics :: proc(levelAlloc: mem.Allocator) -> ^HubGraphics {
+hubGraphicsCreate :: proc(levelAlloc: mem.Allocator) -> ^HubGraphics {
 	self := new(HubGraphics, levelAlloc)
 	self.postProcessingRenderTexture = rl.LoadRenderTexture(RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D)
 	self.object = createGameObject(
 		HubGraphics,
 		self,
 		0,
-		drawProc = cast(proc(_: rawptr))drawHubGraphics,
-		drawEndProc = cast(proc(_: rawptr))drawHubGraphicsEnd,
-		destroyProc = cast(proc(_: rawptr))destroyHubGraphics,
+		destroyProc = cast(proc(_: rawptr))hubGraphicsDestroy,
+		drawProc = cast(proc(_: rawptr))hubGraphicsDraw,
+		drawEndProc = cast(proc(_: rawptr))hubGraphicsDrawEnd,
 	)
 	return self
 }
-destroyHubGraphics :: proc(self: ^HubGraphics) {
+hubGraphicsDestroy :: proc(self: ^HubGraphics) {
 	rl.UnloadRenderTexture(self.postProcessingRenderTexture)
 }
-drawHubGraphics :: proc(self: ^HubGraphics) {
+hubGraphicsDraw :: proc(self: ^HubGraphics) {
 	rl.DrawTextureV(getTexture(.HubBackground), {0.0, 0.0}, rl.WHITE)
 	rl.DrawTextureV(getTexture(.HubBuilding), {0.0, 0.0}, rl.WHITE)
 }
-drawHubGraphicsEnd :: proc(self: ^HubGraphics) {
+hubGraphicsDrawEnd :: proc(self: ^HubGraphics) {
 	// TODO: This shit could be done a lot more optimally
 	beginModeStacked(getZeroCamera2D(), self.postProcessingRenderTexture)
 	shader := getShader(.NoiseAndCRT)
 	rl.BeginShaderMode(shader)
 	self.shaderTime += TARGET_TIME_STEP
-	setShaderValue(shader, "time", self.shaderTime)
-	setShaderValue(shader, "noiseFactor", 0.3)
-	setShaderValue(shader, "crtWidth", 96.0)
-	setShaderValue(shader, "crtFactor", 0.3)
-	setShaderValue(shader, "crtSpeed", 40.0)
+	shaderSetValue(shader, "time", self.shaderTime)
+	shaderSetValue(shader, "noiseFactor", 0.3)
+	shaderSetValue(shader, "crtWidth", 96.0)
+	shaderSetValue(shader, "crtFactor", 0.3)
+	shaderSetValue(shader, "crtSpeed", 40.0)
 	rl.DrawTexture(engine.renderTexture2D.texture, 0, 0, rl.WHITE)
 	rl.EndShaderMode()
 	endModeStacked()
-	rl.DrawTextureV(self.postProcessingRenderTexture.texture, getCamera2DTopLeft(), rl.WHITE)
+	rl.DrawTextureV(self.postProcessingRenderTexture.texture, camera2DGetTopLeft(), rl.WHITE)
 }
 
 BetweenGraphics :: struct {
@@ -564,20 +557,20 @@ BetweenGraphics :: struct {
 	moonPosition:          rl.Vector2,
 	moonParalax:           f32,
 }
-createBetweenGraphics :: proc(levelAllocator: mem.Allocator) -> ^BetweenGraphics {
+betweenGraphicsCreate :: proc(levelAllocator: mem.Allocator) -> ^BetweenGraphics {
 	self := new(BetweenGraphics, levelAllocator)
 	self.backgroundNoiseSprite = createSprite(getSpriteDef(.BetweenBackgroundNoise))
 	self.moonSprite = createSprite(getSpriteDef(.BetweenMoon))
 	self.moonPosition = {0.0, 200.0}
 	self.moonParalax = 0.8
-	self.object = createGameObject(type_of(self), self, 100, drawProc = cast(proc(_: rawptr))drawBetweenGraphics)
+	self.object = createGameObject(type_of(self), self, 100, drawProc = cast(proc(_: rawptr))betweenGraphicsDraw)
 	return self
 }
-drawBetweenGraphics :: proc(self: ^BetweenGraphics) {
+betweenGraphicsDraw :: proc(self: ^BetweenGraphics) {
 	updateSprite(&self.moonSprite)
 	drawSpriteEx(
 		self.moonSprite,
-		self.moonPosition + getCamera2DTopLeft() * self.moonParalax,
+		self.moonPosition + camera2DGetTopLeft() * self.moonParalax,
 		{0.75, 0.75},
 		{200, 200, 200, 255},
 	)
@@ -585,15 +578,15 @@ drawBetweenGraphics :: proc(self: ^BetweenGraphics) {
 	backgroundNoiseShader := getShader(.AnimatedTextureRepeatPosition)
 	rl.BeginShaderMode(backgroundNoiseShader)
 	updateSprite(&self.backgroundNoiseSprite)
-	setShaderValue(backgroundNoiseShader, "frameCount", self.backgroundNoiseSprite.def.frame_count)
-	setShaderValue(backgroundNoiseShader, "frameInd", cast(f32)self.backgroundNoiseSprite.frame_ind)
-	setShaderValue(backgroundNoiseShader, "frameSize", getSpriteFrameSize(self.backgroundNoiseSprite))
-	setShaderValue(backgroundNoiseShader, "offset", -getCamera2DTopLeft())
-	drawTextureRecDest(self.backgroundNoiseSprite.def.tex, getCamera2DViewRect(), {255, 0, 0, 192})
+	shaderSetValue(backgroundNoiseShader, "frameCount", self.backgroundNoiseSprite.def.frame_count)
+	shaderSetValue(backgroundNoiseShader, "frameInd", cast(f32)self.backgroundNoiseSprite.frame_ind)
+	shaderSetValue(backgroundNoiseShader, "frameSize", getSpriteFrameSize(self.backgroundNoiseSprite))
+	shaderSetValue(backgroundNoiseShader, "offset", -camera2DGetTopLeft())
+	drawTextureRecDest(self.backgroundNoiseSprite.def.tex, camera2DGetViewRectangle(), {255, 0, 0, 192})
 	rl.EndShaderMode()
 
 	for rectangle in engine.collisionRectangles {
-		rl.DrawRectangleRec(iRectangleToRlRectangle(rectangle), {128, 128, 128, 200})
+		rl.DrawRectangleRec(iRectangleToRectangle(rectangle), {128, 128, 128, 200})
 	}
 }
 
@@ -604,7 +597,7 @@ UnrulyLandGraphics :: struct {
 	backgroundShaderTime: f32,
 	starBackground:       StarBackground,
 }
-createUnrulyLandGraphics :: proc(levelAlloc: mem.Allocator) -> ^UnrulyLandGraphics {
+unrulyLandGraphicsCreate :: proc(levelAlloc: mem.Allocator) -> ^UnrulyLandGraphics {
 	self := new(UnrulyLandGraphics, levelAlloc)
 	self.starBackground = createStarBackground()
 	self.blockRenderTexture = rl.LoadRenderTexture(RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D)
@@ -612,24 +605,24 @@ createUnrulyLandGraphics :: proc(levelAlloc: mem.Allocator) -> ^UnrulyLandGraphi
 		UnrulyLandGraphics,
 		self,
 		100,
-		drawProc = cast(proc(_: rawptr))drawUnrulyLandGraphics,
-		destroyProc = cast(proc(_: rawptr))destroyUnrulyLandGraphics,
+		drawProc = cast(proc(_: rawptr))unrulyLandGraphicsDraw,
+		destroyProc = cast(proc(_: rawptr))unrulyLandGraphicsDestroy,
 	)
 	return self
 }
-drawUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
+unrulyLandGraphicsDraw :: proc(self: ^UnrulyLandGraphics) {
 	backgroundShader := getShader(.BackgroundWaves)
 	rl.BeginShaderMode(backgroundShader)
 	self.backgroundShaderTime += TARGET_TIME_STEP * 0.5
-	setShaderValue(backgroundShader, "time", self.backgroundShaderTime)
-	setShaderValue(backgroundShader, "resolution", rl.Vector2{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
-	setShaderValue(backgroundShader, "color_a", [4]f32{0.0, 0.0, 2.0 / 255.0, 1.0})
-	setShaderValue(backgroundShader, "color_b", [4]f32{16.0 / 255.0, 0.0, 60.0 / 255.0, 1.0})
-	rl.DrawRectangleRec(getCamera2DViewRect(), rl.WHITE)
+	shaderSetValue(backgroundShader, "time", self.backgroundShaderTime)
+	shaderSetValue(backgroundShader, "resolution", rl.Vector2{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
+	shaderSetValue(backgroundShader, "color_a", [4]f32{0.0, 0.0, 2.0 / 255.0, 1.0})
+	shaderSetValue(backgroundShader, "color_b", [4]f32{16.0 / 255.0, 0.0, 60.0 / 255.0, 1.0})
+	rl.DrawRectangleRec(camera2DGetViewRectangle(), rl.WHITE)
 	rl.EndShaderMode()
 
 	updateStarBackground(&self.starBackground)
-	drawStarBackground(&self.starBackground, getCamera2DTopLeft())
+	drawStarBackground(&self.starBackground, camera2DGetTopLeft())
 
 	beginModeStacked(nil, self.blockRenderTexture)
 	rl.ClearBackground({0, 0, 0, 0})
@@ -642,23 +635,23 @@ drawUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
 	self.blockShaderTime += TARGET_TIME_STEP / 5.0
 	blockShader := getShader(.UnrulyLandGround)
 	rl.BeginShaderMode(blockShader)
-	setShaderValue(blockShader, "flipV", 1)
-	setShaderValue(blockShader, "time", self.blockShaderTime)
-	setShaderValue(blockShader, "resolution", [2]f32{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
-	setShaderValue(blockShader, "band_add", 0.6)
-	setShaderValue(blockShader, "scale", 1.0)
-	setShaderValue(blockShader, "turbulence_amplitude", 0.8)
-	setShaderValue(blockShader, "turbulence_speed", 0.3)
-	setShaderValue(blockShader, "turbulence_frequency", 2.0)
-	setShaderValue(blockShader, "turbulence_exp", 1.4)
-	setShaderValue(blockShader, "base_color_a", [4]f32{129.0 / 255.0, 0.0, 174.0 / 255.0, 1.0})
-	setShaderValue(blockShader, "base_color_b", [4]f32{210.0 / 255.0, 0.0, 255.0 / 255.0, 1.0})
-	setShaderValue(blockShader, "band_color_a", [4]f32{246.0 / 255.0, 220.0 / 255.0, 0.0, 1.0})
-	setShaderValue(blockShader, "band_color_b", [4]f32{177.0 / 255.0, 80.0 / 255.0, 0.0, 1.0})
-	rl.DrawTextureV(self.blockRenderTexture.texture, getCamera2DTopLeft(), rl.WHITE)
+	shaderSetValue(blockShader, "flipV", 1)
+	shaderSetValue(blockShader, "time", self.blockShaderTime)
+	shaderSetValue(blockShader, "resolution", [2]f32{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
+	shaderSetValue(blockShader, "band_add", 0.6)
+	shaderSetValue(blockShader, "scale", 1.0)
+	shaderSetValue(blockShader, "turbulence_amplitude", 0.8)
+	shaderSetValue(blockShader, "turbulence_speed", 0.3)
+	shaderSetValue(blockShader, "turbulence_frequency", 2.0)
+	shaderSetValue(blockShader, "turbulence_exp", 1.4)
+	shaderSetValue(blockShader, "base_color_a", [4]f32{129.0 / 255.0, 0.0, 174.0 / 255.0, 1.0})
+	shaderSetValue(blockShader, "base_color_b", [4]f32{210.0 / 255.0, 0.0, 255.0 / 255.0, 1.0})
+	shaderSetValue(blockShader, "band_color_a", [4]f32{246.0 / 255.0, 220.0 / 255.0, 0.0, 1.0})
+	shaderSetValue(blockShader, "band_color_b", [4]f32{177.0 / 255.0, 80.0 / 255.0, 0.0, 1.0})
+	rl.DrawTextureV(self.blockRenderTexture.texture, camera2DGetTopLeft(), rl.WHITE)
 	rl.EndShaderMode()
 }
-destroyUnrulyLandGraphics :: proc(self: ^UnrulyLandGraphics) {
+unrulyLandGraphicsDestroy :: proc(self: ^UnrulyLandGraphics) {
 	rl.UnloadRenderTexture(self.blockRenderTexture)
 	destroyStarBackground(&self.starBackground)
 }
@@ -669,33 +662,34 @@ ForestGraphics :: struct {
 	blockRenderTexture:   rl.RenderTexture,
 	backgroundShaderTime: f32,
 }
-createForestGraphics :: proc(levelAlloc: mem.Allocator) -> ^ForestGraphics {
+forestGraphicsCreate :: proc(levelAlloc: mem.Allocator) -> ^ForestGraphics {
 	self := new(ForestGraphics, levelAlloc)
 	self.blockRenderTexture = rl.LoadRenderTexture(RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D)
 	self.object = createGameObject(
 		ForestGraphics,
 		self,
 		100,
-		drawProc = cast(proc(_: rawptr))drawForestGraphics,
-		drawEndProc = cast(proc(_: rawptr))drawForestGraphicsEnd,
+		drawProc = cast(proc(_: rawptr))forestGraphicsDraw,
+		drawEndProc = cast(proc(_: rawptr))forestGraphicsDrawEnd,
+		destroyProc = cast(proc(_: rawptr))forestGraphicsDestroy,
 	)
 	return self
 }
-destroyForestGraphics :: proc(self: ^ForestGraphics) {
+forestGraphicsDestroy :: proc(self: ^ForestGraphics) {
 	rl.UnloadRenderTexture(self.blockRenderTexture)
 }
-drawForestGraphics :: proc(self: ^ForestGraphics) {
+forestGraphicsDraw :: proc(self: ^ForestGraphics) {
 	backgroundShader := getShader(.BackgroundWaves)
 	rl.BeginShaderMode(backgroundShader)
 	self.backgroundShaderTime += TARGET_TIME_STEP * 0.5
-	setShaderValue(backgroundShader, "time", self.backgroundShaderTime)
-	setShaderValue(backgroundShader, "resolution", rl.Vector2{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
-	setShaderValue(backgroundShader, "color_a", [4]f32{0.0, 0.0, 2.0 / 255.0, 1.0})
-	setShaderValue(backgroundShader, "color_b", [4]f32{16.0 / 255.0, 0.0, 60.0 / 255.0, 1.0})
-	rl.DrawRectangleRec(getCamera2DViewRect(), rl.WHITE)
+	shaderSetValue(backgroundShader, "time", self.backgroundShaderTime)
+	shaderSetValue(backgroundShader, "resolution", rl.Vector2{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
+	shaderSetValue(backgroundShader, "color_a", [4]f32{0.0, 0.0, 2.0 / 255.0, 1.0})
+	shaderSetValue(backgroundShader, "color_b", [4]f32{16.0 / 255.0, 0.0, 60.0 / 255.0, 1.0})
+	rl.DrawRectangleRec(camera2DGetViewRectangle(), rl.WHITE)
 	rl.EndShaderMode()
 
-	forestTextureSize := getTextureSize(getTexture(.ForestBackground))
+	forestTextureSize := textureGetSize(getTexture(.ForestBackground))
 	forestPosition := -forestTextureSize / 4.0
 	forestPosition.y -= forestTextureSize.y / 5.0
 
@@ -703,7 +697,7 @@ drawForestGraphics :: proc(self: ^ForestGraphics) {
 	beginModeStacked(nil, self.blockRenderTexture)
 	rl.ClearBackground({0, 0, 0, 0})
 	for rectangle in engine.collisionRectangles {
-		rl.DrawRectangleRec(iRectangleToRlRectangle(rectangle), rl.WHITE)
+		rl.DrawRectangleRec(iRectangleToRectangle(rectangle), rl.WHITE)
 	}
 	endModeStacked()
 
@@ -711,17 +705,17 @@ drawForestGraphics :: proc(self: ^ForestGraphics) {
 	rl.BeginShaderMode(textureMaskShader)
 	textureShaderLocation := rl.GetShaderLocation(textureMaskShader, "texture1")
 	rl.SetShaderValueTexture(textureMaskShader, textureShaderLocation, getTexture(.ForestDirt))
-	setShaderValue(textureMaskShader, "textureResolution", getTextureSize(getTexture(.ForestDirt)))
-	setShaderValue(textureMaskShader, "flipV", 1)
-	rl.DrawTextureV(self.blockRenderTexture.texture, getCamera2DTopLeft(), rl.WHITE)
+	shaderSetValue(textureMaskShader, "textureResolution", textureGetSize(getTexture(.ForestDirt)))
+	shaderSetValue(textureMaskShader, "flipV", 1)
+	rl.DrawTextureV(self.blockRenderTexture.texture, camera2DGetTopLeft(), rl.WHITE)
 	rl.EndShaderMode()
 }
-drawForestGraphicsEnd :: proc(self: ^ForestGraphics) {
+forestGraphicsDrawEnd :: proc(self: ^ForestGraphics) {
 	self.fogShaderTime += TARGET_TIME_STEP
 	fogShader := getShader(.Fog)
 	rl.BeginShaderMode(fogShader)
-	setShaderValue(fogShader, "time", self.fogShaderTime)
-	rl.DrawRectangleRec(getCamera2DViewRect(), {192, 192, 192, 255})
+	shaderSetValue(fogShader, "time", self.fogShaderTime)
+	rl.DrawRectangleRec(camera2DGetViewRectangle(), {192, 192, 192, 255})
 	rl.EndShaderMode()
 }
 
@@ -729,20 +723,20 @@ Y0Graphics :: struct {
 	object:               ^GameObject,
 	backgroundShaderTime: f32,
 }
-createY0Graphics :: proc(levelAlloc: mem.Allocator) -> ^Y0Graphics {
+y0GraphicsCreate :: proc(levelAlloc: mem.Allocator) -> ^Y0Graphics {
 	self := new(Y0Graphics, levelAlloc)
-	self.object = createGameObject(ForestGraphics, self, 100, drawProc = cast(proc(_: rawptr))drawY0Graphics)
+	self.object = createGameObject(ForestGraphics, self, 100, drawProc = cast(proc(_: rawptr))y0GraphicsDraw)
 	return self
 }
-drawY0Graphics :: proc(self: ^Y0Graphics) {
+y0GraphicsDraw :: proc(self: ^Y0Graphics) {
 	backgroundShader := getShader(.BackgroundWaves)
 	rl.BeginShaderMode(backgroundShader)
 	self.backgroundShaderTime += TARGET_TIME_STEP * 0.1
-	setShaderValue(backgroundShader, "time", self.backgroundShaderTime)
-	setShaderValue(backgroundShader, "resolution", rl.Vector2{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
-	setShaderValue(backgroundShader, "color_a", [4]f32{0.0, 0.0, 0.0, 1.0})
-	setShaderValue(backgroundShader, "color_b", [4]f32{72.0 / 255.0, 54.0 / 255.0, 0.0, 1.0})
-	rl.DrawRectangleRec(getCamera2DViewRect(), rl.WHITE)
+	shaderSetValue(backgroundShader, "time", self.backgroundShaderTime)
+	shaderSetValue(backgroundShader, "resolution", rl.Vector2{RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D})
+	shaderSetValue(backgroundShader, "color_a", [4]f32{0.0, 0.0, 0.0, 1.0})
+	shaderSetValue(backgroundShader, "color_b", [4]f32{72.0 / 255.0, 54.0 / 255.0, 0.0, 1.0})
+	rl.DrawRectangleRec(camera2DGetViewRectangle(), rl.WHITE)
 	rl.EndShaderMode()
 
 	for rectangle in engine.collisionRectangles {
@@ -806,7 +800,7 @@ Player3DLookingStateData :: struct {
 	pitchTween:      Tween,
 	verticalState:   PlayerLookingStateVertical,
 }
-createPlayer3D :: proc() -> Player3D {
+player3DCreate :: proc() -> Player3D {
 	self := Player3D {
 		lookingStateData = {
 			yawTween = createFinishedTween(0.0),
@@ -815,10 +809,10 @@ createPlayer3D :: proc() -> Player3D {
 			verticalState = .Middle,
 		},
 	}
-	setPlayer3DState(&self, .Inactive)
+	player3DSetState(&self, .Inactive)
 	return self
 }
-setPlayer3DState :: proc(player: ^Player3D, nextState: Player3DState) {
+player3DSetState :: proc(player: ^Player3D, nextState: Player3DState) {
 	if player.state == nextState {
 		return
 	}
@@ -828,14 +822,14 @@ setPlayer3DState :: proc(player: ^Player3D, nextState: Player3DState) {
 	case .Uninitialized:
 	case .Inactive:
 		global.camera3D.position = PLAYER_3D_OUTSIDE_POSITION
-		player3DApplyCameraRotation(player)
+		player3DCameraApplyRotation(player)
 		if previousState != .Uninitialized {
 			if elevator := getFirstGameObjectOfType(Elevator); elevator != nil {
-				setElevatorState(elevator, .Interactable)
+				elevatorSetState(elevator, .Interactable)
 			} else {
 				panic("Couldn't make elevator interactable because there was no elevator")
 			}
-			setElevator3DState(&global.elevator3D, .Invisible)
+			elevator3DSetState(&global.elevator3D, .Invisible)
 		}
 	case .Looking:
 		player.lookingStateData.yawTween = createFinishedTween(player.yaw)
@@ -849,7 +843,7 @@ setPlayer3DState :: proc(player: ^Player3D, nextState: Player3DState) {
 						elevator.object.pos +
 						{elevator.object.colRec.width / 2.0, elevator.object.colRec.height} -
 						{playerSpriteFrameSize.x / 2.0, playerSpriteFrameSize.y}
-					movePlayerNoGravity(player, playerGroundPosition, 0.5, .Movable)
+					playerMoveNoGravity(player, playerGroundPosition, 0.5, .Movable)
 				} else {
 					panic("Couldn't unfreeze player because there was no elevator")
 				}
@@ -858,21 +852,21 @@ setPlayer3DState :: proc(player: ^Player3D, nextState: Player3DState) {
 			}
 		}
 		if global.elevator3D.state == .Invisible {
-			setElevator3DState(&global.elevator3D, .Idle)
+			elevator3DSetState(&global.elevator3D, .Idle)
 		}
 		if previousState == .Inactive {
-			setElevator3DDoorState(&global.elevator3D, true, true, 0.0)
-			setElevator3DDoorState(&global.elevator3D, false, false, 5.0)
+			elevator3DDoorSetState(&global.elevator3D, true, true, 0.0)
+			elevator3DDoorSetState(&global.elevator3D, false, false, 5.0)
 		}
 	case .Panel:
 	}
 }
-player3DApplyCameraRotation :: proc(player: ^Player3D) {
+player3DCameraApplyRotation :: proc(player: ^Player3D) {
 	global.camera3D.target =
 		global.camera3D.position +
 		rl.Vector3Transform(FORWARD_3D, MatrixRotateYaw(player.yaw) * MatrixRotatePitch(player.pitch))
 }
-updatePlayer3D :: proc(self: ^Player3D) {
+player3DUpdate :: proc(self: ^Player3D) {
 	switch self.state {
 	case .Uninitialized:
 	case .Inactive:
@@ -915,14 +909,14 @@ updatePlayer3D :: proc(self: ^Player3D) {
 			)
 		}
 		self.pitch = updateAndStepTween(&data.pitchTween).(f32)
-		player3DApplyCameraRotation(self)
+		player3DCameraApplyRotation(self)
 
 		if tweenIsFinished(data.yawTween) && tweenIsFinished(data.pitchTween) {
 			if data.horizontalState == .Forward && data.verticalState == .Middle {
 				if rl.IsKeyPressed(.LEFT_SHIFT) {
-					movePlayer3D(self, global.camera3D.position, PLAYER_3D_PANEL_POSITION, .Panel)
-				} else if rl.IsKeyPressed(.Z) && isElevator3DDoorOpen(&global.elevator3D) {
-					movePlayer3D(self, global.camera3D.position, PLAYER_3D_OUTSIDE_POSITION, .Inactive)
+					player3DMove(self, global.camera3D.position, PLAYER_3D_PANEL_POSITION, .Panel)
+				} else if rl.IsKeyPressed(.Z) && elevator3DDoorIsOpen(&global.elevator3D) {
+					player3DMove(self, global.camera3D.position, PLAYER_3D_OUTSIDE_POSITION, .Inactive)
 				}
 			}
 		}
@@ -930,12 +924,12 @@ updatePlayer3D :: proc(self: ^Player3D) {
 		global.camera3D.position = updateAndStepTween(&self.movingStateData.movementTween).(rl.Vector3)
 		global.camera3D.target = global.camera3D.position + self.movingStateData.look
 		if tweenIsFinished(self.movingStateData.movementTween) {
-			setPlayer3DState(self, self.movingStateData.nextState)
+			player3DSetState(self, self.movingStateData.nextState)
 		}
-		player3DApplyCameraRotation(self)
+		player3DCameraApplyRotation(self)
 	case .Panel:
 		if rl.IsKeyPressed(.DOWN) {
-			movePlayer3D(self, global.camera3D.position, PLAYER_3D_INSIDE_POSITION, .Looking)
+			player3DMove(self, global.camera3D.position, PLAYER_3D_INSIDE_POSITION, .Looking)
 			break
 		}
 		if !rl.IsMouseButtonPressed(.LEFT) {
@@ -952,14 +946,14 @@ updatePlayer3D :: proc(self: ^Player3D) {
 			screenPosition := rl.GetWorldToScreen(rayCollision.point, global.camera3D._camera)
 			panelPositionNormalized := (screenPosition - panelScreenRectStart) / panelScreenRectSize
 			panelPositionNormalized.y = 1.0 - panelPositionNormalized.y
-			panelPosition := panelPositionNormalized * getTextureSize(global.elevator3D.panelRenderTexture.texture)
-			elevatorPanel3DInput(&global.elevator3D.panelData, panelPosition)
+			panelPosition := panelPositionNormalized * textureGetSize(global.elevator3D.panelRenderTexture.texture)
+			elevatorPanel3DHandleInput(&global.elevator3D.panelData, panelPosition)
 		} else {
 			fmt.println("No collision")
 		}
 	}
 }
-movePlayer3D :: proc(
+player3DMove :: proc(
 	player: ^Player3D,
 	from: rl.Vector3,
 	to: rl.Vector3,
@@ -975,7 +969,7 @@ movePlayer3D :: proc(
 		look          = global.camera3D.target - global.camera3D.position,
 		nextState     = nextState,
 	}
-	setPlayer3DState(player, .Moving)
+	player3DSetState(player, .Moving)
 }
 
 Elevator3DModelMeshes :: enum {
@@ -1006,7 +1000,7 @@ ElevatorPanelData :: struct {
 	depthIndicatorArea:  rl.Rectangle,
 	depth:               i32,
 }
-elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
+elevatorPanel3DHandleInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 	if pointInRectangle(position, panel.buttonArea) {
 		relativeButtonPosition := (position - {panel.buttonArea.x, panel.buttonArea.y}) / panel.buttonSeparation
 		relativeButtonPositionFloored := rl.Vector2 {
@@ -1044,7 +1038,7 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 					panel.buttonPressCount += 1
 				}
 				if panel.buttonPressCount >= ELEVATOR_3D_PANEL_BUTTON_COUNT {
-					setElevator3DState(&global.elevator3D, .Leaving)
+					elevator3DSetState(&global.elevator3D, .Leaving)
 				}
 			}
 		}
@@ -1056,7 +1050,7 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 			math.floor(relativeKnobPosition.y),
 		}
 		knobTexture := getTexture(.ElevatorPanelKnob)
-		knobTextureSize := getTextureSize(knobTexture)
+		knobTextureSize := textureGetSize(knobTexture)
 		knobPosition := knobAreaPosition + relativeKnobPositionFloored * panel.knobSeparation + knobTextureSize / 2.0
 		knobRadius := knobTextureSize.x / 2.0
 		if pointInCircle(position, knobPosition, knobRadius) {
@@ -1091,11 +1085,11 @@ elevatorPanel3DInput :: proc(panel: ^ElevatorPanelData, position: rl.Vector2) {
 			switch (int(relativePositionFloored.x)) {
 			case 0:
 				if global.elevator3D.state == .Idle {
-					setElevator3DDoorState(&global.elevator3D, true, false, 0.4)
+					elevator3DDoorSetState(&global.elevator3D, true, false, 0.4)
 				}
 			case 1:
 				if global.elevator3D.state == .Idle {
-					setElevator3DDoorState(&global.elevator3D, false, false, 0.4)
+					elevator3DDoorSetState(&global.elevator3D, false, false, 0.4)
 				}
 			case 2:
 			// TODO: Play ringing sound
@@ -1142,7 +1136,7 @@ Elevator3D :: struct {
 	doorOpenness:       f32,
 	transitStateData:   Elevator3DTransitStateData,
 }
-setElevator3DDoorState :: proc(e: ^Elevator3D, open: bool, instant: bool, delay: f32) {
+elevator3DDoorSetState :: proc(e: ^Elevator3D, open: bool, instant: bool, delay: f32) {
 	if instant {
 		if open {
 			e.doorsTween = createFinishedTween(1.0)
@@ -1157,13 +1151,13 @@ setElevator3DDoorState :: proc(e: ^Elevator3D, open: bool, instant: bool, delay:
 		}
 	}
 }
-isElevator3DDoorOpen :: proc(e: ^Elevator3D) -> bool {
+elevator3DDoorIsOpen :: proc(e: ^Elevator3D) -> bool {
 	return(
 		(e.doorsTween.range.(TweenF32Range).to == 1.0 && getTweenProgressDurationOnly(e.doorsTween) > 0.5) ||
 		(e.doorsTween.range.(TweenF32Range).to == 0.0 && getTweenProgressDurationOnly(e.doorsTween) < 0.5) \
 	)
 }
-createElevator3D :: proc() -> Elevator3D {
+elevator3DCreate :: proc() -> Elevator3D {
 	lightMaterial := rl.LoadMaterialDefault()
 	lightMaterial.shader = getShader(.AnimatedTexture3D)
 	rl.SetMaterialTexture(&lightMaterial, .ALBEDO, getTexture(.ElevatorLights3D))
@@ -1179,10 +1173,10 @@ createElevator3D :: proc() -> Elevator3D {
 		mainModel = getModel(.Elevator),
 		leftDoorModel = getModel(.ElevatorSlidingDoorLeft),
 		rightDoorModel = getModel(.ElevatorSlidingDoorRight),
-		wallMaterial = loadPassthroughMaterial3D(getTexture(.ElevatorWall3D)),
+		wallMaterial = materialLoadPassthrough3D(getTexture(.ElevatorWall3D)),
 		lightMaterial = lightMaterial,
-		floorMaterial = loadPassthroughMaterial3D(),
-		panelMaterial = loadPassthroughMaterial3D(panelRenderTexture.texture),
+		floorMaterial = materialLoadPassthrough3D(),
+		panelMaterial = materialLoadPassthrough3D(panelRenderTexture.texture),
 		panelRenderTexture = panelRenderTexture,
 		panelData = {
 			buttonArea = {
@@ -1213,16 +1207,16 @@ createElevator3D :: proc() -> Elevator3D {
 		doorsTween = createFinishedTween(f32(1.0)),
 		doorOpenness = 0.0,
 	}
-	setElevator3DState(&self, .Invisible)
+	elevator3DSetState(&self, .Invisible)
 	return self
 }
-updateElevator3D :: proc(e: ^Elevator3D) {
+elevator3DUpdate :: proc(e: ^Elevator3D) {
 	switch e.state {
 	case .Invisible:
 	case .Idle:
 	case .Leaving:
 		if tweenIsFinished(e.doorsTween) {
-			setElevator3DState(e, .Transit)
+			elevator3DSetState(e, .Transit)
 		}
 	case .Transit:
 		stateData := &e.transitStateData
@@ -1278,7 +1272,7 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 		}
 
 		if isTimerFinished(e.transitStateData.timer) {
-			setElevator3DState(e, .Idle)
+			elevator3DSetState(e, .Idle)
 		}
 	}
 	tweenWasWaiting := tweenIsWaiting(e.doorsTween)
@@ -1292,19 +1286,19 @@ updateElevator3D :: proc(e: ^Elevator3D) {
 		rl.PlaySound(rand.choice(sounds[:]))
 	}
 }
-drawElevator3D :: proc(e: ^Elevator3D) {
+elevator3DDraw :: proc(e: ^Elevator3D) {
 	if e.state == .Invisible {
 		return
 	}
-	renderElevator3DPanelTexture(e.panelRenderTexture, &e.panelData)
+	elevator3DPanelRenderTexture(e.panelRenderTexture, &e.panelData)
 	transform := rl.MatrixIdentity()
 	applyLightToShader(e.wallMaterial.shader)
 	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.Walls], e.wallMaterial, transform)
 
 	applyLightToShader(e.floorMaterial.shader)
-	setShaderValue(e.lightMaterial.shader, "frameIndex", e.lightFrameIndex)
-	setShaderValue(e.lightMaterial.shader, "frameCount", 2)
-	setShaderValue(e.lightMaterial.shader, "flipY", 0)
+	shaderSetValue(e.lightMaterial.shader, "frameIndex", e.lightFrameIndex)
+	shaderSetValue(e.lightMaterial.shader, "frameCount", 2)
+	shaderSetValue(e.lightMaterial.shader, "flipY", 0)
 	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.Floor], e.floorMaterial, transform)
 
 	applyLightToShader(e.lightMaterial.shader)
@@ -1314,15 +1308,15 @@ drawElevator3D :: proc(e: ^Elevator3D) {
 	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.PanelBox], engine.defaultMaterial3D, transform)
 
 	applyLightToShader(e.panelMaterial.shader)
-	setShaderValue(e.panelMaterial.shader, "frameIndex", 0.0)
-	setShaderValue(e.panelMaterial.shader, "frameCount", 1)
-	setShaderValue(e.panelMaterial.shader, "flipY", 1)
+	shaderSetValue(e.panelMaterial.shader, "frameIndex", 0.0)
+	shaderSetValue(e.panelMaterial.shader, "frameCount", 1)
+	shaderSetValue(e.panelMaterial.shader, "flipY", 1)
 	rl.DrawMesh(e.mainModel.meshes[Elevator3DModelMeshes.Panel], e.panelMaterial, transform)
 
 	rl.DrawMesh(e.leftDoorModel.meshes[0], engine.defaultMaterial3D, e.leftDoorModel.transform)
 	rl.DrawMesh(e.rightDoorModel.meshes[0], engine.defaultMaterial3D, e.rightDoorModel.transform)
 }
-setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
+elevator3DSetState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 	if e.state == newState {
 		return
 	}
@@ -1341,7 +1335,7 @@ setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 		player.frozenState = e.transitStateData.playerState.frozenState
 
 		elevator := getFirstGameObjectOfType(Elevator)
-		setElevatorState(elevator, .PlayerInside)
+		elevatorSetState(elevator, .PlayerInside)
 		playerSpriteFrameSize := getSpriteFrameSize(player.currentSpr^)
 		player.object.pos =
 			elevator.object.pos +
@@ -1364,10 +1358,10 @@ setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 				e.panelData.buttonState[x][y] = 0
 			}
 		}
-		setElevator3DDoorState(e, true, false, 0.0)
+		elevator3DDoorSetState(e, true, false, 0.0)
 	case .Leaving:
-		if isElevator3DDoorOpen(e) {
-			setElevator3DDoorState(e, false, false, 0.0)
+		if elevator3DDoorIsOpen(e) {
+			elevator3DDoorSetState(e, false, false, 0.0)
 		}
 	case .Transit:
 		e.transitStateData.timer = createTimer(5.0)
@@ -1384,7 +1378,7 @@ setElevator3DState :: proc(e: ^Elevator3D, newState: Elevator3DState) {
 		rl.SetSoundVolume(getSound(.ElevatorMovingLoop), 0.0)
 	}
 }
-renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^ElevatorPanelData) {
+elevator3DPanelRenderTexture :: proc(renderTexture: rl.RenderTexture, data: ^ElevatorPanelData) {
 	beginModeStacked(getZeroCamera2D(), renderTexture)
 	rl.ClearBackground({0, 0, 0, 0})
 
@@ -1408,14 +1402,14 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 	}
 
 	knobTexture := getTexture(.ElevatorPanelKnob)
-	knobTextureSize := getTextureSize(knobTexture)
+	knobTextureSize := textureGetSize(knobTexture)
 	knobTextureOrigin := knobTextureSize / 2.0
-	knobTextureSource := getTextureRec(knobTexture)
+	knobTextureSource := textureGetRectangle(knobTexture)
 	knobFirstPosition := rl.Vector2{data.knobArea.x, data.knobArea.y}
 	rl.DrawTexturePro(
 		knobTexture,
 		knobTextureSource,
-		getTextureDestinationRectangle(knobTexture, knobFirstPosition + knobTextureOrigin),
+		textureGetDestinationRectangle(knobTexture, knobFirstPosition + knobTextureOrigin),
 		knobTextureOrigin,
 		data.knobState[0],
 		rl.WHITE,
@@ -1423,14 +1417,14 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 	rl.DrawTexturePro(
 		knobTexture,
 		knobTextureSource,
-		getTextureDestinationRectangle(knobTexture, knobFirstPosition + data.knobSeparation + knobTextureOrigin),
+		textureGetDestinationRectangle(knobTexture, knobFirstPosition + data.knobSeparation + knobTextureOrigin),
 		knobTextureOrigin,
 		data.knobState[1],
 		rl.WHITE,
 	)
 
 	sliderTexture := getTexture(.ElevatorPanelSlider)
-	sliderTextureSize := getTextureSize(sliderTexture)
+	sliderTextureSize := textureGetSize(sliderTexture)
 	sliderTextureOrigin := sliderTextureSize / 2.0
 	sliderAreaPosition := rl.Vector2{data.sliderArea.x, data.sliderArea.y}
 	for i in 0 ..< 3 {
@@ -1464,7 +1458,7 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 	}
 
 	rl.DrawRectangleRec(data.depthIndicatorArea, rl.BLACK)
-	depthTextPosition := getRlRectangleCenter(data.depthIndicatorArea)
+	depthTextPosition := rectangleGetCenter(data.depthIndicatorArea)
 	drawTextAligned(
 		rl.TextFormat("%i", data.depth),
 		depthTextPosition,
@@ -1476,6 +1470,6 @@ renderElevator3DPanelTexture :: proc(renderTexture: rl.RenderTexture, data: ^Ele
 	)
 	endModeStacked()
 }
-destroyElevator3D :: proc(e: ^Elevator3D) {
+elevator3DDestroy :: proc(e: ^Elevator3D) {
 	rl.UnloadRenderTexture(e.panelRenderTexture)
 }

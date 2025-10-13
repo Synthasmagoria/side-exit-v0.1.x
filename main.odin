@@ -28,7 +28,8 @@ when ODIN_ARCH == .wasm32 || ODIN_ARCH == .wasm64p32 {
 
 		initRaylib()
 		init()
-		setGameGlobals()
+		global.player3D = player3DCreate()
+		global.elevator3D = elevator3DCreate()
 	}
 
 	@(export)
@@ -41,6 +42,7 @@ when ODIN_ARCH == .wasm32 || ODIN_ARCH == .wasm64p32 {
 	@(export)
 	main_end :: proc "c" () {
 		context = web_context
+		elevator3DDestroy(&global.elevator3D)
 		for i in 0 ..< len(engine.gameObjects) {
 			engine.gameObjects[i].destroyProc(engine.gameObjects[i].data)
 		}
@@ -65,11 +67,14 @@ when ODIN_ARCH == .wasm32 || ODIN_ARCH == .wasm64p32 {
 		context.temp_allocator = engine.frameAlloc
 		defer deinit()
 
-		setGameGlobals()
+		global.player3D = player3DCreate()
+		global.elevator3D = elevator3DCreate()
 
 		for !rl.WindowShouldClose() && !global.windowCloseRequest {
 			gameStep()
 		}
+
+		elevator3DDestroy(&global.elevator3D)
 
 		for i in 0 ..< len(engine.gameObjects) {
 			engine.gameObjects[i].destroyProc(engine.gameObjects[i].data)

@@ -12,7 +12,7 @@ web10CreateTexture :: proc(size: iVector2, spr_def: SpriteDef, num: i32) -> rl.T
 	spr_list := make([dynamic]Sprite, num, num)
 	rect_list := make([dynamic]rl.Rectangle, num, num)
 	frame_count := f32(spr_def.frame_count)
-	tex_size := getTextureSize(spr_def.tex)
+	tex_size := textureGetSize(spr_def.tex)
 	for i: i32 = 0; i < num; i += 1 {
 		spr_list[i] = createSprite(spr_def)
 		setSpriteFrame(&spr_list[i], rand.int31_max(spr_def.frame_count))
@@ -102,25 +102,25 @@ web10CreateTexture2D :: proc(
 
 DEBUG_FONT_SIZE :: 12
 getDebugFontSize :: proc() -> i32 {
-	return i32(getScreenScale().x * DEBUG_FONT_SIZE)
+	return i32(screenGetScale().x * DEBUG_FONT_SIZE)
 }
 debugDrawFrameTime :: proc(x: i32, y: i32) {
 	debugFontSize := getDebugFontSize()
 	frameTimeText := rl.TextFormat("Frame time: %fms", rl.GetFrameTime() * 1000.0)
 	stringSize := rl.MeasureText(frameTimeText, debugFontSize)
-	debugDrawTextOutline(frameTimeText, x - stringSize, y, debugFontSize, rl.WHITE, rl.BLACK)
+	drawDebugTextOutline(frameTimeText, x - stringSize, y, debugFontSize, rl.WHITE, rl.BLACK)
 }
 debugDrawPlayerInfo :: proc(player: Player, x: i32, y: i32) {
 	debugFontSize := getDebugFontSize()
 	positionText := rl.TextFormat("Position: %s", vector2ToStringTemp(player.object.pos))
 	dy := y
-	debugDrawTextOutline(positionText, x, dy, debugFontSize, rl.WHITE, rl.BLACK)
+	drawDebugTextOutline(positionText, x, dy, debugFontSize, rl.WHITE, rl.BLACK)
 	dy += debugFontSize
 }
 debugDrawGlobalCamera3DInfo :: proc(cam: rl.Camera3D, x: i32, y: i32) {
 	dy := y
 	debugFontSize := getDebugFontSize()
-	debugDrawTextOutline(
+	drawDebugTextOutline(
 		rl.TextFormat("pos: %s", vector3ToStringTemp(cam.position)),
 		x,
 		dy,
@@ -129,7 +129,7 @@ debugDrawGlobalCamera3DInfo :: proc(cam: rl.Camera3D, x: i32, y: i32) {
 		rl.BLACK,
 	)
 	dy += debugFontSize
-	debugDrawTextOutline(
+	drawDebugTextOutline(
 		rl.TextFormat("target: %s", vector3ToStringTemp(cam.target)),
 		x,
 		dy,
@@ -138,7 +138,7 @@ debugDrawGlobalCamera3DInfo :: proc(cam: rl.Camera3D, x: i32, y: i32) {
 		rl.BLACK,
 	)
 	dy += debugFontSize
-	debugDrawTextOutline(
+	drawDebugTextOutline(
 		rl.TextFormat("look: %s", vector3ToStringTemp(cam.target - cam.position)),
 		x,
 		dy,
@@ -203,13 +203,13 @@ updateStarBackground :: proc(self: ^StarBackground) {
 drawStarBackground :: proc(self: ^StarBackground, position: rl.Vector2) {
 	shd := getShader(.AnimatedTextureRepeatPositionMulti)
 	rl.BeginShaderMode(shd)
-	setShaderValue(shd, "frameCount", self.frameCount)
-	setShaderValue(shd, "spriteCount", self.spriteCount)
-	setShaderValue(shd, "frameInd", self.frameIndex)
-	setShaderValue(shd, "frameSize", self.frameSize)
-	setShaderValue(shd, "scrollPx", self.scroll)
-	setShaderValue(shd, "offset", global.camera.offset * self.paralax)
-	setShaderValue(shd, "speedMultiplier", self.scrollSpeedMultiplier)
+	shaderSetValue(shd, "frameCount", self.frameCount)
+	shaderSetValue(shd, "spriteCount", self.spriteCount)
+	shaderSetValue(shd, "frameInd", self.frameIndex)
+	shaderSetValue(shd, "frameSize", self.frameSize)
+	shaderSetValue(shd, "scrollPx", self.scroll)
+	shaderSetValue(shd, "offset", global.camera.offset * self.paralax)
+	shaderSetValue(shd, "speedMultiplier", self.scrollSpeedMultiplier)
 	drawTextureRecDest(
 		self.genTex,
 		{position.x, position.y, RENDER_TEXTURE_WIDTH_2D, RENDER_TEXTURE_HEIGHT_2D},
